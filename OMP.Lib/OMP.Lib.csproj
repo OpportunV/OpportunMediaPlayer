@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FFmpeg.AutoGen" Version="7.1.1"/>
+        <PackageReference Include="NAudio" Version="2.2.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Condition="$([MSBuild]::IsOSPlatform('Windows'))" Include="Libs\win\**">
+            <Link>%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>
