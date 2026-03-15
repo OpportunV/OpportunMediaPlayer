@@ -1,10 +1,12 @@
 <Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="clr-namespace:OMP.Ui"
     x:Class="OMP.Ui.MainWindow"
     Width="1200"
     Height="800"
-    Title="Autogen Media Player">
+    Title="Autogen Media Player"
+    x:DataType="ui:MainWindow">
 
     <Grid RowDefinitions="Auto,*">
 
@@ -32,11 +34,8 @@
                 </Border.Background>
             </Border>
 
-            <TextBlock Text="VIDEO OUTPUT"
-                       Foreground="#555"
-                       FontSize="32"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
+            <Image Name="VideoView"
+                    Stretch="Uniform"/>
 
             <!-- Overlay Controls -->
             <Border Name="OverlayControls"
@@ -52,119 +51,59 @@
                     </Transitions>
                 </Border.Transitions>
 
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto"
                       ColumnSpacing="10">
 
-                    <Button Grid.Column="0" Content="⏮" Name="StepBackButton" />
-                    <Button Grid.Column="1" Content="▶" Name="PlayButton" />
-                    <Button Grid.Column="2" Content="⏸" Name="PauseButton" />
-                    <Button Grid.Column="3" Content="⏭" Name="StepForwardButton" />
+                    <Button Grid.Column="0" Content="⏮" Name="StepBackButton"/>
 
+                    <Button Grid.Column="1"
+                            Name="PlayPauseButton"
+                            Content="▶"/>
+
+                    <Button Grid.Column="2" Content="⏭" Name="StepForwardButton"/>
+
+                    <!-- CURRENT TIME -->
+                    <TextBlock Grid.Column="3"
+                               Name="CurrentTimeLabel"
+                               Text="00:00"
+                               VerticalAlignment="Center"
+                               FontFamily="Consolas"/>
+
+                    <!-- PROGRESS -->
                     <Slider Grid.Column="4"
+                            Grid.ColumnSpan="2"
                             Name="ProgressSlider"
                             Minimum="0"
-                            Maximum="100"
-                            Value="0" />
+                            Maximum="1"/>
 
-                    <TextBlock Grid.Column="5"
+                    <!-- TOTAL TIME -->
+                    <TextBlock Grid.Column="6"
+                               Name="DurationLabel"
+                               Text="00:00"
+                               VerticalAlignment="Center"
+                               FontFamily="Consolas"/>
+
+                    <TextBlock Grid.Column="7"
                                Text="🔊"
-                               VerticalAlignment="Center" />
+                               VerticalAlignment="Center"/>
 
-                    <Slider Grid.Column="6"
+                    <Slider Grid.Column="8"
                             Name="VolumeSlider"
                             Width="120"
                             Minimum="0"
                             Maximum="100"
-                            Value="50" />
+                            Value="50"/>
 
-                    <Button Grid.Column="7"
+                    <Button Grid.Column="9"
                             Content="⚙"
-                            Name="OptionsButton" />
+                            Name="OptionsButton"/>
 
-                    <Button Grid.Column="8"
+                    <Button Grid.Column="10"
                             Content="⛶"
-                            Name="FullscreenButton" />
+                            Name="FullscreenButton"/>
                 </Grid>
 
             </Border>
         </Grid>
     </Grid>
-
-
-    <!-- <Grid Name="VideoHost"> -->
-    <!-- -->
-    <!--     ~1~ ===== MENU ===== @1@ -->
-    <!--     <Menu DockPanel.Dock="Top"> -->
-    <!--         <MenuItem Header="_File"> -->
-    <!--             <MenuItem Header="_Open..." Name="OpenMenuItem" /> -->
-    <!--             <Separator /> -->
-    <!--             <MenuItem Header="E_xit" Name="ExitMenuItem" /> -->
-    <!--         </MenuItem> -->
-    <!--     </Menu> -->
-    <!--     ~1~ Video Layer @1@ -->
-    <!--     <Border> -->
-    <!--         <Border.Background> -->
-    <!--             <LinearGradientBrush StartPoint="0,0" -->
-    <!--                                  EndPoint="1,1"> -->
-    <!--                 <GradientStop Color="#1E1E1E" Offset="0" /> -->
-    <!--                 <GradientStop Color="#2A2A2A" Offset="1" /> -->
-    <!--             </LinearGradientBrush> -->
-    <!--         </Border.Background> -->
-    <!--     </Border> -->
-    <!-- -->
-    <!--     <TextBlock Text="VIDEO OUTPUT" -->
-    <!--                Foreground="#555" -->
-    <!--                FontSize="32" -->
-    <!--                HorizontalAlignment="Center" -->
-    <!--                VerticalAlignment="Center" /> -->
-    <!-- -->
-    <!--     ~1~ Overlay Layer @1@ -->
-    <!--     <Border Name="OverlayControls" -->
-    <!--             Background="#66000000" -->
-    <!--             VerticalAlignment="Bottom" -->
-    <!--             Padding="10"> -->
-    <!--          -->
-    <!--         <Border.Transitions> -->
-    <!--             <Transitions> -->
-    <!--                 <DoubleTransition Property="Opacity" -->
-    <!--                                   Duration="0:0:0.5" /> -->
-    <!--             </Transitions> -->
-    <!--         </Border.Transitions> -->
-    <!-- -->
-    <!--         <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto" -->
-    <!--               ColumnSpacing="10"> -->
-    <!-- -->
-    <!--             <Button Grid.Column="0" Content="⏮" Name="StepBackButton" /> -->
-    <!--             <Button Grid.Column="1" Content="▶" Name="PlayButton" /> -->
-    <!--             <Button Grid.Column="2" Content="⏸" Name="PauseButton" /> -->
-    <!--             <Button Grid.Column="3" Content="⏭" Name="StepForwardButton" /> -->
-    <!-- -->
-    <!--             <Slider Grid.Column="4" -->
-    <!--                     Name="ProgressSlider" -->
-    <!--                     Minimum="0" -->
-    <!--                     Maximum="100" -->
-    <!--                     Value="0" /> -->
-    <!-- -->
-    <!--             <TextBlock Grid.Column="5" -->
-    <!--                        Text="🔊" -->
-    <!--                        VerticalAlignment="Center" /> -->
-    <!-- -->
-    <!--             <Slider Grid.Column="6" -->
-    <!--                     Name="VolumeSlider" -->
-    <!--                     Width="120" -->
-    <!--                     Minimum="0" -->
-    <!--                     Maximum="100" -->
-    <!--                     Value="50" /> -->
-    <!-- -->
-    <!--             <Button Grid.Column="7" -->
-    <!--                     Content="⚙" -->
-    <!--                     Name="OptionsButton" /> -->
-    <!-- -->
-    <!--             <Button Grid.Column="8" -->
-    <!--                     Content="⛶" -->
-    <!--                     Name="FullscreenButton" /> -->
-    <!--         </Grid> -->
-    <!--     </Border> -->
-    <!-- -->
-    <!-- </Grid> -->
 </Window>

@@ -25,7 +25,7 @@
                           Margin="0,4">
 
                         <TextBlock Grid.Column="0"
-                                   Text="{Binding Track}"
+                                   Text="{Binding Stream}"
                                    VerticalAlignment="Center"/>
 
                         <TextBlock Grid.Column="1"
@@ -51,7 +51,7 @@
                     Spacing="10"
                     Margin="0,15,0,0">
 
-            <ComboBox Name="TrackSelector"
+            <ComboBox Name="StreamSelector"
                       Width="180"/>
 
             <ComboBox Name="OutputSelector"
