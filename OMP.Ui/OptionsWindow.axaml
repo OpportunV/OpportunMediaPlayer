@@ -1,57 +1,76 @@
 ﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:OMP.Ui.Models"
-        xmlns:ui="clr-namespace:OMP.Ui"
         x:Class="OMP.Ui.OptionsWindow"
-        Width="600"
-        Height="400"
+        Width="500"
+        SizeToContent="Height"
         Title="Audio Routing Options">
 
-    <StackPanel Margin="20" Spacing="10">
+    <Grid RowDefinitions="Auto,Auto,*,Auto"
+          Margin="20">
 
-        <TextBlock Text="Audio Routing"
+        <!-- Header -->
+        <TextBlock Grid.Row="0"
+                   Text="Audio Routing"
                    FontSize="18"
-                   FontWeight="Bold"/>
+                   FontWeight="Bold"
+                   Margin="0,0,0,10"/>
 
-        <ItemsControl Name="RoutesList">
+        <!-- Existing Routes -->
+        <ItemsControl Grid.Row="1"
+                      Name="RoutesList">
+
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="local:AudioRoute">
-                    <Grid ColumnDefinitions="*,*,Auto" Margin="0,5">
 
-                        <!-- Track -->
-                        <ComboBox Grid.Column="0"
-                                  ItemsSource="{Binding AvailableTracks,
-                                            RelativeSource={RelativeSource AncestorType=ui:OptionsWindow}}"
-                                  SelectedItem="{Binding SelectedTrack}"/>
+                    <Grid ColumnDefinitions="*,*,Auto"
+                          Margin="0,4">
 
-                        <!-- Output -->
-                        <ComboBox Grid.Column="1"
-                                  Margin="10,0"
-                                  ItemsSource="{Binding AvailableOutputs,
-                                            RelativeSource={RelativeSource AncestorType=ui:OptionsWindow}}"
-                                  SelectedItem="{Binding SelectedOutput}"/>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Track}"
+                                   VerticalAlignment="Center"/>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Output}"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0"/>
 
                         <Button Grid.Column="2"
-                                Click="OnRemoveRouteButton"
-                                Content="−"
-                                Width="30"
-                                Name="RemoveButton"/>
+                                Name="DeleteRouteButton"
+                                Content="✕"
+                                Width="28"
+                                Height="28"/>
                     </Grid>
+
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
+
         </ItemsControl>
 
-        <Button Name="AddRouteButton"
-                Content="+ Add Route"
-                Width="120"
-                HorizontalAlignment="Left"/>
+        <!-- Add New Route -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    Spacing="10"
+                    Margin="0,15,0,0">
 
-        <Border Height="20"/>
+            <ComboBox Name="TrackSelector"
+                      Width="180"/>
 
-        <Button Name="SaveButton"
+            <ComboBox Name="OutputSelector"
+                      Width="180"/>
+
+            <Button Name="AddRouteButton"
+                    Content="+"
+                    Width="32"/>
+        </StackPanel>
+
+        <!-- Save -->
+        <Button Grid.Row="3"
+                Name="SaveButton"
                 Content="Save"
-                Width="100"
-                HorizontalAlignment="Right"/>
+                HorizontalAlignment="Right"
+                Margin="0,20,0,0"
+                Width="100"/>
 
-    </StackPanel>
+    </Grid>
 </Window>

@@ -1,44 +1,83 @@
 ﻿using System.Collections.ObjectModel;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using OMP.Ui.Models;
 
 namespace OMP.Ui;
 
 public partial class OptionsWindow : Window
 {
-    public ObservableCollection<AudioRoute> Routes { get; } = new();
-    
-    public ObservableCollection<string> AvailableTracks { get; } = new() { "Track 1", "Track 2", "Track 3" };
+    public ObservableCollection<AudioRoute> Routes { get; } = [];
 
-    public ObservableCollection<string> AvailableOutputs { get; } = new() { "Speakers", "Headphones", "HDMI" };
-    
+    private readonly string[] _tracks =
+    [
+        "Track 1",
+        "Track 2",
+        "Track 3"
+    ];
+
+    private readonly string[] _outputs =
+    [
+        "Speakers",
+        "Headphones",
+        "HDMI"
+    ];
+
     public OptionsWindow()
     {
         InitializeComponent();
 
         RoutesList.ItemsSource = Routes;
 
-        Routes.Add(new AudioRoute("1", "2"));
+        TrackSelector.ItemsSource = _tracks;
+        OutputSelector.ItemsSource = _outputs;
 
-        AddRouteButton.Click += OnAddButton;
-        SaveButton.Click += OnSaveButton;
+        AddRouteButton.Click += AddRouteButton_Click;
+        SaveButton.Click += SaveButton_Click;
+
+        RoutesList.AddHandler(Button.ClickEvent, DeleteRouteHandler, handledEventsToo: true);
+
+        Routes.Add(new AudioRoute(_tracks[0], _outputs[0]));
+
+        UpdateDeleteButtons();
     }
 
-    private void OnAddButton(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void AddRouteButton_Click(object? sender, RoutedEventArgs e)
     {
-        Routes.Add(new AudioRoute("11", "22"));
+        if (TrackSelector.SelectedItem is not string track ||
+            OutputSelector.SelectedItem is not string output)
+            return;
+
+        Routes.Add(new AudioRoute(track, output));
+
+        UpdateDeleteButtons();
     }
 
-    private void OnSaveButton(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void DeleteRouteHandler(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is Button button &&
+            button is { Name: "DeleteRouteButton", DataContext: AudioRoute route } &&
+            Routes.Count > 1)
+        {
+            Routes.Remove(route);
+            UpdateDeleteButtons();
+        }
+    }
+
+    private void SaveButton_Click(object? sender, RoutedEventArgs e)
     {
         Close(true);
     }
 
-    private void OnRemoveRouteButton(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void UpdateDeleteButtons()
     {
-        if (sender is Button {DataContext: AudioRoute route} && Routes.Count > 1)
+        var canDelete = Routes.Count > 1;
+
+        foreach (var control in RoutesList.GetLogicalDescendants())
         {
-            Routes.Remove(route);
+            if (control is Button b && b.Name == "DeleteRouteButton")
+                b.IsEnabled = canDelete;
         }
     }
 }
