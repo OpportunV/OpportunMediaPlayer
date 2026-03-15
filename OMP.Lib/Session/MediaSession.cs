@@ -1,6 +1,7 @@
 ﻿using FFmpeg.AutoGen;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
+using OMP.Lib.Video;
 
 namespace OMP.Lib.Session;
 
@@ -10,11 +11,17 @@ public sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
+    public IReadOnlyList<(AudioStream audioStream, AudioOutput audioOutput)> AudioRoutes => _audioRoutes.AsReadOnly();
+
     public TimeSpan CurrentTime => _audioPipelines.Count > 0 ? TimeSpan.FromSeconds(_audioPipelines[0].CurrentTimeSeconds) : TimeSpan.Zero;
 
     public TimeSpan Duration => _formatContext->duration > 0 ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE) : TimeSpan.Zero;
 
+    public VideoFrame? VideoFrame => _videoPipeline?.Frame;
+
     private readonly List<AudioPipeline> _audioPipelines = [];
+    private readonly List<(AudioStream audioStream, AudioOutput audioOutput)> _audioRoutes = [];
+    private VideoPipeline? _videoPipeline;
 
     private readonly Thread _demuxThread;
 
@@ -38,6 +45,17 @@ public sealed unsafe class MediaSession : IMediaSession
             throw new ApplicationException("Could not find stream info.");
         }
 
+        for (var i = 0; i < _formatContext->nb_streams; i++)
+        {
+            var stream = _formatContext->streams[i];
+
+            if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO)
+            {
+                _videoPipeline = new VideoPipeline(_formatContext, i);
+                break;
+            }
+        }
+
         AudioStreams = new AudioScanner().GetAudioStreams(_formatContext);
         AudioOutputs = new OutputScanner().ScanOutputs();
 
@@ -51,11 +69,21 @@ public sealed unsafe class MediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes)
     {
+        var wasPlaying = !_paused;
+        Pause();
+        _audioPipelines.ForEach(p => p.Flush());
+        
         ClearAudioPipelines();
+        _audioRoutes.AddRange(routes);
 
-        foreach (var (stream, output) in routes)
+        foreach (var (stream, output) in _audioRoutes)
         {
             _audioPipelines.Add(new AudioPipeline(_formatContext, stream.Id, output.Id));
+        }
+
+        if (wasPlaying)
+        {
+            Play();
         }
     }
 
@@ -73,20 +101,22 @@ public sealed unsafe class MediaSession : IMediaSession
 
     public void Step(TimeSpan offset)
     {
+        var targetSeconds = CurrentTime + offset;
+        Seek(targetSeconds);
+    }
+
+    public void Seek(TimeSpan target)
+    {
         if (_audioPipelines.Count == 0)
         {
             return;
         }
 
-        var wasPlaying = !_paused;
-        Pause();
+        var targetSeconds = Math.Clamp(target.TotalSeconds, 0, Duration.TotalSeconds);
         var audioPipeline = _audioPipelines[0];
         var stream = _formatContext->streams[audioPipeline.StreamIndex];
-        var targetSeconds = CurrentTime.TotalSeconds + offset.TotalSeconds;
-        if (targetSeconds < 0)
-        {
-            targetSeconds = 0;
-        }
+        var wasPlaying = !_paused;
+        Pause();
 
         var targetPts = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(stream->time_base));
 
@@ -102,10 +132,8 @@ public sealed unsafe class MediaSession : IMediaSession
 
         ffmpeg.avformat_flush(_formatContext);
 
-        foreach (var pipeline in _audioPipelines)
-        {
-            pipeline.Flush();
-        }
+        _audioPipelines.ForEach(pipeline => pipeline.Flush());
+        _videoPipeline?.Flush();
 
         if (wasPlaying)
         {
@@ -120,6 +148,7 @@ public sealed unsafe class MediaSession : IMediaSession
         _demuxThread.Join();
 
         ClearAudioPipelines();
+        _videoPipeline?.Dispose();
 
         fixed (AVFormatContext** fc = &_formatContext)
         {
@@ -151,6 +180,11 @@ public sealed unsafe class MediaSession : IMediaSession
                     pipeline.Enqueue(packet);
                 }
             }
+            
+            if (_videoPipeline != null && packet->stream_index == _videoPipeline.StreamIndex)
+            {
+                _videoPipeline.Enqueue(packet);
+            }
 
             ffmpeg.av_packet_unref(packet);
         }
@@ -162,5 +196,6 @@ public sealed unsafe class MediaSession : IMediaSession
     {
         _audioPipelines.ForEach(p => p.Dispose());
         _audioPipelines.Clear();
+        _audioRoutes.Clear();
     }
 }
