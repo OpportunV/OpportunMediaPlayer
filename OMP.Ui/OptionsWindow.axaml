@@ -1,0 +1,57 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OMP.Ui.Models"
+        xmlns:ui="clr-namespace:OMP.Ui"
+        x:Class="OMP.Ui.OptionsWindow"
+        Width="600"
+        Height="400"
+        Title="Audio Routing Options">
+
+    <StackPanel Margin="20" Spacing="10">
+
+        <TextBlock Text="Audio Routing"
+                   FontSize="18"
+                   FontWeight="Bold"/>
+
+        <ItemsControl Name="RoutesList">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:AudioRoute">
+                    <Grid ColumnDefinitions="*,*,Auto" Margin="0,5">
+
+                        <!-- Track -->
+                        <ComboBox Grid.Column="0"
+                                  ItemsSource="{Binding AvailableTracks,
+                                            RelativeSource={RelativeSource AncestorType=ui:OptionsWindow}}"
+                                  SelectedItem="{Binding SelectedTrack}"/>
+
+                        <!-- Output -->
+                        <ComboBox Grid.Column="1"
+                                  Margin="10,0"
+                                  ItemsSource="{Binding AvailableOutputs,
+                                            RelativeSource={RelativeSource AncestorType=ui:OptionsWindow}}"
+                                  SelectedItem="{Binding SelectedOutput}"/>
+
+                        <Button Grid.Column="2"
+                                Click="OnRemoveRouteButton"
+                                Content="−"
+                                Width="30"
+                                Name="RemoveButton"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button Name="AddRouteButton"
+                Content="+ Add Route"
+                Width="120"
+                HorizontalAlignment="Left"/>
+
+        <Border Height="20"/>
+
+        <Button Name="SaveButton"
+                Content="Save"
+                Width="100"
+                HorizontalAlignment="Right"/>
+
+    </StackPanel>
+</Window>
