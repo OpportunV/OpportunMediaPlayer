@@ -1,26 +1,42 @@
 using System;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using OMP.Lib.Session;
 
 namespace OMP.Ui;
 
 public partial class MainWindow : Window
 {
     private readonly DispatcherTimer _overlayTimer = new();
+    private readonly DispatcherTimer _uiTimer = new();
+    private readonly DispatcherTimer _videoTimer = new();
+    private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private bool _isFullscreen;
-    private WindowState _previousWindowState; 
+    private WindowState _previousWindowState;
+    private bool _isPlaying;
+    private WriteableBitmap? _videoBitmap;
 
-    public MainWindow()
+    public MainWindow(IMediaSessionRegistry mediaSessionRegistry)
     {
+        _mediaSessionRegistry = mediaSessionRegistry;
         InitializeComponent();
         SetupButtons();
-        SetupTimer();
+        SetupOverlayTimer();
+        SetupUiTimer();
+        SetupVideoTimer();
         AddHotkeys();
         _previousWindowState = WindowState;
+        ProgressSlider.PointerCaptureLost += (_, _) =>
+            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
     }
 
     private void OnPointerExited(object? o, PointerEventArgs pointerEventArgs)
@@ -50,7 +66,7 @@ public partial class MainWindow : Window
         _overlayTimer.Start();
     }
 
-    private void SetupTimer()
+    private void SetupOverlayTimer()
     {
         _overlayTimer.Interval = TimeSpan.FromSeconds(3);
         _overlayTimer.Tick += (_, _) =>
@@ -63,13 +79,111 @@ public partial class MainWindow : Window
         };
     }
 
+    private void SetupUiTimer()
+    {
+        _uiTimer.Interval = TimeSpan.FromMilliseconds(200);
+
+        _uiTimer.Tick += (_, _) =>
+        {
+            var session = _mediaSessionRegistry.Current;
+
+            if (session == null)
+            {
+                return;
+            }
+
+            var current = session.CurrentTime.TotalSeconds;
+
+            if (!ProgressSlider.IsPointerOver)
+            {
+                ProgressSlider.Value = current;
+            }
+
+            CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
+        };
+
+        _uiTimer.Start();
+    }
+
+    private void SetupVideoTimer()
+    {
+        _videoTimer.Interval = TimeSpan.FromMilliseconds(1);
+
+        _videoTimer.Tick += (_, _) =>
+        {
+            var frame = _mediaSessionRegistry.Current?.VideoFrame;
+
+            if (frame == null)
+            {
+                return;
+            }
+
+            if (_videoBitmap == null ||
+                _videoBitmap.PixelSize.Width != frame.Width ||
+                _videoBitmap.PixelSize.Height != frame.Height)
+            {
+                _videoBitmap = new WriteableBitmap(
+                    new PixelSize(frame.Width, frame.Height),
+                    new Vector(96, 96),
+                    Avalonia.Platform.PixelFormat.Bgra8888,
+                    Avalonia.Platform.AlphaFormat.Premul);
+
+                VideoView.Source = _videoBitmap;
+            }
+
+            using var fb = _videoBitmap.Lock();
+
+            Marshal.Copy(frame.Data, 0, fb.Address, frame.Data.Length);
+            VideoView.InvalidateVisual();
+        };
+
+        _videoTimer.Start();
+    }
+
+    private static string FormatTime(TimeSpan time)
+    {
+        if (time.TotalHours >= 1)
+        {
+            return time.ToString(@"hh\:mm\:ss");
+        }
+
+        return time.ToString(@"mm\:ss");
+    }
+
     private void SetupButtons()
     {
         OpenMenuItem.Click += async (_, _) => await OpenFile();
         ExitMenuItem.Click += (_, _) => Close();
 
+        PlayPauseButton.Click += (_, _) => TogglePlayPause();
+        StepBackButton.Click += (_, _) => _mediaSessionRegistry.Current?.Step(TimeSpan.FromSeconds(-5));
+        StepForwardButton.Click += (_, _) => _mediaSessionRegistry.Current?.Step(TimeSpan.FromSeconds(5));
+
         FullscreenButton.Click += (_, _) => ToggleFullscreen();
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
+    }
+    
+    private void TogglePlayPause()
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session == null)
+        {
+            return;
+        }
+
+        if (_isPlaying)
+        {
+            session.Pause();
+            PlayPauseButton.Content = "▶";
+        }
+        else
+        {
+            session.Play();
+            PlayPauseButton.Content = "⏸";
+        }
+
+        _isPlaying = !_isPlaying;
     }
 
     private async Task OpenFile()
@@ -81,7 +195,46 @@ public partial class MainWindow : Window
                 AllowMultiple = false
             });
 
-        // No logic yet — placeholder only
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+
+        if (path != null)
+        {
+            _mediaSessionRegistry.Open(path);
+            var session = _mediaSessionRegistry.Current!;
+
+            var routes = session.AudioStreams
+                .Zip(session.AudioOutputs)
+                .ToList();
+            
+            Console.WriteLine($"Audio streams count: {routes.Count}");
+            Console.WriteLine(
+                string.Join(
+                    Environment.NewLine,
+                    session.AudioStreams.Select(stream => $"{stream.Title}, {stream.Language}")));
+            Console.WriteLine();
+            Console.WriteLine($"Audio outputs count: {routes.Count}");
+            Console.WriteLine(
+                string.Join(Environment.NewLine, session.AudioOutputs.Select(output => output.FriendlyName)));
+            
+            Console.WriteLine("Resulting routes:");
+            Console.WriteLine(
+                string.Join(
+                    Environment.NewLine,
+                    routes.Select(output => $"{output.First.Title} -> {output.Second.FriendlyName}")));
+            
+            session.SetAudioRoutes(routes);
+            
+            Console.WriteLine($"Total duration is {session.Duration}.");
+
+            // session.SetAudioRoutes([(session.AudioStreams[0], session.AudioOutputs[0])]);
+            DurationLabel.Text = FormatTime(session.Duration);
+            ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
+        }
     }
 
     private void ToggleFullscreen()
@@ -117,7 +270,7 @@ public partial class MainWindow : Window
 
     private void ShowOptionsWindow()
     {
-        var window = new OptionsWindow();
+        var window = Program.Services.GetRequiredService<OptionsWindow>();
         window.ShowDialog(this);
     }
 
@@ -128,7 +281,7 @@ public partial class MainWindow : Window
             switch (e.Key)
             {
                 case Key.Space:
-                    PlayButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PlayPauseButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     break;
 
                 case Key.Left:
@@ -140,7 +293,7 @@ public partial class MainWindow : Window
                     break;
 
                 case Key.F:
-                    ToggleFullscreen();
+                    FullscreenButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     break;
             }
         };

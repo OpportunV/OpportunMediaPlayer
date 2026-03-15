@@ -1,18 +1,33 @@
 ﻿using Avalonia;
 using System;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using OMP.Lib.Session;
 
 namespace OMP.Ui;
 
 class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
-    [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static IServiceProvider Services => _appHost.Services;
 
-    // Avalonia configuration, don't remove; also used by visual designer.
+    private static IHost _appHost = null!;
+
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        _appHost = Host.CreateDefaultBuilder(args)
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
+
+                services.AddTransient<MainWindow>();
+                services.AddTransient<OptionsWindow>();
+            })
+            .Build();
+
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
