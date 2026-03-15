@@ -9,14 +9,12 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto"
           Margin="20">
 
-        <!-- Header -->
         <TextBlock Grid.Row="0"
                    Text="Audio Routing"
                    FontSize="18"
                    FontWeight="Bold"
                    Margin="0,0,0,10"/>
 
-        <!-- Existing Routes -->
         <ItemsControl Grid.Row="1"
                       Name="RoutesList">
 
@@ -32,16 +30,16 @@
 
                         <TextBlock Grid.Column="1"
                                    Text="{Binding Output}"
-                                   VerticalAlignment="Center"
-                                   Margin="10,0"/>
+                                   Margin="10,0"
+                                   VerticalAlignment="Center"/>
 
                         <Button Grid.Column="2"
                                 Name="DeleteRouteButton"
+                                Click="OnDeleteRoute"
                                 Content="✕"
                                 Width="28"
                                 Height="28"/>
                     </Grid>
-
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
 
