@@ -25,6 +25,12 @@ class Program
             })
             .Build();
 
+        if (args.Length > 0)
+        {
+            var sessionRegistry = Services.GetRequiredService<IMediaSessionRegistry>();
+            sessionRegistry.Open(args[0]);
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

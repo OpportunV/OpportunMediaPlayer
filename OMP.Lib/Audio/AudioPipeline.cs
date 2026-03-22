@@ -10,17 +10,19 @@ public sealed unsafe class AudioPipeline : IDisposable
     public int StreamIndex { get; }
 
     private readonly BufferedWaveProvider _buffer;
-
+    private readonly byte[] _managedBuffer = new byte[8192];
     private readonly AVCodecContext* _codecContext;
-
     private readonly AVFrame* _frame;
 
+    private readonly CancellationToken _cancellationToken;
     private readonly WaveOutEvent _output;
     private readonly SwrContext* _swr;
     private readonly AVRational _timeBase;
 
-    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex)
+    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
+        CancellationToken cancellationToken)
     {
+        _cancellationToken = cancellationToken;
         StreamIndex = streamIndex;
 
         var stream = formatContext->streams[streamIndex];
@@ -89,13 +91,13 @@ public sealed unsafe class AudioPipeline : IDisposable
     public void Enqueue(AVPacket* packet)
     {
         ffmpeg.avcodec_send_packet(_codecContext, packet);
-        var managedBuffer = new byte[8192];
-        fixed (byte* outPtr = managedBuffer)
+        fixed (byte* outPtr = _managedBuffer)
         {
             var outPtrs = stackalloc byte*[1];
             outPtrs[0] = outPtr;
 
-            while (ffmpeg.avcodec_receive_frame(_codecContext, _frame) == 0)
+            while (ffmpeg.avcodec_receive_frame(_codecContext, _frame) == 0 &&
+                   !_cancellationToken.IsCancellationRequested)
             {
                 if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
                 {
@@ -116,12 +118,13 @@ public sealed unsafe class AudioPipeline : IDisposable
 
                 var outBytes = dstSamples * 2 * 2;
 
-                while (_buffer.BufferedBytes > _buffer.BufferLength * 0.75)
+                while (_buffer.BufferedBytes > _buffer.BufferLength * 0.75 &&
+                       !_cancellationToken.IsCancellationRequested)
                 {
                     Thread.Sleep(1);
                 }
 
-                _buffer.AddSamples(managedBuffer, 0, outBytes);
+                _buffer.AddSamples(_managedBuffer, 0, outBytes);
             }
         }
     }

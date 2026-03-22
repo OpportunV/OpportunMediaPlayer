@@ -11,6 +11,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using OMP.Lib.Session;
+using OMP.Lib.Video;
 
 namespace OMP.Ui;
 
@@ -18,7 +19,6 @@ public partial class MainWindow : Window
 {
     private readonly DispatcherTimer _overlayTimer = new();
     private readonly DispatcherTimer _uiTimer = new();
-    private readonly DispatcherTimer _videoTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private bool _isFullscreen;
     private WindowState _previousWindowState;
@@ -32,11 +32,14 @@ public partial class MainWindow : Window
         SetupButtons();
         SetupOverlayTimer();
         SetupUiTimer();
-        SetupVideoTimer();
         AddHotkeys();
         _previousWindowState = WindowState;
         ProgressSlider.PointerCaptureLost += (_, _) =>
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+        if (_mediaSessionRegistry.Current is not null)
+        {
+            UpdateSessionData();
+        }
     }
 
     private void OnPointerExited(object? o, PointerEventArgs pointerEventArgs)
@@ -105,19 +108,42 @@ public partial class MainWindow : Window
         _uiTimer.Start();
     }
 
-    private void SetupVideoTimer()
+    private async Task VideoLoop()
     {
-        _videoTimer.Interval = TimeSpan.FromMilliseconds(1);
-
-        _videoTimer.Tick += (_, _) =>
+        while (_mediaSessionRegistry.Current is null)
         {
-            var frame = _mediaSessionRegistry.Current?.VideoFrame;
+            await Task.Delay(20);
+        }
 
+        while (_isPlaying)
+        {
+            var frame = _mediaSessionRegistry.Current.PeekFrame;
             if (frame == null)
             {
-                return;
+                await Task.Delay(1);
+                continue;
             }
 
+            var delay = frame.TimeSeconds - _mediaSessionRegistry.Current.CurrentTime.TotalSeconds;
+            switch (delay)
+            {
+                case > 0:
+                    await Task.Delay(TimeSpan.FromSeconds(delay / 2));
+                    break;
+                case < -0.1:
+                    _mediaSessionRegistry.Current.PopFrame();
+                    continue;
+            }
+
+            Render(frame);
+            _mediaSessionRegistry.Current.PopFrame();
+        }
+    }
+
+    private void Render(VideoFrame frame)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
             if (_videoBitmap == null ||
                 _videoBitmap.PixelSize.Width != frame.Width ||
                 _videoBitmap.PixelSize.Height != frame.Height)
@@ -130,14 +156,12 @@ public partial class MainWindow : Window
 
                 VideoView.Source = _videoBitmap;
             }
-
+        
             using var fb = _videoBitmap.Lock();
-
+        
             Marshal.Copy(frame.Data, 0, fb.Address, frame.Data.Length);
             VideoView.InvalidateVisual();
-        };
-
-        _videoTimer.Start();
+        });
     }
 
     private static string FormatTime(TimeSpan time)
@@ -176,14 +200,15 @@ public partial class MainWindow : Window
         {
             session.Pause();
             PlayPauseButton.Content = "▶";
+            _isPlaying = false;
         }
         else
         {
+            _isPlaying = true;
+            Task.Run(VideoLoop);
             session.Play();
             PlayPauseButton.Content = "⏸";
         }
-
-        _isPlaying = !_isPlaying;
     }
 
     private async Task OpenFile()
@@ -229,12 +254,16 @@ public partial class MainWindow : Window
             
             session.SetAudioRoutes(routes);
             
+            UpdateSessionData();
             Console.WriteLine($"Total duration is {session.Duration}.");
-
-            // session.SetAudioRoutes([(session.AudioStreams[0], session.AudioOutputs[0])]);
-            DurationLabel.Text = FormatTime(session.Duration);
-            ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
         }
+    }
+
+    private void UpdateSessionData()
+    {
+        Title = $"{_mediaSessionRegistry.Current!.FileName} | Opportun Media Player";
+        DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
+        ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }
 
     private void ToggleFullscreen()
