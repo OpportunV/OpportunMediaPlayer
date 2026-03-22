@@ -15,8 +15,10 @@ public interface IMediaSession : IDisposable
     public TimeSpan CurrentTime { get; }
 
     public TimeSpan Duration { get; }
-    
-    public VideoFrame? VideoFrame { get; }
+
+    public VideoFrame? PeekFrame { get; }
+
+    public string FileName { get; }
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes);
 
@@ -27,4 +29,6 @@ public interface IMediaSession : IDisposable
     public void Step(TimeSpan offset);
 
     public void Seek(TimeSpan target);
+
+    public void PopFrame();
 }

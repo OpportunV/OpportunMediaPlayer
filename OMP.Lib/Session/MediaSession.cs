@@ -1,31 +1,56 @@
-﻿using FFmpeg.AutoGen;
+﻿using System.Threading.Channels;
+using FFmpeg.AutoGen;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
+using OMP.Lib.Extensions;
 using OMP.Lib.Video;
 
 namespace OMP.Lib.Session;
 
 public sealed unsafe class MediaSession : IMediaSession
 {
-    public IReadOnlyList<AudioStream> AudioStreams { get; }
-
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
     public IReadOnlyList<(AudioStream audioStream, AudioOutput audioOutput)> AudioRoutes => _audioRoutes.AsReadOnly();
 
-    public TimeSpan CurrentTime => _audioPipelines.Count > 0 ? TimeSpan.FromSeconds(_audioPipelines[0].CurrentTimeSeconds) : TimeSpan.Zero;
+    public IReadOnlyList<AudioStream> AudioStreams { get; }
 
-    public TimeSpan Duration => _formatContext->duration > 0 ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE) : TimeSpan.Zero;
+    public TimeSpan CurrentTime => _audioPipelines.Count > 0
+        ? TimeSpan.FromSeconds(_audioPipelines[0].CurrentTimeSeconds)
+        : TimeSpan.Zero;
 
-    public VideoFrame? VideoFrame => _videoPipeline?.Frame;
+    public TimeSpan Duration => _formatContext->duration > 0
+        ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
+        : TimeSpan.Zero;
+
+    public string FileName { get; }
+
+    public VideoFrame? PeekFrame =>
+        _videoPipeline is not null && _videoPipeline.TryPeek(out var videoFrame) ? videoFrame : null;
+
+    private readonly Channel<PacketRef> _audioChannel = Channel.CreateBounded<PacketRef>(
+        new BoundedChannelOptions(10)
+        {
+            FullMode = BoundedChannelFullMode.Wait
+        });
 
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<(AudioStream audioStream, AudioOutput audioOutput)> _audioRoutes = [];
-    private VideoPipeline? _videoPipeline;
+    private readonly Thread _audioThread;
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     private readonly Thread _demuxThread;
 
     private readonly AVFormatContext* _formatContext;
+
+    private readonly Channel<PacketRef> _videoChannel = Channel.CreateBounded<PacketRef>(
+        new BoundedChannelOptions(10)
+        {
+            FullMode = BoundedChannelFullMode.Wait
+        });
+
+    private readonly VideoPipeline? _videoPipeline;
+    private readonly Thread _videoThread;
 
     private volatile bool _paused = true;
     private volatile bool _running = true;
@@ -45,10 +70,11 @@ public sealed unsafe class MediaSession : IMediaSession
             throw new ApplicationException("Could not find stream info.");
         }
 
+        FileName = Path.GetFileNameWithoutExtension(filePath);
+
         for (var i = 0; i < _formatContext->nb_streams; i++)
         {
             var stream = _formatContext->streams[i];
-
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO)
             {
                 _videoPipeline = new VideoPipeline(_formatContext, i);
@@ -59,12 +85,15 @@ public sealed unsafe class MediaSession : IMediaSession
         AudioStreams = new AudioScanner().GetAudioStreams(_formatContext);
         AudioOutputs = new OutputScanner().ScanOutputs();
 
-        _demuxThread = new Thread(DemuxLoop)
-        {
-            IsBackground = true
-        };
+        _demuxThread = new Thread(DemuxLoop) { IsBackground = true };
+        _audioThread = new Thread(AudioLoop) { IsBackground = true };
+        _videoThread = new Thread(VideoLoop) { IsBackground = true };
 
         _demuxThread.Start();
+        _audioThread.Start();
+        _videoThread.Start();
+
+        SetAudioRoutes([(AudioStreams[0], AudioOutputs[0])]);
     }
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes)
@@ -72,13 +101,14 @@ public sealed unsafe class MediaSession : IMediaSession
         var wasPlaying = !_paused;
         Pause();
         _audioPipelines.ForEach(p => p.Flush());
-        
+
         ClearAudioPipelines();
         _audioRoutes.AddRange(routes);
 
         foreach (var (stream, output) in _audioRoutes)
         {
-            _audioPipelines.Add(new AudioPipeline(_formatContext, stream.Id, output.Id));
+            _audioPipelines.Add(
+                new AudioPipeline(_formatContext, stream.Id, output.Id, _cancellationTokenSource.Token));
         }
 
         if (wasPlaying)
@@ -141,11 +171,20 @@ public sealed unsafe class MediaSession : IMediaSession
         }
     }
 
+    public void PopFrame()
+    {
+        _videoPipeline?.Pop();
+    }
+
     public void Dispose()
     {
         _running = false;
         _paused = false;
+        _cancellationTokenSource.Cancel(false);
+        _cancellationTokenSource.Dispose();
         _demuxThread.Join();
+        _audioThread.Join();
+        _videoThread.Join();
 
         ClearAudioPipelines();
         _videoPipeline?.Dispose();
@@ -173,6 +212,43 @@ public sealed unsafe class MediaSession : IMediaSession
                 break;
             }
 
+            var streamIndex = packet->stream_index;
+
+            if (_audioPipelines.Any(pipeline => pipeline.StreamIndex == streamIndex))
+            {
+                var cloned = ffmpeg.av_packet_alloc();
+                ffmpeg.av_packet_ref(cloned, packet);
+                var packetRef = new PacketRef { Packet = cloned };
+                _audioChannel.Writer.Write(packetRef, _cancellationTokenSource.Token);
+            }
+
+            if (streamIndex == _videoPipeline?.StreamIndex)
+            {
+                var cloned = ffmpeg.av_packet_alloc();
+                ffmpeg.av_packet_ref(cloned, packet);
+                var packetRef = new PacketRef { Packet = cloned };
+                _videoChannel.Writer.Write(packetRef, _cancellationTokenSource.Token);
+            }
+
+            ffmpeg.av_packet_unref(packet);
+        }
+
+        ffmpeg.av_packet_free(&packet);
+    }
+
+    private void AudioLoop()
+    {
+        while (_running)
+        {
+            if (_paused)
+            {
+                Thread.Sleep(5);
+                continue;
+            }
+
+            var packetRef = _audioChannel.Reader.Read(_cancellationTokenSource.Token);
+            var packet = packetRef.Packet;
+
             foreach (var pipeline in _audioPipelines)
             {
                 if (pipeline.StreamIndex == packet->stream_index)
@@ -180,16 +256,26 @@ public sealed unsafe class MediaSession : IMediaSession
                     pipeline.Enqueue(packet);
                 }
             }
-            
-            if (_videoPipeline != null && packet->stream_index == _videoPipeline.StreamIndex)
+
+            ffmpeg.av_packet_free(&packet);
+        }
+    }
+
+    private void VideoLoop()
+    {
+        while (_running)
+        {
+            if (_paused)
             {
-                _videoPipeline.Enqueue(packet);
+                Thread.Sleep(5);
+                continue;
             }
 
-            ffmpeg.av_packet_unref(packet);
+            var packetRef = _videoChannel.Reader.Read(_cancellationTokenSource.Token);
+            var packet = packetRef.Packet;
+            _videoPipeline?.Enqueue(packet);
+            ffmpeg.av_packet_free(&packet);
         }
-
-        ffmpeg.av_packet_free(&packet);
     }
 
     private void ClearAudioPipelines()

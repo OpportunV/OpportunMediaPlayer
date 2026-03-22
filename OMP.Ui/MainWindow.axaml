@@ -5,7 +5,7 @@
     x:Class="OMP.Ui.MainWindow"
     Width="1200"
     Height="800"
-    Title="Autogen Media Player"
+    Title="Opportun Media Player"
     x:DataType="ui:MainWindow">
 
     <Grid RowDefinitions="Auto,*">
