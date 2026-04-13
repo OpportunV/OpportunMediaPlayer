@@ -5,12 +5,19 @@ namespace OMP.Lib.Audio;
 
 public sealed unsafe class AudioPipeline : IDisposable
 {
+    private const double SyncLatencyCompensationSeconds = 0.2;
+    private const int BytesPerSampleFrame = 4;
+
     public double CurrentTimeSeconds { get; private set; }
+    public double PlaybackTimeSeconds =>
+        Math.Max(0, CurrentTimeSeconds - Math.Min(BufferedDurationSeconds, SyncLatencyCompensationSeconds));
+    public double BufferedDurationSeconds => _buffer.BufferedDuration.TotalSeconds;
 
     public int StreamIndex { get; }
 
     private readonly BufferedWaveProvider _buffer;
     private readonly byte[] _managedBuffer = new byte[8192];
+    private byte[] _speedAdjustedBuffer = new byte[8192];
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
 
@@ -18,6 +25,7 @@ public sealed unsafe class AudioPipeline : IDisposable
     private readonly WaveOutEvent _output;
     private readonly SwrContext* _swr;
     private readonly AVRational _timeBase;
+    private double _speed = 1.0;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
         CancellationToken cancellationToken)
@@ -117,6 +125,7 @@ public sealed unsafe class AudioPipeline : IDisposable
                 }
 
                 var outBytes = dstSamples * 2 * 2;
+                var speedAdjustedBytes = AdjustPcmSpeed(_managedBuffer, outBytes);
 
                 while (_buffer.BufferedBytes > _buffer.BufferLength * 0.75 &&
                        !_cancellationToken.IsCancellationRequested)
@@ -124,7 +133,7 @@ public sealed unsafe class AudioPipeline : IDisposable
                     Thread.Sleep(1);
                 }
 
-                _buffer.AddSamples(_managedBuffer, 0, outBytes);
+                _buffer.AddSamples(_speedAdjustedBuffer, 0, speedAdjustedBytes);
             }
         }
     }
@@ -146,5 +155,59 @@ public sealed unsafe class AudioPipeline : IDisposable
         ffmpeg.swr_init(_swr);
 
         _buffer.ClearBuffer();
+    }
+
+    public void ResetClock(double timeSeconds)
+    {
+        CurrentTimeSeconds = Math.Max(0, timeSeconds);
+    }
+
+    public void SetSpeed(double speed)
+    {
+        _speed = speed;
+    }
+
+    private int AdjustPcmSpeed(byte[] source, int sourceBytes)
+    {
+        var speed = _speed;
+        if (Math.Abs(speed - 1.0) < 0.001)
+        {
+            EnsureSpeedBufferCapacity(sourceBytes);
+            Buffer.BlockCopy(source, 0, _speedAdjustedBuffer, 0, sourceBytes);
+            return sourceBytes;
+        }
+
+        var sourceFrames = sourceBytes / BytesPerSampleFrame;
+        if (sourceFrames == 0)
+        {
+            return 0;
+        }
+
+        var outputFrames = Math.Max(1, (int)Math.Round(sourceFrames / speed));
+        var outputBytes = outputFrames * BytesPerSampleFrame;
+        EnsureSpeedBufferCapacity(outputBytes);
+
+        for (var i = 0; i < outputFrames; i++)
+        {
+            var sourceFrame = (int)Math.Min(sourceFrames - 1, Math.Floor(i * speed));
+            Buffer.BlockCopy(
+                source,
+                sourceFrame * BytesPerSampleFrame,
+                _speedAdjustedBuffer,
+                i * BytesPerSampleFrame,
+                BytesPerSampleFrame);
+        }
+
+        return outputBytes;
+    }
+
+    private void EnsureSpeedBufferCapacity(int requiredSize)
+    {
+        if (_speedAdjustedBuffer.Length >= requiredSize)
+        {
+            return;
+        }
+
+        _speedAdjustedBuffer = new byte[requiredSize];
     }
 }

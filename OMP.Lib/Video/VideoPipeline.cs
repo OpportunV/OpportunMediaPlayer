@@ -1,26 +1,34 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using OMP.Lib.Extensions;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace OMP.Lib.Video;
 
 public sealed unsafe class VideoPipeline : IDisposable
 {
     public int StreamIndex { get; }
+    public double DecodeFps { get; private set; }
 
     private readonly VideoFrame _baseVideoFrame;
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
+    private readonly nint[] _frameBuffers;
+    private int _nextFrameBufferIndex;
 
     private readonly Channel<VideoFrame> _frameChannel = Channel.CreateBounded<VideoFrame>(
         new BoundedChannelOptions(3)
         {
-            FullMode = BoundedChannelFullMode.Wait
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+            SingleWriter = true
         });
 
     private readonly SwsContext* _sws;
     private readonly AVRational _timeBase;
+    private int _decodedFrames;
+    private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
 
     public VideoPipeline(AVFormatContext* formatContext, int streamIndex)
     {
@@ -32,6 +40,8 @@ public sealed unsafe class VideoPipeline : IDisposable
 
         _codecContext = ffmpeg.avcodec_alloc_context3(codec);
         ffmpeg.avcodec_parameters_to_context(_codecContext, stream->codecpar);
+        _codecContext->thread_count = Environment.ProcessorCount;
+        _codecContext->thread_type = ffmpeg.FF_THREAD_FRAME;
 
         if (ffmpeg.avcodec_open2(_codecContext, codec, null) < 0)
         {
@@ -56,14 +66,26 @@ public sealed unsafe class VideoPipeline : IDisposable
             null);
 
         var stride = width * 4;
+        var frameBufferSize = stride * height;
+        _frameBuffers =
+        [
+            Marshal.AllocHGlobal(frameBufferSize),
+            Marshal.AllocHGlobal(frameBufferSize),
+            Marshal.AllocHGlobal(frameBufferSize)
+        ];
 
-        _baseVideoFrame = new VideoFrame(width, height, stride, [], 0);
+        _baseVideoFrame = new VideoFrame(width, height, stride, 0, frameBufferSize, 0);
     }
 
     public void Dispose()
     {
         Flush();
         _frameChannel.Writer.Complete();
+        foreach (var frameBuffer in _frameBuffers)
+        {
+            Marshal.FreeHGlobal(frameBuffer);
+        }
+
         fixed (AVFrame** f = &_frame)
         {
             ffmpeg.av_frame_free(f);
@@ -77,7 +99,7 @@ public sealed unsafe class VideoPipeline : IDisposable
         ffmpeg.sws_freeContext(_sws);
     }
 
-    public bool TryPeek([NotNullWhen(true)] out VideoFrame? videoFrame)
+    public bool TryPeek(out VideoFrame videoFrame)
     {
         return _frameChannel.Reader.TryPeek(out videoFrame);
     }
@@ -99,28 +121,34 @@ public sealed unsafe class VideoPipeline : IDisposable
             }
 
             var time = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
-            var buffer = new byte[_baseVideoFrame.Stride * _baseVideoFrame.Height];
+            var buffer = _frameBuffers[_nextFrameBufferIndex];
+            _nextFrameBufferIndex = (_nextFrameBufferIndex + 1) % _frameBuffers.Length;
 
-            fixed (byte* bufferPtr = buffer)
+            byte_ptrArray4 dstData = default;
+            int_array4 dstLines = default;
+
+            dstData[0] = (byte*)buffer;
+            dstLines[0] = _baseVideoFrame.Stride;
+
+            ffmpeg.sws_scale(
+                _sws,
+                _frame->data,
+                _frame->linesize,
+                0,
+                _baseVideoFrame.Height,
+                dstData,
+                dstLines);
+
+            var videoFrame = _baseVideoFrame with { DataPtr = buffer, TimeSeconds = time };
+            _frameChannel.Writer.TryWrite(videoFrame);
+            _decodedFrames++;
+
+            if (_decodeFpsStopwatch.ElapsedMilliseconds >= 1000)
             {
-                byte_ptrArray4 dstData = default;
-                int_array4 dstLines = default;
-
-                dstData[0] = bufferPtr;
-                dstLines[0] = _baseVideoFrame.Stride;
-
-                ffmpeg.sws_scale(
-                    _sws,
-                    _frame->data,
-                    _frame->linesize,
-                    0,
-                    _baseVideoFrame.Height,
-                    dstData,
-                    dstLines);
+                DecodeFps = _decodedFrames * 1000.0 / _decodeFpsStopwatch.ElapsedMilliseconds;
+                _decodedFrames = 0;
+                _decodeFpsStopwatch.Restart();
             }
-
-            var videoFrame = _baseVideoFrame with { Data = buffer, TimeSeconds = time };
-            _frameChannel.Writer.Write(videoFrame);
         }
     }
 

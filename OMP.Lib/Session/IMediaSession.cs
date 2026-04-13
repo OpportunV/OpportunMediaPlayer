@@ -6,6 +6,8 @@ namespace OMP.Lib.Session;
 
 public interface IMediaSession : IDisposable
 {
+    public event Action<VideoFrame>? VideoFrameReady;
+
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
@@ -16,9 +18,13 @@ public interface IMediaSession : IDisposable
 
     public TimeSpan Duration { get; }
 
-    public VideoFrame? PeekFrame { get; }
-
     public string FileName { get; }
+
+    public double Speed { get; }
+
+    public double VideoFps { get; }
+
+    public double VideoDecodeFps { get; }
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes);
 
@@ -30,5 +36,5 @@ public interface IMediaSession : IDisposable
 
     public void Seek(TimeSpan target);
 
-    public void PopFrame();
+    public void SetSpeed(double speed);
 }
