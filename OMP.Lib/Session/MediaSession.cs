@@ -20,9 +20,18 @@ public sealed unsafe class MediaSession : IMediaSession
 
     public TimeSpan CurrentTime => TimeSpan.FromSeconds(GetPlaybackTimeSeconds());
 
-    public TimeSpan Duration => _formatContext->duration > 0
-        ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
-        : TimeSpan.Zero;
+    public TimeSpan Duration
+    {
+        get
+        {
+            lock (_formatSync)
+            {
+                return _formatContext->duration > 0
+                    ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
+                    : TimeSpan.Zero;
+            }
+        }
+    }
 
     public string FileName { get; }
     public double Speed { get; private set; } = 1.0;
@@ -119,8 +128,11 @@ public sealed unsafe class MediaSession : IMediaSession
 
         foreach (var (stream, output) in _audioRoutes)
         {
-            _audioPipelines.Add(
-                new AudioPipeline(_formatContext, stream.Id, output.Id, _cancellationTokenSource.Token));
+            lock (_formatSync)
+            {
+                _audioPipelines.Add(
+                    new AudioPipeline(_formatContext, stream.Id, output.Id, _cancellationTokenSource.Token));
+            }
         }
 
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
@@ -180,7 +192,7 @@ public sealed unsafe class MediaSession : IMediaSession
                         _formatContext,
                         -1,
                         targetPts,
-                        ffmpeg.AVSEEK_FLAG_BACKWARD) < 0)
+                        ffmpeg.AVSEEK_FLAG_ANY) < 0)
                 {
                     Console.WriteLine("Error during seek.");
                     return;
@@ -216,6 +228,7 @@ public sealed unsafe class MediaSession : IMediaSession
             _playbackClockStartTicks = Stopwatch.GetTimestamp();
         }
 
+        // TODO: Perhaps need to flush same way as in the seek method.
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
     }
 
@@ -252,7 +265,7 @@ public sealed unsafe class MediaSession : IMediaSession
                 continue;
             }
 
-            var readResult = 0;
+            int readResult;
             lock (_formatSync)
             {
                 readResult = ffmpeg.av_read_frame(_formatContext, packet);
