@@ -20,7 +20,7 @@ public sealed unsafe class VideoPipeline : IDisposable
     private readonly Channel<VideoFrame> _frameChannel = Channel.CreateBounded<VideoFrame>(
         new BoundedChannelOptions(3)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = true
         });
@@ -140,7 +140,7 @@ public sealed unsafe class VideoPipeline : IDisposable
                 dstLines);
 
             var videoFrame = _baseVideoFrame with { DataPtr = buffer, TimeSeconds = time };
-            _frameChannel.Writer.TryWrite(videoFrame);
+            _frameChannel.Writer.Write(videoFrame);
             _decodedFrames++;
 
             if (_decodeFpsStopwatch.ElapsedMilliseconds >= 1000)

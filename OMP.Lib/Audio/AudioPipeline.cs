@@ -1,31 +1,45 @@
-﻿using FFmpeg.AutoGen;
+﻿using System.Threading.Channels;
+using FFmpeg.AutoGen;
+using NAudio.Dsp;
 using NAudio.Wave;
+using OMP.Lib.Extensions;
 
 namespace OMP.Lib.Audio;
 
 public sealed unsafe class AudioPipeline : IDisposable
 {
-    private const double SyncLatencyCompensationSeconds = 0.2;
-    private const int BytesPerSampleFrame = 4;
-
-    public double CurrentTimeSeconds { get; private set; }
-    public double PlaybackTimeSeconds =>
-        Math.Max(0, CurrentTimeSeconds - Math.Min(BufferedDurationSeconds, SyncLatencyCompensationSeconds));
-    public double BufferedDurationSeconds => _buffer.BufferedDuration.TotalSeconds;
-
     public int StreamIndex { get; }
 
-    private readonly BufferedWaveProvider _buffer;
-    private readonly byte[] _managedBuffer = new byte[8192];
+    private double _currentTimeSeconds;
     private byte[] _speedAdjustedBuffer = new byte[8192];
+    private double _speed = 1.0;
+    private float[] _pitchLeftBuffer = [];
+    private float[] _pitchRightBuffer = [];
+
+    private readonly Channel<AudioChunk> _decodedPcmChannel = Channel.CreateBounded<AudioChunk>(
+        new BoundedChannelOptions(128)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = true
+        });
+
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
+    private readonly BufferedWaveProvider _buffer;
 
     private readonly CancellationToken _cancellationToken;
+    private readonly byte[] _managedBuffer = new byte[8192];
     private readonly WaveOutEvent _output;
     private readonly SwrContext* _swr;
     private readonly AVRational _timeBase;
-    private double _speed = 1.0;
+    private readonly SmbPitchShifter _leftPitchShifter = new();
+    private readonly SmbPitchShifter _rightPitchShifter = new();
+
+    private const int BytesPerSampleFrame = 4;
+    private const int OutputSampleRate = 44100;
+    private const int PitchFftFrameSize = 1024;
+    private const int PitchOversampling = 8;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
         CancellationToken cancellationToken)
@@ -109,7 +123,7 @@ public sealed unsafe class AudioPipeline : IDisposable
             {
                 if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
                 {
-                    CurrentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
+                    _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
                 }
 
                 var dstSamples = ffmpeg.swr_convert(
@@ -126,14 +140,44 @@ public sealed unsafe class AudioPipeline : IDisposable
 
                 var outBytes = dstSamples * 2 * 2;
                 var speedAdjustedBytes = AdjustPcmSpeed(_managedBuffer, outBytes);
+                ApplyPitchPreservingStretch(_speedAdjustedBuffer, speedAdjustedBytes);
 
-                while (_buffer.BufferedBytes > _buffer.BufferLength * 0.75 &&
-                       !_cancellationToken.IsCancellationRequested)
-                {
-                    Thread.Sleep(1);
-                }
+                var chunkBytes = new byte[speedAdjustedBytes];
+                Buffer.BlockCopy(_speedAdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
+                var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
+                _decodedPcmChannel.Writer.Write(chunk, _cancellationToken);
+            }
+        }
+    }
 
-                _buffer.AddSamples(_speedAdjustedBuffer, 0, speedAdjustedBytes);
+    public void PumpToOutput(double targetMediaTimeSeconds)
+    {
+        while (_decodedPcmChannel.Reader.TryPeek(out var chunk))
+        {
+            if (chunk.TimeSeconds > targetMediaTimeSeconds + 0.2)
+            {
+                break;
+            }
+
+            if (_buffer.BufferedBytes > _buffer.BufferLength * 0.9)
+            {
+                break;
+            }
+
+            var remainingBufferCapacity = _buffer.BufferLength - _buffer.BufferedBytes;
+            if (chunk.Length > remainingBufferCapacity)
+            {
+                break;
+            }
+
+            _decodedPcmChannel.Reader.TryRead(out chunk);
+            try
+            {
+                _buffer.AddSamples(chunk.Data, 0, chunk.Length);
+            }
+            catch (InvalidOperationException)
+            {
+                break;
             }
         }
     }
@@ -155,11 +199,14 @@ public sealed unsafe class AudioPipeline : IDisposable
         ffmpeg.swr_init(_swr);
 
         _buffer.ClearBuffer();
+        while (_decodedPcmChannel.Reader.TryRead(out _))
+        {
+        }
     }
 
     public void ResetClock(double timeSeconds)
     {
-        CurrentTimeSeconds = Math.Max(0, timeSeconds);
+        _currentTimeSeconds = Math.Max(0, timeSeconds);
     }
 
     public void SetSpeed(double speed)
@@ -209,5 +256,60 @@ public sealed unsafe class AudioPipeline : IDisposable
         }
 
         _speedAdjustedBuffer = new byte[requiredSize];
+    }
+
+    private void ApplyPitchPreservingStretch(byte[] pcmBuffer, int length)
+    {
+        if (Math.Abs(_speed - 1.0) < 0.001)
+        {
+            return;
+        }
+
+        var frames = length / BytesPerSampleFrame;
+        if (frames < 64)
+        {
+            return;
+        }
+
+        if (_pitchLeftBuffer.Length < frames)
+        {
+            _pitchLeftBuffer = new float[frames];
+            _pitchRightBuffer = new float[frames];
+        }
+
+        for (var i = 0; i < frames; i++)
+        {
+            var offset = i * BytesPerSampleFrame;
+            _pitchLeftBuffer[i] = BitConverter.ToInt16(pcmBuffer, offset) / 32768f;
+            _pitchRightBuffer[i] = BitConverter.ToInt16(pcmBuffer, offset + 2) / 32768f;
+        }
+
+        var pitchShift = (float)Math.Clamp(1.0 / _speed, 0.5, 2.0);
+        _leftPitchShifter.PitchShift(
+            pitchShift,
+            frames,
+            PitchFftFrameSize,
+            PitchOversampling,
+            OutputSampleRate,
+            _pitchLeftBuffer);
+        _rightPitchShifter.PitchShift(
+            pitchShift,
+            frames,
+            PitchFftFrameSize,
+            PitchOversampling,
+            OutputSampleRate,
+            _pitchRightBuffer);
+
+        for (var i = 0; i < frames; i++)
+        {
+            var offset = i * BytesPerSampleFrame;
+            var left = (short)Math.Clamp(_pitchLeftBuffer[i] * 32767f, short.MinValue, short.MaxValue);
+            var right = (short)Math.Clamp(_pitchRightBuffer[i] * 32767f, short.MinValue, short.MaxValue);
+
+            pcmBuffer[offset] = (byte)(left & 0xff);
+            pcmBuffer[offset + 1] = (byte)((left >> 8) & 0xff);
+            pcmBuffer[offset + 2] = (byte)(right & 0xff);
+            pcmBuffer[offset + 3] = (byte)((right >> 8) & 0xff);
+        }
     }
 }
