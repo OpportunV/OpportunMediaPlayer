@@ -1,3 +1,3 @@
 ﻿namespace OMP.Lib.Video;
 
-public sealed record VideoFrame(int Width, int Height, int Stride, byte[] Data, double TimeSeconds);
+public readonly record struct VideoFrame(int Width, int Height, int Stride, nint DataPtr, int DataLength, double TimeSeconds);

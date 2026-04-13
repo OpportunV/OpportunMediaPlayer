@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -12,6 +11,7 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace OMP.Ui;
 
@@ -24,6 +24,9 @@ public partial class MainWindow : Window
     private WindowState _previousWindowState;
     private bool _isPlaying;
     private WriteableBitmap? _videoBitmap;
+    private int _uiFramesRendered;
+    private double _uiFps;
+    private readonly Stopwatch _uiFpsStopwatch = Stopwatch.StartNew();
 
     public MainWindow(IMediaSessionRegistry mediaSessionRegistry)
     {
@@ -34,12 +37,22 @@ public partial class MainWindow : Window
         SetupUiTimer();
         AddHotkeys();
         _previousWindowState = WindowState;
+        _mediaSessionRegistry.SessionChanged += OnSessionChanged;
         ProgressSlider.PointerCaptureLost += (_, _) =>
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
         if (_mediaSessionRegistry.Current is not null)
         {
+            OnSessionChanged(_mediaSessionRegistry);
             UpdateSessionData();
         }
+    }
+
+    private void OnSessionChanged(IMediaSessionRegistry registry)
+    {
+        registry.Current?.VideoFrameReady -= Render;
+        registry.Current?.VideoFrameReady += Render;
+        _videoBitmap = null;
+        VideoView.Source = null;
     }
 
     private void OnPointerExited(object? o, PointerEventArgs pointerEventArgs)
@@ -103,41 +116,11 @@ public partial class MainWindow : Window
             }
 
             CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
+            Title =
+                $"{session.FileName} | Opportun Media Player | Decode {session.VideoDecodeFps:F1} | Dispatch {session.VideoFps:F1} | UI {_uiFps:F1} FPS | x{session.Speed:F2}";
         };
 
         _uiTimer.Start();
-    }
-
-    private async Task VideoLoop()
-    {
-        while (_mediaSessionRegistry.Current is null)
-        {
-            await Task.Delay(20);
-        }
-
-        while (_isPlaying)
-        {
-            var frame = _mediaSessionRegistry.Current.PeekFrame;
-            if (frame == null)
-            {
-                await Task.Delay(1);
-                continue;
-            }
-
-            var delay = frame.TimeSeconds - _mediaSessionRegistry.Current.CurrentTime.TotalSeconds;
-            switch (delay)
-            {
-                case > 0:
-                    await Task.Delay(TimeSpan.FromSeconds(delay / 2));
-                    break;
-                case < -0.1:
-                    _mediaSessionRegistry.Current.PopFrame();
-                    continue;
-            }
-
-            Render(frame);
-            _mediaSessionRegistry.Current.PopFrame();
-        }
     }
 
     private void Render(VideoFrame frame)
@@ -158,9 +141,20 @@ public partial class MainWindow : Window
             }
         
             using var fb = _videoBitmap.Lock();
-        
-            Marshal.Copy(frame.Data, 0, fb.Address, frame.Data.Length);
+
+            unsafe
+            {
+                Buffer.MemoryCopy((void*)frame.DataPtr, (void*)fb.Address, frame.DataLength, frame.DataLength);
+            }
+
             VideoView.InvalidateVisual();
+            _uiFramesRendered++;
+            if (_uiFpsStopwatch.ElapsedMilliseconds >= 1000)
+            {
+                _uiFps = _uiFramesRendered * 1000.0 / _uiFpsStopwatch.ElapsedMilliseconds;
+                _uiFramesRendered = 0;
+                _uiFpsStopwatch.Restart();
+            }
         });
     }
 
@@ -205,7 +199,6 @@ public partial class MainWindow : Window
         else
         {
             _isPlaying = true;
-            Task.Run(VideoLoop);
             session.Play();
             PlayPauseButton.Content = "⏸";
         }
@@ -264,6 +257,7 @@ public partial class MainWindow : Window
         Title = $"{_mediaSessionRegistry.Current!.FileName} | Opportun Media Player";
         DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
+        _mediaSessionRegistry.Current!.SetSpeed(1);
     }
 
     private void ToggleFullscreen()
@@ -324,7 +318,21 @@ public partial class MainWindow : Window
                 case Key.F:
                     FullscreenButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     break;
+                case Key.OemPlus:
+                case Key.Add:
+                    ChangeSpeed(0.1);
+                    break;
+                case Key.OemMinus:
+                case Key.Subtract:
+                    ChangeSpeed(-0.1);
+                    break;
             }
         };
+    }
+
+    private void ChangeSpeed(double delta)
+    {
+        var session = _mediaSessionRegistry.Current;
+        session?.SetSpeed(session.Speed + delta);
     }
 }
