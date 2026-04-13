@@ -18,7 +18,7 @@ public sealed unsafe class VideoPipeline : IDisposable
     private int _nextFrameBufferIndex;
 
     private readonly Channel<VideoFrame> _frameChannel = Channel.CreateBounded<VideoFrame>(
-        new BoundedChannelOptions(3)
+        new BoundedChannelOptions(BufferedFrameCount)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -29,6 +29,7 @@ public sealed unsafe class VideoPipeline : IDisposable
     private readonly AVRational _timeBase;
     private int _decodedFrames;
     private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
+    private const int BufferedFrameCount = 8;
 
     public VideoPipeline(AVFormatContext* formatContext, int streamIndex)
     {
@@ -67,12 +68,11 @@ public sealed unsafe class VideoPipeline : IDisposable
 
         var stride = width * 4;
         var frameBufferSize = stride * height;
-        _frameBuffers =
-        [
-            Marshal.AllocHGlobal(frameBufferSize),
-            Marshal.AllocHGlobal(frameBufferSize),
-            Marshal.AllocHGlobal(frameBufferSize)
-        ];
+        _frameBuffers = new nint[BufferedFrameCount];
+        for (var i = 0; i < BufferedFrameCount; i++)
+        {
+            _frameBuffers[i] = Marshal.AllocHGlobal(frameBufferSize);
+        }
 
         _baseVideoFrame = new VideoFrame(width, height, stride, 0, frameBufferSize, 0);
     }
@@ -158,5 +158,7 @@ public sealed unsafe class VideoPipeline : IDisposable
         while (_frameChannel.Reader.TryRead(out _))
         {
         }
+
+        _nextFrameBufferIndex = 0;
     }
 }
