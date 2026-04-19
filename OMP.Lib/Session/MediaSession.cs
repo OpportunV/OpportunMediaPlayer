@@ -73,6 +73,7 @@ public sealed unsafe class MediaSession : IMediaSession
     private long _playbackClockStartTicks;
     private bool _playbackClockRunning;
     private bool _awaitingFirstFrame = true;
+    private double? _pendingSeekTargetSeconds;
 
     public MediaSession(string filePath)
     {
@@ -184,26 +185,23 @@ public sealed unsafe class MediaSession : IMediaSession
             Pause();
             DrainPacketChannel(_audioChannel);
             DrainPacketChannel(_videoChannel);
-            var targetPts = (long)Math.Round(targetSeconds * ffmpeg.AV_TIME_BASE);
+            var seekTargetSeconds = _videoPipeline is null
+                ? targetSeconds
+                : Math.Max(0, targetSeconds - 1);
 
             lock (_formatSync)
             {
-                if (ffmpeg.av_seek_frame(
-                        _formatContext,
-                        -1,
-                        targetPts,
-                        ffmpeg.AVSEEK_FLAG_ANY) < 0)
+                if (!TrySeekToVideoTarget(seekTargetSeconds))
                 {
                     Console.WriteLine("Error during seek.");
                     return;
                 }
-
-                ffmpeg.avformat_flush(_formatContext);
             }
 
             _playbackClockBaseSeconds = targetSeconds;
             _playbackClockRunning = false;
             _awaitingFirstFrame = true;
+            _pendingSeekTargetSeconds = targetSeconds;
 
             _audioPipelines.ForEach(pipeline =>
             {
@@ -357,8 +355,13 @@ public sealed unsafe class MediaSession : IMediaSession
                     continue;
                 }
 
+                if (_awaitingFirstFrame && _pendingSeekTargetSeconds.HasValue)
+                {
+                    _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
+                }
+
                 var playbackTime = GetPlaybackTimeSeconds();
-                if (_audioPipelines.Count > 0)
+                if (_audioPipelines.Count > 0 && !_awaitingFirstFrame)
                 {
                     _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
                 }
@@ -371,11 +374,28 @@ public sealed unsafe class MediaSession : IMediaSession
 
                 if (_awaitingFirstFrame)
                 {
-                    _playbackClockBaseSeconds = frame.TimeSeconds;
+                    if (_pendingSeekTargetSeconds.HasValue)
+                    {
+                        var pendingSeekTargetSeconds = _pendingSeekTargetSeconds.Value;
+
+                        if (frame.TimeSeconds + 0.01 < pendingSeekTargetSeconds)
+                        {
+                            _videoPipeline.Pop();
+                            continue;
+                        }
+
+                        _playbackClockBaseSeconds = pendingSeekTargetSeconds;
+                        _pendingSeekTargetSeconds = null;
+                    }
+                    else
+                    {
+                        _playbackClockBaseSeconds = frame.TimeSeconds;
+                    }
+
                     _playbackClockStartTicks = Stopwatch.GetTimestamp();
                     _playbackClockRunning = true;
                     _awaitingFirstFrame = false;
-                    playbackTime = frame.TimeSeconds;
+                    playbackTime = _playbackClockBaseSeconds;
                 }
 
                 var leadSeconds = frame.TimeSeconds - playbackTime;
@@ -426,6 +446,45 @@ public sealed unsafe class MediaSession : IMediaSession
             var packet = packetRef.Packet;
             ffmpeg.av_packet_free(&packet);
         }
+    }
+
+    private bool TrySeekToVideoTarget(double targetSeconds)
+    {
+        int result;
+        if (_videoPipeline is null)
+        {
+            var targetPts = (long)Math.Round(targetSeconds * ffmpeg.AV_TIME_BASE);
+            result = ffmpeg.av_seek_frame(
+                _formatContext,
+                -1,
+                targetPts,
+                ffmpeg.AVSEEK_FLAG_BACKWARD);
+
+            if (result >= 0)
+            {
+                ffmpeg.avformat_flush(_formatContext);
+                return true;
+            }
+
+            return false;
+        }
+
+        var stream = _formatContext->streams[_videoPipeline.StreamIndex];
+        var streamTimeBase = stream->time_base;
+        var targetPtsInStreamTimeBase = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(streamTimeBase));
+        result = ffmpeg.av_seek_frame(
+            _formatContext,
+            _videoPipeline.StreamIndex,
+            targetPtsInStreamTimeBase,
+            ffmpeg.AVSEEK_FLAG_BACKWARD);
+
+        if (result >= 0)
+        {
+            ffmpeg.avformat_flush(_formatContext);
+            return true;
+        }
+
+        return false;
     }
 
     private double GetPlaybackTimeSeconds()

@@ -154,6 +154,12 @@ public sealed unsafe class AudioPipeline : IDisposable
     {
         while (_decodedPcmChannel.Reader.TryPeek(out var chunk))
         {
+            if (chunk.TimeSeconds < targetMediaTimeSeconds - 0.2)
+            {
+                _decodedPcmChannel.Reader.TryRead(out _);
+                continue;
+            }
+
             if (chunk.TimeSeconds > targetMediaTimeSeconds + 0.2)
             {
                 break;
@@ -179,6 +185,19 @@ public sealed unsafe class AudioPipeline : IDisposable
             {
                 break;
             }
+        }
+    }
+
+    public void DiscardBefore(double timeSeconds)
+    {
+        while (_decodedPcmChannel.Reader.TryPeek(out var chunk))
+        {
+            if (chunk.TimeSeconds >= timeSeconds)
+            {
+                break;
+            }
+
+            _decodedPcmChannel.Reader.TryRead(out _);
         }
     }
 
