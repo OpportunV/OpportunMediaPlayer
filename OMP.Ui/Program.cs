@@ -1,8 +1,10 @@
-﻿using Avalonia;
+using Avalonia;
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OMP.Lib.Session;
+using OMP.Ui.Controls;
+using OMP.Ui.Input;
 
 namespace OMP.Ui;
 
@@ -19,6 +21,8 @@ class Program
             .ConfigureServices(services =>
             {
                 services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
+                services.AddTransient<IMainWindowCommands, MainWindowCommands>();
+                services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
 
                 services.AddTransient<MainWindow>();
                 services.AddTransient<OptionsWindow>();

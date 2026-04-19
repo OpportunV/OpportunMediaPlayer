@@ -1,41 +1,63 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
-using Stopwatch = System.Diagnostics.Stopwatch;
+using OMP.Ui.Controls;
+using OMP.Ui.Input;
 
 namespace OMP.Ui;
 
 public partial class MainWindow : Window
 {
+    private const double WindowedOverlaySpacing = 8;
     private readonly DispatcherTimer _overlayTimer = new();
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
+    private readonly IMainWindowCommands _commands;
+    private readonly IMainWindowHotkeyService _hotkeyService;
     private bool _isFullscreen;
     private WindowState _previousWindowState;
-    private bool _isPlaying;
     private WriteableBitmap? _videoBitmap;
-    private int _uiFramesRendered;
-    private double _uiFps;
-    private readonly Stopwatch _uiFpsStopwatch = Stopwatch.StartNew();
 
-    public MainWindow(IMediaSessionRegistry mediaSessionRegistry)
+    private bool IsPlaying
+    {
+        get;
+        set
+        {
+            field = value;
+            UpdatePlayPauseIcon();
+        }
+    }
+
+    public MainWindow(
+        IMediaSessionRegistry mediaSessionRegistry,
+        IMainWindowCommands commands,
+        IMainWindowHotkeyService hotkeyService)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
+        _commands = commands;
+        _hotkeyService = hotkeyService;
         InitializeComponent();
+        _commands.Attach(new MainWindowCommandContext
+        {
+            GetIsPlaying = () => IsPlaying,
+            SetIsPlaying = value => IsPlaying = value,
+            ToggleFullscreen = ToggleFullscreen
+        });
         SetupButtons();
         SetupOverlayTimer();
         SetupUiTimer();
-        AddHotkeys();
+        SetupHotkeys();
+        OverlayControls.SizeChanged += (_, _) => UpdateVideoViewportMargin();
+        UpdatePlayPauseIcon();
+        UpdateVideoViewportMargin();
         _previousWindowState = WindowState;
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
         ProgressSlider.PointerCaptureLost += (_, _) =>
@@ -53,6 +75,7 @@ public partial class MainWindow : Window
         registry.Current?.VideoFrameReady += Render;
         _videoBitmap = null;
         VideoView.Source = null;
+        IsPlaying = false;
     }
 
     private void OnPointerExited(object? o, PointerEventArgs pointerEventArgs)
@@ -116,8 +139,6 @@ public partial class MainWindow : Window
             }
 
             CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
-            Title =
-                $"{session.FileName} | Opportun Media Player | Decode {session.VideoDecodeFps:F1} | Dispatch {session.VideoFps:F1} | UI {_uiFps:F1} FPS | x{session.Speed:F2}";
         };
 
         _uiTimer.Start();
@@ -139,7 +160,7 @@ public partial class MainWindow : Window
 
                 VideoView.Source = _videoBitmap;
             }
-        
+
             using var fb = _videoBitmap.Lock();
 
             unsafe
@@ -148,13 +169,6 @@ public partial class MainWindow : Window
             }
 
             VideoView.InvalidateVisual();
-            _uiFramesRendered++;
-            if (_uiFpsStopwatch.ElapsedMilliseconds >= 1000)
-            {
-                _uiFps = _uiFramesRendered * 1000.0 / _uiFpsStopwatch.ElapsedMilliseconds;
-                _uiFramesRendered = 0;
-                _uiFpsStopwatch.Restart();
-            }
         });
     }
 
@@ -168,40 +182,29 @@ public partial class MainWindow : Window
         return time.ToString(@"mm\:ss");
     }
 
+    private void UpdatePlayPauseIcon()
+    {
+        PlayIcon.IsVisible = !IsPlaying;
+        PauseIcon.IsVisible = IsPlaying;
+    }
+
+    private void UpdateVideoViewportMargin()
+    {
+        var bottomMargin = _isFullscreen ? 0 : OverlayControls.Bounds.Height + WindowedOverlaySpacing;
+        VideoSurface.Margin = new Thickness(0, 0, 0, bottomMargin);
+    }
+
     private void SetupButtons()
     {
         OpenMenuItem.Click += async (_, _) => await OpenFile();
         ExitMenuItem.Click += (_, _) => Close();
 
-        PlayPauseButton.Click += (_, _) => TogglePlayPause();
-        StepBackButton.Click += (_, _) => _mediaSessionRegistry.Current?.Step(TimeSpan.FromSeconds(-5));
-        StepForwardButton.Click += (_, _) => _mediaSessionRegistry.Current?.Step(TimeSpan.FromSeconds(5));
+        PlayPauseButton.Click += (_, _) => _commands.TogglePlayPause();
+        StepBackButton.Click += (_, _) => _commands.StepBack();
+        StepForwardButton.Click += (_, _) => _commands.StepForward();
 
-        FullscreenButton.Click += (_, _) => ToggleFullscreen();
+        FullscreenButton.Click += (_, _) => _commands.ToggleFullscreen();
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
-    }
-    
-    private void TogglePlayPause()
-    {
-        var session = _mediaSessionRegistry.Current;
-
-        if (session == null)
-        {
-            return;
-        }
-
-        if (_isPlaying)
-        {
-            session.Pause();
-            PlayPauseButton.Content = "▶";
-            _isPlaying = false;
-        }
-        else
-        {
-            _isPlaying = true;
-            session.Play();
-            PlayPauseButton.Content = "⏸";
-        }
     }
 
     private async Task OpenFile()
@@ -247,6 +250,7 @@ public partial class MainWindow : Window
 
             TopMenu.IsVisible = false;
             OverlayControls.Opacity = 1;
+            UpdateVideoViewportMargin();
 
             _overlayTimer.Start();
         }
@@ -259,11 +263,11 @@ public partial class MainWindow : Window
 
             TopMenu.IsVisible = true;
             OverlayControls.Opacity = 1;
+            UpdateVideoViewportMargin();
 
             _overlayTimer.Stop();
         }
     }
-
 
     private void ShowOptionsWindow()
     {
@@ -271,42 +275,8 @@ public partial class MainWindow : Window
         window.ShowDialog(this);
     }
 
-    private void AddHotkeys()
+    private void SetupHotkeys()
     {
-        KeyDown += (_, e) =>
-        {
-            switch (e.Key)
-            {
-                case Key.Space:
-                    PlayPauseButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    break;
-
-                case Key.Left:
-                    StepBackButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    break;
-
-                case Key.Right:
-                    StepForwardButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    break;
-
-                case Key.F:
-                    FullscreenButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    break;
-                case Key.OemPlus:
-                case Key.Add:
-                    ChangeSpeed(0.1);
-                    break;
-                case Key.OemMinus:
-                case Key.Subtract:
-                    ChangeSpeed(-0.1);
-                    break;
-            }
-        };
-    }
-
-    private void ChangeSpeed(double delta)
-    {
-        var session = _mediaSessionRegistry.Current;
-        session?.SetSpeed(session.Speed + delta);
+        KeyDown += (_, e) => e.Handled = _hotkeyService.Handle(e.Key, _commands);
     }
 }
