@@ -15,4 +15,6 @@ public interface IMainWindowCommands
     public void DecreaseSpeed();
 
     public void ToggleFullscreen();
+
+    public void ExitFullscreen();
 }
