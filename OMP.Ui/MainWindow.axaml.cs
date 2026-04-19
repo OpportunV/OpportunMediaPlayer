@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -277,6 +278,15 @@ public partial class MainWindow : Window
 
     private void SetupHotkeys()
     {
-        KeyDown += (_, e) => e.Handled = _hotkeyService.Handle(e.Key, _commands);
+        AddHandler(
+            KeyDownEvent,
+            OnHotkeyPressed,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
+    }
+
+    private void OnHotkeyPressed(object? sender, KeyEventArgs e)
+    {
+        e.Handled = _hotkeyService.Handle(e.Key, _commands);
     }
 }
