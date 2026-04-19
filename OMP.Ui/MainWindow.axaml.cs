@@ -223,32 +223,7 @@ public partial class MainWindow : Window
         if (path != null)
         {
             _mediaSessionRegistry.Open(path);
-            var session = _mediaSessionRegistry.Current!;
-
-            var routes = session.AudioStreams
-                .Zip(session.AudioOutputs)
-                .ToList();
-            
-            Console.WriteLine($"Audio streams count: {routes.Count}");
-            Console.WriteLine(
-                string.Join(
-                    Environment.NewLine,
-                    session.AudioStreams.Select(stream => $"{stream.Title}, {stream.Language}")));
-            Console.WriteLine();
-            Console.WriteLine($"Audio outputs count: {routes.Count}");
-            Console.WriteLine(
-                string.Join(Environment.NewLine, session.AudioOutputs.Select(output => output.FriendlyName)));
-            
-            Console.WriteLine("Resulting routes:");
-            Console.WriteLine(
-                string.Join(
-                    Environment.NewLine,
-                    routes.Select(output => $"{output.First.Title} -> {output.Second.FriendlyName}")));
-            
-            session.SetAudioRoutes(routes);
-            
             UpdateSessionData();
-            Console.WriteLine($"Total duration is {session.Duration}.");
         }
     }
 
@@ -257,7 +232,6 @@ public partial class MainWindow : Window
         Title = $"{_mediaSessionRegistry.Current!.FileName} | Opportun Media Player";
         DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
-        _mediaSessionRegistry.Current!.SetSpeed(1);
     }
 
     private void ToggleFullscreen()
