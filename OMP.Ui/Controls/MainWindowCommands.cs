@@ -58,6 +58,14 @@ public sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistr
         _context?.ToggleFullscreen();
     }
 
+    public void ExitFullscreen()
+    {
+        if (_context?.GetIsFullscreen() == true)
+        {
+            _context.ToggleFullscreen();
+        }
+    }
+
     private void ChangeSpeed(double delta)
     {
         var session = mediaSessionRegistry.Current;

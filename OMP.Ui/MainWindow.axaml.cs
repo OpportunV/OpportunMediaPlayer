@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         _commands.Attach(new MainWindowCommandContext
         {
             GetIsPlaying = () => IsPlaying,
+            GetIsFullscreen = () => _isFullscreen,
             SetIsPlaying = value => IsPlaying = value,
             ToggleFullscreen = ToggleFullscreen
         });

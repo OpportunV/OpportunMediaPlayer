@@ -25,6 +25,10 @@ public sealed class MainWindowHotkeyService : IMainWindowHotkeyService
                 commands.ToggleFullscreen();
                 return true;
 
+            case Key.Escape:
+                commands.ExitFullscreen();
+                return true;
+
             case Key.OemPlus:
             case Key.Add:
                 commands.IncreaseSpeed();
