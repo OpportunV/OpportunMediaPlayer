@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="OMP.Console/OMP.Console.csproj" />
   <Project Path="OMP.Lib/OMP.Lib.csproj" />
   <Project Path="OMP.Ui/OMP.Ui.csproj" />
 </Solution>

@@ -10,7 +10,6 @@
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- TOP MENU -->
         <Menu Name="TopMenu" Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open..." Name="OpenMenuItem" />
@@ -19,25 +18,16 @@
             </MenuItem>
         </Menu>
 
-        <!-- VIDEO AREA -->
         <Grid Name="VideoHost"
               Grid.Row="1">
 
-            <!-- Video Layer -->
-            <Border>
-                <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0"
-                                         EndPoint="1,1">
-                        <GradientStop Color="#1E1E1E" Offset="0" />
-                        <GradientStop Color="#2A2A2A" Offset="1" />
-                    </LinearGradientBrush>
-                </Border.Background>
-            </Border>
+            <Grid Name="VideoSurface">
+                <Border Background="Black" />
 
-            <Image Name="VideoView"
-                    Stretch="Uniform"/>
+                <Image Name="VideoView"
+                       Stretch="Uniform" />
+            </Grid>
 
-            <!-- Overlay Controls -->
             <Border Name="OverlayControls"
                     Background="#66000000"
                     VerticalAlignment="Bottom"
@@ -54,53 +44,144 @@
                 <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto"
                       ColumnSpacing="10">
 
-                    <Button Grid.Column="0" Content="⏮" Name="StepBackButton"/>
+                    <Button Grid.Column="0"
+                            Name="StepBackButton"
+                            Width="36"
+                            Height="36">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M7,12 L17,5 V19 Z"
+                                      Fill="White" />
+                                <Path Data="M3,5 H5 V19 H3 Z"
+                                      Fill="White" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
 
                     <Button Grid.Column="1"
                             Name="PlayPauseButton"
-                            Content="▶"/>
+                            Width="36"
+                            Height="36">
+                        <Grid Width="18" Height="18">
+                            <Viewbox Name="PlayIcon"
+                                     Width="18"
+                                     Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M6,4 L19,12 L6,20 Z"
+                                          Fill="White" />
+                                </Canvas>
+                            </Viewbox>
 
-                    <Button Grid.Column="2" Content="⏭" Name="StepForwardButton"/>
+                            <Viewbox Name="PauseIcon"
+                                     Width="18"
+                                     Height="18"
+                                     IsVisible="False">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M6,4 H10 V20 H6 Z"
+                                          Fill="White" />
+                                    <Path Data="M14,4 H18 V20 H14 Z"
+                                          Fill="White" />
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                    </Button>
 
-                    <!-- CURRENT TIME -->
+                    <Button Grid.Column="2"
+                            Name="StepForwardButton"
+                            Width="36"
+                            Height="36">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M17,12 L7,5 V19 Z"
+                                      Fill="White" />
+                                <Path Data="M19,5 H21 V19 H19 Z"
+                                      Fill="White" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
                     <TextBlock Grid.Column="3"
                                Name="CurrentTimeLabel"
                                Text="00:00"
                                VerticalAlignment="Center"
-                               FontFamily="Consolas"/>
+                               FontFamily="Consolas" />
 
-                    <!-- PROGRESS -->
                     <Slider Grid.Column="4"
                             Grid.ColumnSpan="2"
                             Name="ProgressSlider"
                             Minimum="0"
-                            Maximum="1"/>
+                            Maximum="1" />
 
-                    <!-- TOTAL TIME -->
                     <TextBlock Grid.Column="6"
                                Name="DurationLabel"
                                Text="00:00"
                                VerticalAlignment="Center"
-                               FontFamily="Consolas"/>
+                               FontFamily="Consolas" />
 
-                    <TextBlock Grid.Column="7"
-                               Text="🔊"
-                               VerticalAlignment="Center"/>
+                    <Viewbox Grid.Column="7"
+                             Width="18"
+                             Height="18"
+                             VerticalAlignment="Center">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
+                                  Fill="White" />
+                            <Path Data="M15,9 C16.5,10.5 16.5,13.5 15,15"
+                                  Stroke="White"
+                                  StrokeThickness="2"
+                                  StrokeLineCap="Round" />
+                            <Path Data="M18,6 C21,9 21,15 18,18"
+                                  Stroke="White"
+                                  StrokeThickness="2"
+                                  StrokeLineCap="Round" />
+                        </Canvas>
+                    </Viewbox>
 
                     <Slider Grid.Column="8"
                             Name="VolumeSlider"
                             Width="120"
                             Minimum="0"
                             Maximum="100"
-                            Value="50"/>
+                            Value="50" />
 
                     <Button Grid.Column="9"
-                            Content="⚙"
-                            Name="OptionsButton"/>
+                            Name="OptionsButton"
+                            Width="36"
+                            Height="36">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M12,8.5 A3.5,3.5 0 1 1 12,15.5 A3.5,3.5 0 1 1 12,8.5"
+                                      Fill="White" />
+                                <Path Data="M10.9,2 H13.1 L13.6,4.3 C14.2,4.5 14.8,4.8 15.3,5.1 L17.4,4 L20,6.6 L18.9,8.7 C19.2,9.2 19.5,9.8 19.7,10.4 L22,10.9 V13.1 L19.7,13.6 C19.5,14.2 19.2,14.8 18.9,15.3 L20,17.4 L17.4,20 L15.3,18.9 C14.8,19.2 14.2,19.5 13.6,19.7 L13.1,22 H10.9 L10.4,19.7 C9.8,19.5 9.2,19.2 8.7,18.9 L6.6,20 L4,17.4 L5.1,15.3 C4.8,14.8 4.5,14.2 4.3,13.6 L2,13.1 V10.9 L4.3,10.4 C4.5,9.8 4.8,9.2 5.1,8.7 L4,6.6 L6.6,4 L8.7,5.1 C9.2,4.8 9.8,4.5 10.4,4.3 Z"
+                                      Fill="White" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
 
                     <Button Grid.Column="10"
-                            Content="⛶"
-                            Name="FullscreenButton"/>
+                            Name="FullscreenButton"
+                            Width="36"
+                            Height="36">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M4,10 V4 H10"
+                                      Stroke="White"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Square" />
+                                <Path Data="M14,4 H20 V10"
+                                      Stroke="White"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Square" />
+                                <Path Data="M20,14 V20 H14"
+                                      Stroke="White"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Square" />
+                                <Path Data="M10,20 H4 V14"
+                                      Stroke="White"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Square" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
                 </Grid>
 
             </Border>
