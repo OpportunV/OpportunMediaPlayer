@@ -26,7 +26,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private readonly BufferedWaveProvider _buffer;
 
     private readonly CancellationToken _cancellationToken;
-    private readonly byte[] _managedBuffer = new byte[8192];
+    private readonly byte[] _managedBuffer = new byte[MaxResampledSamplesPerConvert * BytesPerSampleFrame];
     private readonly WaveOutEvent _output;
     private readonly SwrContext* _swr;
     private readonly AVRational _timeBase;
