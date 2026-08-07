@@ -9,7 +9,7 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace OMP.Lib.Session;
 
-public sealed unsafe class MediaSession : IMediaSession
+internal sealed unsafe class MediaSession : IMediaSession
 {
     public event Action<VideoFrame>? VideoFrameReady;
 

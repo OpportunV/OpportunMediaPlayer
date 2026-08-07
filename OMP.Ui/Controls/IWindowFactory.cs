@@ -2,7 +2,7 @@ using Avalonia.Controls;
 
 namespace OMP.Ui.Controls;
 
-public interface IWindowFactory
+internal interface IWindowFactory
 {
     public TWindow Create<TWindow>() where TWindow : Window;
 }

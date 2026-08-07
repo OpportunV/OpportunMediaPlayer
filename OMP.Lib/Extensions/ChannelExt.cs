@@ -2,7 +2,7 @@
 
 namespace OMP.Lib.Extensions;
 
-public static class ChannelExt
+internal static class ChannelExt
 {
     extension<TWrite>(ChannelWriter<TWrite> channelWriter)
     {

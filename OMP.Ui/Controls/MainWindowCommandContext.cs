@@ -2,7 +2,7 @@ using System;
 
 namespace OMP.Ui.Controls;
 
-public sealed class MainWindowCommandContext
+internal sealed class MainWindowCommandContext
 {
     public required Func<bool> GetIsPlaying { get; init; }
 

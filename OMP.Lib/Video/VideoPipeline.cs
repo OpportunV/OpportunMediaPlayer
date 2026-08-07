@@ -6,7 +6,7 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace OMP.Lib.Video;
 
-public sealed unsafe class VideoPipeline : IDisposable
+internal sealed unsafe class VideoPipeline : IDisposable
 {
     public int StreamIndex { get; }
     public double DecodeFps { get; private set; }

@@ -3,7 +3,7 @@ using OMP.Lib.Session;
 
 namespace OMP.Ui.Controls;
 
-public sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistry) : IMainWindowCommands
+internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistry) : IMainWindowCommands
 {
     private static readonly TimeSpan _seekStep = TimeSpan.FromSeconds(5);
     private MainWindowCommandContext? _context;

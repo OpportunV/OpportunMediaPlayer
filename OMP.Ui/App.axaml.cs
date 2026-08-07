@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace OMP.Ui;
 
-public partial class App : Application
+public sealed partial class App : Application
 {
     public IServiceProvider? Services { get; set; }
 
