@@ -36,12 +36,11 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const int OutputChannelCount = 2;
     private const int BytesPerSampleFrame = OutputChannelCount * OutputBitsPerSample / 8;
     private const int MaxResampledSamplesPerConvert = 4096;
-    private const int BufferDurationSeconds = 2;
     private const double PumpWindowSeconds = 0.2;
     private const double BufferHighWaterMarkRatio = 0.9;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, int bufferDurationSeconds)
     {
         _cancellationToken = cancellationToken;
         StreamIndex = streamIndex;
@@ -81,7 +80,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
         _buffer = new BufferedWaveProvider(waveFormat)
         {
-            BufferDuration = TimeSpan.FromSeconds(BufferDurationSeconds),
+            BufferDuration = TimeSpan.FromSeconds(bufferDurationSeconds),
             DiscardOnBufferOverflow = false
         };
 
