@@ -6,7 +6,7 @@ using Avalonia.Threading;
 
 namespace OMP.Ui.Controls;
 
-public sealed class FullscreenController : IDisposable
+internal sealed class FullscreenController : IDisposable
 {
     public bool IsFullscreen { get; private set; }
 
@@ -80,11 +80,13 @@ public sealed class FullscreenController : IDisposable
     {
         _overlayTimer.Stop();
 
-        if (IsFullscreen)
+        if (!IsFullscreen)
         {
-            _window.PointerMoved -= OnPointerMoved;
-            _window.PointerExited -= OnPointerExited;
+            return;
         }
+
+        _window.PointerMoved -= OnPointerMoved;
+        _window.PointerExited -= OnPointerExited;
     }
 
     private void OnPointerExited(object? sender, PointerEventArgs e)

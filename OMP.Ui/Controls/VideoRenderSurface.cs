@@ -6,7 +6,7 @@ using OMP.Lib.Video;
 
 namespace OMP.Ui.Controls;
 
-public sealed class VideoRenderSurface(Image imageControl) : IDisposable
+internal sealed class VideoRenderSurface(Image imageControl) : IDisposable
 {
     private WriteableBitmap? _bitmap;
 

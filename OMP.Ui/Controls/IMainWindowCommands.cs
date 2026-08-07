@@ -1,6 +1,6 @@
 namespace OMP.Ui.Controls;
 
-public interface IMainWindowCommands
+internal interface IMainWindowCommands
 {
     public void Attach(MainWindowCommandContext context);
 

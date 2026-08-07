@@ -5,7 +5,7 @@ using OMP.Lib.Extensions;
 
 namespace OMP.Lib.Audio;
 
-public sealed unsafe class AudioPipeline : IDisposable
+internal sealed unsafe class AudioPipeline : IDisposable
 {
     public int StreamIndex { get; }
 

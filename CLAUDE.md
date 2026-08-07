@@ -9,9 +9,11 @@ different audio tracks from one file to different audio output devices simultane
 
 ## Member ordering
 
-Within a class: properties before fields, grouped by descending accessibility (public →
-internal → protected → private); constants come last within the private-field group;
-constructor after fields; methods last, also ordered by descending accessibility.
+Within a class, group members by descending accessibility (public → internal → protected →
+private). Within each accessibility group: properties first, then fields, with constants last
+within that group's fields (not at the bottom of the whole class — just the bottom of their own
+accessibility group's fields). Constructor after fields. Methods last, also grouped by
+descending accessibility.
 
 `stylecop.json` + `.editorconfig` enforce the accessibility-grouping part (SA1202) at build
 time. They do **not** enforce properties-before-fields or constants-last — StyleCop's SA1201/
@@ -47,6 +49,26 @@ inheritance used for labeling, not behavior, and is the pattern to avoid here.
 `PlaybackClock` locks its state with a plain `Lock`/short critical section (field reads/writes,
 no I/O, no blocking, no nested locks) — that's the correct, unremarkable use of a lock, not a
 smell. Only worry about locking when critical sections do real work, block, or nest.
+
+## Type visibility and sealing
+
+Default to `internal`, not `public` — a type is `public` only if something outside its own
+assembly actually references it (`OMP.Lib`'s public surface is what `OMP.Ui` consumes;
+`OMP.Ui` itself has no external consumers at all, so almost everything there is `internal`
+except `App`/`MainWindow`/`OptionsWindow`, kept `public` since they're Avalonia XAML
+code-behind). Default to `sealed` unless a class is deliberately designed as a base type —
+nothing in this codebase currently is.
+
+Gotcha this produces: `Microsoft.Extensions.DependencyInjection`'s default `ServiceProvider`
+only activates a type via `services.AddTransient<T>()`/`AddSingleton<T>()` (registering the
+concrete type directly) if it has a **public** constructor — it will not use an internal one,
+even same-assembly, unlike general reflection which doesn't care. So a type registered that way
+needs either a public constructor (and therefore public constructor-parameter types, per
+CS0051) or an explicit factory registration instead:
+`services.AddTransient(sp => new MainWindow(sp.GetRequiredService<...>(), ...))` — see
+`Program.cs`. `Microsoft.Extensions.Options`' binding (`IOptions<T>`/`services.Configure<T>`)
+does *not* have this restriction — internal options types (e.g. `DebugOptions`) work fine there,
+it's specifically `ServiceProvider`'s constructor-activation path that's public-only.
 
 ## Resource lifetime
 

@@ -12,7 +12,7 @@ using OMP.Ui.Input;
 
 namespace OMP.Ui;
 
-public partial class MainWindow : Window
+public sealed partial class MainWindow : Window
 {
     private bool IsPlaying
     {
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
 
-    public MainWindow(
+    internal MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
         IMainWindowCommands commands,
         IMainWindowHotkeyService hotkeyService,

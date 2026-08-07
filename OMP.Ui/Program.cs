@@ -4,12 +4,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OMP.Lib.Session;
 using OMP.Ui.Controls;
-using OMP.Ui.Debug;
+using OMP.Ui.DevTools;
 using OMP.Ui.Input;
 
 namespace OMP.Ui;
 
-class Program
+internal static class Program
 {
     [STAThread]
     public static void Main(string[] args)
@@ -26,8 +26,16 @@ class Program
                 services.AddSingleton<IWindowFactory, WindowFactory>();
                 services.AddSingleton<DebugTrackAutoRouter>();
 
-                services.AddTransient<MainWindow>();
-                services.AddTransient<OptionsWindow>();
+                // Explicit factories, not services.AddTransient<MainWindow>(): the default
+                // ServiceProvider activator only ever invokes a *public* constructor, and these
+                // windows deliberately keep an internal one (nothing outside this assembly should
+                // construct them directly).
+                services.AddTransient(sp => new MainWindow(
+                    sp.GetRequiredService<IMediaSessionRegistry>(),
+                    sp.GetRequiredService<IMainWindowCommands>(),
+                    sp.GetRequiredService<IMainWindowHotkeyService>(),
+                    sp.GetRequiredService<IWindowFactory>()));
+                services.AddTransient(sp => new OptionsWindow(sp.GetRequiredService<IMediaSessionRegistry>()));
             })
             .Build();
 
