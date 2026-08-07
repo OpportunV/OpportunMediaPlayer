@@ -1,0 +1,24 @@
+root = true
+
+[*.cs]
+
+# StyleCop.Analyzers is scoped to member-ordering enforcement only (see CLAUDE.md).
+# Every other StyleCop category is disabled so it doesn't fight this codebase's
+# no-doc-comments style or existing formatting conventions.
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.DocumentationRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.NamingRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.ReadabilityRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.SpacingRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.MaintainabilityRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.LayoutRules.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.SpecialRules.severity = none
+
+# Ordering: only SA1202 (accessibility-first grouping) survives here. SA1201/SA1203/SA1214
+# were tried and dropped — their built-in "kind" priority is hardcoded fields-before-properties
+# and constants/readonly-first, which actively contradicts this project's properties-before-fields,
+# constants-last convention (confirmed by StyleCop flagging our own hand-ordered files). See CLAUDE.md.
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.OrderingRules.severity = none
+dotnet_diagnostic.SA1202.severity = warning
+
+# We don't write XML doc comments (see CLAUDE.md); this warning just says so on every build.
+dotnet_diagnostic.SA0001.severity = none

@@ -2,7 +2,7 @@
 
 namespace OMP.Lib.Audio.Output;
 
-public sealed class OutputScanner
+internal sealed class OutputScanner
 {
     public IReadOnlyList<AudioOutput> ScanOutputs()
     {

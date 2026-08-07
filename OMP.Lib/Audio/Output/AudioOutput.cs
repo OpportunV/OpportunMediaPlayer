@@ -1,3 +1,3 @@
 ﻿namespace OMP.Lib.Audio.Output;
 
-public record AudioOutput(int Id, string FriendlyName);
+public sealed record AudioOutput(int Id, string FriendlyName);
