@@ -32,7 +32,7 @@ public sealed partial class MainWindow : Window
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
 
-    internal MainWindow(
+    public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
         IMainWindowCommands commands,
         IMainWindowHotkeyService hotkeyService,

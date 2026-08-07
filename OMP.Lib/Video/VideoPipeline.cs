@@ -13,6 +13,7 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     private readonly VideoFrame _baseVideoFrame;
     private readonly AVCodecContext* _codecContext;
+    private readonly CancellationToken _cancellationToken;
     private readonly AVFrame* _frame;
     private readonly nint[] _frameBuffers;
     private int _nextFrameBufferIndex;
@@ -31,9 +32,10 @@ internal sealed unsafe class VideoPipeline : IDisposable
     private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
     private const int BufferedFrameCount = 8;
 
-    public VideoPipeline(AVFormatContext* formatContext, int streamIndex)
+    public VideoPipeline(AVFormatContext* formatContext, int streamIndex, CancellationToken cancellationToken)
     {
         StreamIndex = streamIndex;
+        _cancellationToken = cancellationToken;
 
         var stream = formatContext->streams[streamIndex];
         _timeBase = stream->time_base;
@@ -140,7 +142,11 @@ internal sealed unsafe class VideoPipeline : IDisposable
                 dstLines);
 
             var videoFrame = _baseVideoFrame with { DataPtr = buffer, TimeSeconds = time };
-            _frameChannel.Writer.Write(videoFrame);
+            if (!_frameChannel.Writer.TryWriteBlocking(videoFrame, _cancellationToken))
+            {
+                break;
+            }
+
             _decodedFrames++;
 
             if (_decodeFpsStopwatch.ElapsedMilliseconds >= 1000)

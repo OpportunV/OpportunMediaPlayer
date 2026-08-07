@@ -20,7 +20,7 @@ public sealed partial class OptionsWindow : Window
     private readonly List<AudioStream> _streams = [];
     private readonly List<AudioOutput> _outputs = [];
 
-    internal OptionsWindow(IMediaSessionRegistry mediaSessionRegistry)
+    public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry)
     {
         InitializeComponent();
 
