@@ -35,8 +35,11 @@ internal sealed unsafe class MediaSession : IMediaSession
     }
 
     public string FileName { get; }
+
     public double Speed => _clock.Speed;
+
     public double VideoFps { get; private set; }
+
     public double VideoDecodeFps { get; private set; }
 
     private readonly Channel<PacketRef> _audioChannel;
@@ -62,8 +65,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly double _fpsSampleWindowMs;
     private int _videoFramesRendered;
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
+    private bool _isPlaying;
     private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
+    private int _seekGeneration;
 
     private const int NoVideoIdleSleepMs = 2;
     private const int FrameNotReadySleepMs = 1;
@@ -138,7 +143,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes)
     {
-        var wasPlaying = _clock.IsRunning;
+        var wasPlaying = _isPlaying;
         Pause();
         _audioPipelines.ForEach(p => p.Flush());
 
@@ -169,10 +174,16 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void Play()
     {
+        _isPlaying = true;
+
         if (!_clock.IsRunning)
         {
-            _clock.Start();
             _awaitingFirstFrame = true;
+
+            if (_videoPipeline is null)
+            {
+                _clock.Start();
+            }
         }
 
         _demuxWorker.Resume();
@@ -185,6 +196,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void Pause()
     {
+        _isPlaying = false;
         _clock.Stop();
 
         _demuxWorker.Pause();
@@ -210,8 +222,10 @@ internal sealed unsafe class MediaSession : IMediaSession
                 return;
             }
 
+            Interlocked.Increment(ref _seekGeneration);
+
             var targetSeconds = Math.Clamp(target.TotalSeconds, 0, Duration.TotalSeconds);
-            var wasPlaying = _clock.IsRunning;
+            var wasPlaying = _isPlaying;
             Pause();
             DrainPacketChannel(_audioChannel);
             DrainPacketChannel(_videoChannel);
@@ -219,25 +233,29 @@ internal sealed unsafe class MediaSession : IMediaSession
                 ? targetSeconds
                 : Math.Max(0, targetSeconds - SeekLookbackSeconds);
 
+            bool seeked;
             lock (_formatSync)
             {
-                if (!TrySeekToVideoTarget(seekTargetSeconds))
-                {
-                    Console.WriteLine("Error during seek.");
-                    return;
-                }
+                seeked = TrySeekToVideoTarget(seekTargetSeconds);
             }
 
-            _clock.Rebase(targetSeconds);
-            _awaitingFirstFrame = true;
-            _pendingSeekTargetSeconds = targetSeconds;
-
-            _audioPipelines.ForEach(pipeline =>
+            if (!seeked)
             {
-                pipeline.Flush();
-                pipeline.ResetClock(targetSeconds);
-            });
-            _videoPipeline?.Flush();
+                Console.WriteLine("Error during seek.");
+            }
+            else
+            {
+                _clock.Rebase(targetSeconds);
+                _awaitingFirstFrame = true;
+                _pendingSeekTargetSeconds = targetSeconds;
+
+                _audioPipelines.ForEach(pipeline =>
+                {
+                    pipeline.Flush();
+                    pipeline.ResetClock(targetSeconds);
+                });
+                _videoPipeline?.Flush();
+            }
 
             if (wasPlaying)
             {
@@ -302,12 +320,13 @@ internal sealed unsafe class MediaSession : IMediaSession
             }
 
             var streamIndex = packet->stream_index;
+            var generation = Volatile.Read(ref _seekGeneration);
 
             if (_audioPipelines.Any(pipeline => pipeline.StreamIndex == streamIndex))
             {
                 var cloned = ffmpeg.av_packet_alloc();
                 ffmpeg.av_packet_ref(cloned, packet);
-                var packetRef = new PacketRef { Packet = cloned };
+                var packetRef = new PacketRef(cloned, generation);
                 if (!_audioChannel.Writer.TryWrite(packetRef))
                 {
                     ffmpeg.av_packet_free(&cloned);
@@ -318,7 +337,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             {
                 var cloned = ffmpeg.av_packet_alloc();
                 ffmpeg.av_packet_ref(cloned, packet);
-                var packetRef = new PacketRef { Packet = cloned };
+                var packetRef = new PacketRef(cloned, generation);
                 if (!_videoChannel.Writer.TryWriteBlocking(packetRef, _cancellationTokenSource.Token))
                 {
                     ffmpeg.av_packet_free(&cloned);
@@ -347,11 +366,14 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             var packet = packetRef.Packet;
 
-            foreach (var pipeline in _audioPipelines)
+            if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
             {
-                if (pipeline.StreamIndex == packet->stream_index)
+                foreach (var pipeline in _audioPipelines)
                 {
-                    pipeline.Enqueue(packet);
+                    if (pipeline.StreamIndex == packet->stream_index)
+                    {
+                        pipeline.Enqueue(packet);
+                    }
                 }
             }
 
@@ -375,7 +397,11 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             var packet = packetRef.Packet;
 
-            _videoPipeline?.Enqueue(packet);
+            if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
+            {
+                _videoPipeline?.Enqueue(packet);
+            }
+
             ffmpeg.av_packet_free(&packet);
         }
     }
@@ -416,26 +442,41 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 if (_awaitingFirstFrame)
                 {
-                    if (_pendingSeekTargetSeconds.HasValue)
+                    bool skipFrame;
+                    lock (_seekSync)
                     {
-                        var pendingSeekTargetSeconds = _pendingSeekTargetSeconds.Value;
-
-                        if (frame.TimeSeconds + SeekFrameSkipEpsilonSeconds < pendingSeekTargetSeconds)
+                        if (_pendingSeekTargetSeconds.HasValue)
                         {
-                            _videoPipeline.Pop();
-                            continue;
+                            var pendingSeekTargetSeconds = _pendingSeekTargetSeconds.Value;
+
+                            if (frame.TimeSeconds + SeekFrameSkipEpsilonSeconds < pendingSeekTargetSeconds)
+                            {
+                                skipFrame = true;
+                            }
+                            else
+                            {
+                                _clock.Rebase(pendingSeekTargetSeconds);
+                                _pendingSeekTargetSeconds = null;
+                                _clock.Start();
+                                _awaitingFirstFrame = false;
+                                skipFrame = false;
+                            }
                         }
-
-                        _clock.Rebase(pendingSeekTargetSeconds);
-                        _pendingSeekTargetSeconds = null;
+                        else
+                        {
+                            _clock.Rebase(frame.TimeSeconds);
+                            _clock.Start();
+                            _awaitingFirstFrame = false;
+                            skipFrame = false;
+                        }
                     }
-                    else
+
+                    if (skipFrame)
                     {
-                        _clock.Rebase(frame.TimeSeconds);
+                        _videoPipeline.Pop();
+                        continue;
                     }
 
-                    _clock.Start();
-                    _awaitingFirstFrame = false;
                     playbackTime = _clock.CurrentSeconds;
                 }
 
