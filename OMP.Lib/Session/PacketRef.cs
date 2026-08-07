@@ -2,7 +2,7 @@
 
 namespace OMP.Lib.Session;
 
-public unsafe struct PacketRef
+internal unsafe struct PacketRef
 {
     public AVPacket* Packet;
 }

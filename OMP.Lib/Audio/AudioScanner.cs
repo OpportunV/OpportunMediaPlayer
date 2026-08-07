@@ -3,7 +3,7 @@ using FFmpeg.AutoGen;
 
 namespace OMP.Lib.Audio;
 
-public sealed unsafe class AudioScanner
+internal sealed unsafe class AudioScanner
 {
     public List<AudioStream> GetAudioStreams(AVFormatContext* formatContext)
     {

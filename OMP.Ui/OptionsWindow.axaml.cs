@@ -12,7 +12,7 @@ using OMP.Ui.Models;
 
 namespace OMP.Ui;
 
-public partial class OptionsWindow : Window
+public sealed partial class OptionsWindow : Window
 {
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly ObservableCollection<AudioRoute> _routes = [];
