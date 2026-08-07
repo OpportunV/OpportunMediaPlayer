@@ -1,7 +1,9 @@
 using Avalonia;
 using System;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OMP.Lib;
 using OMP.Lib.Session;
 using OMP.Ui.Controls;
 using OMP.Ui.DevTools;
@@ -20,6 +22,9 @@ internal static class Program
             {
                 services.Configure<DebugOptions>(context.Configuration.GetSection(DebugOptions.SectionName));
 
+                services.AddSingleton(
+                    context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
+                    ?? new PlaybackTuningOptions());
                 services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                 services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                 services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();

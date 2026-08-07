@@ -39,14 +39,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     public double VideoFps { get; private set; }
     public double VideoDecodeFps { get; private set; }
 
-    private readonly Channel<PacketRef> _audioChannel = Channel.CreateBounded<PacketRef>(
-        new BoundedChannelOptions(AudioChannelCapacity)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest
-        });
-
+    private readonly Channel<PacketRef> _audioChannel;
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<(AudioStream audioStream, AudioOutput audioOutput)> _audioRoutes = [];
+    private readonly int _audioBufferDurationSeconds;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly PlaybackClock _clock = new();
 
@@ -59,21 +55,16 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     private readonly AVFormatContext* _formatContext;
 
-    private readonly Channel<PacketRef> _videoChannel = Channel.CreateBounded<PacketRef>(
-        new BoundedChannelOptions(VideoChannelCapacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait
-        });
+    private readonly Channel<PacketRef> _videoChannel;
 
     private readonly VideoPipeline? _videoPipeline;
 
+    private readonly double _fpsSampleWindowMs;
     private int _videoFramesRendered;
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
     private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
 
-    private const int AudioChannelCapacity = 200;
-    private const int VideoChannelCapacity = 10;
     private const int NoVideoIdleSleepMs = 2;
     private const int FrameNotReadySleepMs = 1;
     private const int RenderErrorBackoffSleepMs = 5;
@@ -81,10 +72,24 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
     private const double SeekFrameSkipEpsilonSeconds = 0.01;
     private const double SeekLookbackSeconds = 1;
-    private const double FpsSampleWindowMs = 1000;
 
-    public MediaSession(string filePath)
+    public MediaSession(string filePath, PlaybackTuningOptions options)
     {
+        _audioChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(options.AudioChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest
+            });
+
+        _videoChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(options.VideoChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait
+            });
+
+        _audioBufferDurationSeconds = options.BufferDurationSeconds;
+        _fpsSampleWindowMs = options.FpsSampleWindowMs;
+
         fixed (AVFormatContext** fc = &_formatContext)
         {
             if (ffmpeg.avformat_open_input(fc, filePath, null, null) != 0)
@@ -145,7 +150,12 @@ internal sealed unsafe class MediaSession : IMediaSession
             lock (_formatSync)
             {
                 _audioPipelines.Add(
-                    new AudioPipeline(_formatContext, stream.Id, output.Id, _cancellationTokenSource.Token));
+                    new AudioPipeline(
+                        _formatContext,
+                        stream.Id,
+                        output.Id,
+                        _cancellationTokenSource.Token,
+                        _audioBufferDurationSeconds));
             }
         }
 
@@ -447,9 +457,9 @@ internal sealed unsafe class MediaSession : IMediaSession
                 _videoPipeline.Pop();
                 _videoFramesRendered++;
 
-                if (_fpsStopwatch.ElapsedMilliseconds >= FpsSampleWindowMs)
+                if (_fpsStopwatch.ElapsedMilliseconds >= _fpsSampleWindowMs)
                 {
-                    VideoFps = _videoFramesRendered * FpsSampleWindowMs / _fpsStopwatch.ElapsedMilliseconds;
+                    VideoFps = _videoFramesRendered * _fpsSampleWindowMs / _fpsStopwatch.ElapsedMilliseconds;
                     VideoDecodeFps = _videoPipeline.DecodeFps;
                     _videoFramesRendered = 0;
                     _fpsStopwatch.Restart();
