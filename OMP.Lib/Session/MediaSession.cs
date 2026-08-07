@@ -105,7 +105,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             var stream = _formatContext->streams[i];
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO)
             {
-                _videoPipeline = new VideoPipeline(_formatContext, i);
+                _videoPipeline = new VideoPipeline(_formatContext, i, _cancellationTokenSource.Token);
                 break;
             }
         }
@@ -309,7 +309,10 @@ internal sealed unsafe class MediaSession : IMediaSession
                 var cloned = ffmpeg.av_packet_alloc();
                 ffmpeg.av_packet_ref(cloned, packet);
                 var packetRef = new PacketRef { Packet = cloned };
-                _videoChannel.Writer.Write(packetRef, _cancellationTokenSource.Token);
+                if (!_videoChannel.Writer.TryWriteBlocking(packetRef, _cancellationTokenSource.Token))
+                {
+                    ffmpeg.av_packet_free(&cloned);
+                }
             }
 
             ffmpeg.av_packet_unref(packet);
@@ -327,12 +330,12 @@ internal sealed unsafe class MediaSession : IMediaSession
                 break;
             }
 
-            var packetRef = _audioChannel.Reader.Read(_cancellationTokenSource.Token);
-            var packet = packetRef.Packet;
-            if (packet is null)
+            if (!_audioChannel.Reader.TryReadBlocking(out var packetRef, _cancellationTokenSource.Token))
             {
                 break;
             }
+
+            var packet = packetRef.Packet;
 
             foreach (var pipeline in _audioPipelines)
             {
@@ -355,12 +358,12 @@ internal sealed unsafe class MediaSession : IMediaSession
                 break;
             }
 
-            var packetRef = _videoChannel.Reader.Read(_cancellationTokenSource.Token);
-            var packet = packetRef.Packet;
-            if (packet is null)
+            if (!_videoChannel.Reader.TryReadBlocking(out var packetRef, _cancellationTokenSource.Token))
             {
                 break;
             }
+
+            var packet = packetRef.Packet;
 
             _videoPipeline?.Enqueue(packet);
             ffmpeg.av_packet_free(&packet);

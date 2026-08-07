@@ -50,25 +50,49 @@ inheritance used for labeling, not behavior, and is the pattern to avoid here.
 no I/O, no blocking, no nested locks) — that's the correct, unremarkable use of a lock, not a
 smell. Only worry about locking when critical sections do real work, block, or nest.
 
+`ChannelExt` (`OMP.Lib/Extensions/ChannelExt.cs`) gives `ChannelWriter<T>`/`ChannelReader<T>` a
+genuinely synchronous, thread-blocking `TryWriteBlocking`/`TryReadBlocking` (bool-returning, out
+param for read) — `System.Threading.Channels` is async-only and has no native blocking API, and
+this codebase's loops are OS threads, not async/await, so something has to bridge that. It's
+sync-over-async (`.AsTask().Wait(token)`), which isn't free (forces a `Task` even on channel
+operations that would otherwise complete synchronously) — `System.Collections.Concurrent
+.BlockingCollection<T>` would avoid that allocation with a genuinely blocking implementation, but
+doesn't support `BoundedChannelFullMode.DropOldest` (used by `MediaSession`'s audio packet
+channel) without reimplementing that eviction by hand, so it's not a drop-in swap. Worth
+revisiting only if profiling ever shows this allocation matters — unlikely, given the ffmpeg
+decode work around every call site dominates. The `bool`/`out` shape (rather than swallowing
+`OperationCanceledException` and returning `default!`) is deliberate: a silently-returned
+default value is indistinguishable from a legitimately-default item, which is exactly the kind
+of bug this shape avoids — see `PipelineWorker.TryWaitIfPaused()` for the same pattern.
+
 ## Type visibility and sealing
 
 Default to `internal`, not `public` — a type is `public` only if something outside its own
-assembly actually references it (`OMP.Lib`'s public surface is what `OMP.Ui` consumes;
-`OMP.Ui` itself has no external consumers at all, so almost everything there is `internal`
-except `App`/`MainWindow`/`OptionsWindow`, kept `public` since they're Avalonia XAML
-code-behind). Default to `sealed` unless a class is deliberately designed as a base type —
-nothing in this codebase currently is.
+assembly actually references it, or if it's a type `Microsoft.Extensions.DependencyInjection`
+constructs directly via `services.AddTransient<T>()`/`AddSingleton<T>()` (see gotcha below).
+`OMP.Lib`'s public surface is what `OMP.Ui` consumes (`IMediaSession`, `IMediaSessionRegistry`,
+`MediaSessionRegistry`, `AudioStream`, `AudioOutput`, `VideoFrame`); everything else there —
+`MediaSession` itself, `AudioPipeline`, `VideoPipeline`, scanners, etc. — is `internal`.
+`OMP.Ui` has no external consumers at all, so the only things `public` there are `App`,
+`MainWindow`, `OptionsWindow` (Avalonia XAML code-behind convention) and the interfaces/context
+type that cross into `MainWindow`'s public constructor signature (`IMainWindowCommands`,
+`IMainWindowHotkeyService`, `IWindowFactory`, `MainWindowCommandContext`) — their concrete
+implementations (`MainWindowCommands`, `MainWindowHotkeyService`, `WindowFactory`) stay
+`internal`, since an internal class implementing a public interface is completely fine, and
+nothing outside the assembly ever names the concrete type. Default to `sealed` unless a class
+is deliberately designed as a base type — nothing in this codebase currently is.
 
-Gotcha this produces: `Microsoft.Extensions.DependencyInjection`'s default `ServiceProvider`
-only activates a type via `services.AddTransient<T>()`/`AddSingleton<T>()` (registering the
-concrete type directly) if it has a **public** constructor — it will not use an internal one,
-even same-assembly, unlike general reflection which doesn't care. So a type registered that way
-needs either a public constructor (and therefore public constructor-parameter types, per
-CS0051) or an explicit factory registration instead:
-`services.AddTransient(sp => new MainWindow(sp.GetRequiredService<...>(), ...))` — see
-`Program.cs`. `Microsoft.Extensions.Options`' binding (`IOptions<T>`/`services.Configure<T>`)
-does *not* have this restriction — internal options types (e.g. `DebugOptions`) work fine there,
-it's specifically `ServiceProvider`'s constructor-activation path that's public-only.
+Gotcha: `Microsoft.Extensions.DependencyInjection`'s default `ServiceProvider` only activates a
+type via `services.AddTransient<T>()`/`AddSingleton<T>()` (registering the concrete type
+directly, as `MainWindow` and `OptionsWindow` are) if it has a **public** constructor — it will
+not use an internal one, even same-assembly, unlike general reflection which doesn't care. We
+tried keeping those two constructors internal with an explicit factory registration
+(`services.AddTransient(sp => new MainWindow(...))`) to avoid this, but decided the simpler,
+more conventional `AddTransient<MainWindow>()` was worth the small public surface it costs —
+hence those two constructors, and the handful of types feeding their signatures, staying public.
+`Microsoft.Extensions.Options`' binding (`IOptions<T>`/`services.Configure<T>`) does *not* have
+this restriction — internal options types (e.g. `DebugOptions`) work fine there, it's
+specifically `ServiceProvider`'s constructor-activation path that's public-only.
 
 ## Resource lifetime
 

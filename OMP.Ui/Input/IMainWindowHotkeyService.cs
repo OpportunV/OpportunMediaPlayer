@@ -3,7 +3,7 @@ using OMP.Ui.Controls;
 
 namespace OMP.Ui.Input;
 
-internal interface IMainWindowHotkeyService
+public interface IMainWindowHotkeyService
 {
     public bool Handle(Key key, IMainWindowCommands commands);
 }

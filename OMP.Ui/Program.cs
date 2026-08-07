@@ -26,16 +26,8 @@ internal static class Program
                 services.AddSingleton<IWindowFactory, WindowFactory>();
                 services.AddSingleton<DebugTrackAutoRouter>();
 
-                // Explicit factories, not services.AddTransient<MainWindow>(): the default
-                // ServiceProvider activator only ever invokes a *public* constructor, and these
-                // windows deliberately keep an internal one (nothing outside this assembly should
-                // construct them directly).
-                services.AddTransient(sp => new MainWindow(
-                    sp.GetRequiredService<IMediaSessionRegistry>(),
-                    sp.GetRequiredService<IMainWindowCommands>(),
-                    sp.GetRequiredService<IMainWindowHotkeyService>(),
-                    sp.GetRequiredService<IWindowFactory>()));
-                services.AddTransient(sp => new OptionsWindow(sp.GetRequiredService<IMediaSessionRegistry>()));
+                services.AddTransient<MainWindow>();
+                services.AddTransient<OptionsWindow>();
             })
             .Build();
 

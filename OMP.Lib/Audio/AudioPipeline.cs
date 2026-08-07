@@ -143,7 +143,10 @@ internal sealed unsafe class AudioPipeline : IDisposable
                 var chunkBytes = new byte[speedAdjustedBytes];
                 Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
                 var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
-                _decodedPcmChannel.Writer.Write(chunk, _cancellationToken);
+                if (!_decodedPcmChannel.Writer.TryWriteBlocking(chunk, _cancellationToken))
+                {
+                    break;
+                }
             }
         }
     }
