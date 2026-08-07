@@ -1,13 +1,10 @@
 using System;
 using System.Threading.Tasks;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using Microsoft.Extensions.DependencyInjection;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
@@ -17,16 +14,6 @@ namespace OMP.Ui;
 
 public partial class MainWindow : Window
 {
-    private const double WindowedOverlaySpacing = 8;
-    private readonly DispatcherTimer _overlayTimer = new();
-    private readonly DispatcherTimer _uiTimer = new();
-    private readonly IMediaSessionRegistry _mediaSessionRegistry;
-    private readonly IMainWindowCommands _commands;
-    private readonly IMainWindowHotkeyService _hotkeyService;
-    private bool _isFullscreen;
-    private WindowState _previousWindowState;
-    private WriteableBitmap? _videoBitmap;
-
     private bool IsPlaying
     {
         get;
@@ -37,30 +24,42 @@ public partial class MainWindow : Window
         }
     }
 
+    private readonly DispatcherTimer _uiTimer = new();
+    private readonly IMediaSessionRegistry _mediaSessionRegistry;
+    private readonly IMainWindowCommands _commands;
+    private readonly IMainWindowHotkeyService _hotkeyService;
+    private readonly IWindowFactory _windowFactory;
+    private readonly VideoRenderSurface _videoRenderSurface;
+    private readonly FullscreenController _fullscreenController;
+
     public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
         IMainWindowCommands commands,
-        IMainWindowHotkeyService hotkeyService)
+        IMainWindowHotkeyService hotkeyService,
+        IWindowFactory windowFactory)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
         _commands = commands;
         _hotkeyService = hotkeyService;
+        _windowFactory = windowFactory;
         InitializeComponent();
+
+        _videoRenderSurface = new VideoRenderSurface(VideoView);
+        _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
+
         _commands.Attach(new MainWindowCommandContext
         {
             GetIsPlaying = () => IsPlaying,
-            GetIsFullscreen = () => _isFullscreen,
+            GetIsFullscreen = () => _fullscreenController.IsFullscreen,
             SetIsPlaying = value => IsPlaying = value,
-            ToggleFullscreen = ToggleFullscreen
+            ToggleFullscreen = () => _fullscreenController.Toggle()
         });
         SetupButtons();
-        SetupOverlayTimer();
         SetupUiTimer();
         SetupHotkeys();
-        OverlayControls.SizeChanged += (_, _) => UpdateVideoViewportMargin();
+        OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
-        UpdateVideoViewportMargin();
-        _previousWindowState = WindowState;
+        _fullscreenController.UpdateVideoViewportMargin();
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
         ProgressSlider.PointerCaptureLost += (_, _) =>
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
@@ -71,53 +70,20 @@ public partial class MainWindow : Window
         }
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _fullscreenController.Dispose();
+        _videoRenderSurface.Dispose();
+
+        base.OnClosed(e);
+    }
+
     private void OnSessionChanged(IMediaSessionRegistry registry)
     {
         registry.Current?.VideoFrameReady -= Render;
         registry.Current?.VideoFrameReady += Render;
-        _videoBitmap = null;
-        VideoView.Source = null;
+        _videoRenderSurface.Reset();
         IsPlaying = false;
-    }
-
-    private void OnPointerExited(object? o, PointerEventArgs pointerEventArgs)
-    {
-        if (!_isFullscreen)
-        {
-            return;
-        }
-
-        TopMenu.IsVisible = false;
-        OverlayControls.Opacity = 0;
-
-        _overlayTimer.Stop();
-    }
-
-    private void OnPointerMoved(object? o, PointerEventArgs pointerEventArgs)
-    {
-        if (!_isFullscreen)
-        {
-            return;
-        }
-
-        TopMenu.Opacity = 1;
-        OverlayControls.Opacity = 1;
-
-        _overlayTimer.Stop();
-        _overlayTimer.Start();
-    }
-
-    private void SetupOverlayTimer()
-    {
-        _overlayTimer.Interval = TimeSpan.FromSeconds(3);
-        _overlayTimer.Tick += (_, _) =>
-        {
-            if (_isFullscreen)
-            {
-                OverlayControls.Opacity = 0;
-                _overlayTimer.Stop();
-            }
-        };
     }
 
     private void SetupUiTimer()
@@ -148,30 +114,7 @@ public partial class MainWindow : Window
 
     private void Render(VideoFrame frame)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_videoBitmap == null ||
-                _videoBitmap.PixelSize.Width != frame.Width ||
-                _videoBitmap.PixelSize.Height != frame.Height)
-            {
-                _videoBitmap = new WriteableBitmap(
-                    new PixelSize(frame.Width, frame.Height),
-                    new Vector(96, 96),
-                    Avalonia.Platform.PixelFormat.Bgra8888,
-                    Avalonia.Platform.AlphaFormat.Premul);
-
-                VideoView.Source = _videoBitmap;
-            }
-
-            using var fb = _videoBitmap.Lock();
-
-            unsafe
-            {
-                Buffer.MemoryCopy((void*)frame.DataPtr, (void*)fb.Address, frame.DataLength, frame.DataLength);
-            }
-
-            VideoView.InvalidateVisual();
-        });
+        Dispatcher.UIThread.Post(() => _videoRenderSurface.Render(frame));
     }
 
     private static string FormatTime(TimeSpan time)
@@ -188,12 +131,6 @@ public partial class MainWindow : Window
     {
         PlayIcon.IsVisible = !IsPlaying;
         PauseIcon.IsVisible = IsPlaying;
-    }
-
-    private void UpdateVideoViewportMargin()
-    {
-        var bottomMargin = _isFullscreen ? 0 : OverlayControls.Bounds.Height + WindowedOverlaySpacing;
-        VideoSurface.Margin = new Thickness(0, 0, 0, bottomMargin);
     }
 
     private void SetupButtons()
@@ -239,41 +176,9 @@ public partial class MainWindow : Window
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }
 
-    private void ToggleFullscreen()
-    {
-        _isFullscreen = !_isFullscreen;
-        if (_isFullscreen)
-        {
-            _previousWindowState = WindowState;
-            PointerMoved += OnPointerMoved;
-            PointerExited += OnPointerExited;
-            SystemDecorations = SystemDecorations.None;
-            WindowState = WindowState.FullScreen;
-
-            TopMenu.IsVisible = false;
-            OverlayControls.Opacity = 1;
-            UpdateVideoViewportMargin();
-
-            _overlayTimer.Start();
-        }
-        else
-        {
-            PointerMoved -= OnPointerMoved;
-            PointerExited -= OnPointerExited;
-            SystemDecorations = SystemDecorations.Full;
-            WindowState = _previousWindowState;
-
-            TopMenu.IsVisible = true;
-            OverlayControls.Opacity = 1;
-            UpdateVideoViewportMargin();
-
-            _overlayTimer.Stop();
-        }
-    }
-
     private void ShowOptionsWindow()
     {
-        var window = Program.Services.GetRequiredService<OptionsWindow>();
+        var window = _windowFactory.Create<OptionsWindow>();
         window.ShowDialog(this);
     }
 

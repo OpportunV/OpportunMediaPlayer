@@ -4,38 +4,46 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OMP.Lib.Session;
 using OMP.Ui.Controls;
+using OMP.Ui.Debug;
 using OMP.Ui.Input;
 
 namespace OMP.Ui;
 
 class Program
 {
-    public static IServiceProvider Services => _appHost.Services;
-
-    private static IHost _appHost = null!;
-
     [STAThread]
     public static void Main(string[] args)
     {
-        _appHost = Host.CreateDefaultBuilder(args)
-            .ConfigureServices(services =>
+        var appHost = Host.CreateDefaultBuilder(args)
+            .UseContentRoot(AppContext.BaseDirectory)
+            .ConfigureServices((context, services) =>
             {
+                services.Configure<DebugOptions>(context.Configuration.GetSection(DebugOptions.SectionName));
+
                 services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                 services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                 services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
+                services.AddSingleton<IWindowFactory, WindowFactory>();
+                services.AddSingleton<DebugTrackAutoRouter>();
 
                 services.AddTransient<MainWindow>();
                 services.AddTransient<OptionsWindow>();
             })
             .Build();
 
+        var services = appHost.Services;
+
+        // Resolved once, purely for its constructor side effect of subscribing to session changes.
+        services.GetRequiredService<DebugTrackAutoRouter>();
+
         if (args.Length > 0)
         {
-            var sessionRegistry = Services.GetRequiredService<IMediaSessionRegistry>();
-            sessionRegistry.Open(args[0]);
+            services.GetRequiredService<IMediaSessionRegistry>().Open(args[0]);
         }
 
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        BuildAvaloniaApp()
+            .AfterSetup(builder => ((App)builder.Instance!).Services = services)
+            .StartWithClassicDesktopLifetime(args);
     }
 
     public static AppBuilder BuildAvaloniaApp()
