@@ -24,6 +24,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
     private readonly BufferedWaveProvider _buffer;
+    private readonly Lock _decodeSync = new();
 
     private readonly CancellationToken _cancellationToken;
     private readonly byte[] _managedBuffer = new byte[MaxResampledSamplesPerConvert * BytesPerSampleFrame];
@@ -110,26 +111,38 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public void Enqueue(AVPacket* packet)
     {
-        ffmpeg.avcodec_send_packet(_codecContext, packet);
+        lock (_decodeSync)
+        {
+            ffmpeg.avcodec_send_packet(_codecContext, packet);
+        }
+
         fixed (byte* outPtr = _managedBuffer)
         {
             var outPtrs = stackalloc byte*[1];
             outPtrs[0] = outPtr;
 
-            while (ffmpeg.avcodec_receive_frame(_codecContext, _frame) == 0 &&
-                   !_cancellationToken.IsCancellationRequested)
+            while (!_cancellationToken.IsCancellationRequested)
             {
-                if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
+                int dstSamples;
+                lock (_decodeSync)
                 {
-                    _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
-                }
+                    if (ffmpeg.avcodec_receive_frame(_codecContext, _frame) != 0)
+                    {
+                        break;
+                    }
 
-                var dstSamples = ffmpeg.swr_convert(
-                    _swr,
-                    outPtrs,
-                    MaxResampledSamplesPerConvert,
-                    _frame->extended_data,
-                    _frame->nb_samples);
+                    if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
+                    {
+                        _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
+                    }
+
+                    dstSamples = ffmpeg.swr_convert(
+                        _swr,
+                        outPtrs,
+                        MaxResampledSamplesPerConvert,
+                        _frame->extended_data,
+                        _frame->nb_samples);
+                }
 
                 if (dstSamples <= 0)
                 {
@@ -213,9 +226,12 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public void Flush()
     {
-        ffmpeg.avcodec_flush_buffers(_codecContext);
-        ffmpeg.swr_close(_swr);
-        ffmpeg.swr_init(_swr);
+        lock (_decodeSync)
+        {
+            ffmpeg.avcodec_flush_buffers(_codecContext);
+            ffmpeg.swr_close(_swr);
+            ffmpeg.swr_init(_swr);
+        }
 
         _buffer.ClearBuffer();
         while (_decodedPcmChannel.Reader.TryRead(out _))

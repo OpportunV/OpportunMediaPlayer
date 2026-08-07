@@ -28,6 +28,7 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     private readonly SwsContext* _sws;
     private readonly AVRational _timeBase;
+    private readonly Lock _decodeSync = new();
     private int _decodedFrames;
     private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
     private const int BufferedFrameCount = 8;
@@ -113,10 +114,24 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     public void Enqueue(AVPacket* packet)
     {
-        ffmpeg.avcodec_send_packet(_codecContext, packet);
-
-        while (ffmpeg.avcodec_receive_frame(_codecContext, _frame) == 0)
+        lock (_decodeSync)
         {
+            ffmpeg.avcodec_send_packet(_codecContext, packet);
+        }
+
+        while (true)
+        {
+            int receiveResult;
+            lock (_decodeSync)
+            {
+                receiveResult = ffmpeg.avcodec_receive_frame(_codecContext, _frame);
+            }
+
+            if (receiveResult != 0)
+            {
+                break;
+            }
+
             if (_frame->best_effort_timestamp == ffmpeg.AV_NOPTS_VALUE)
             {
                 continue;
@@ -160,7 +175,11 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     public void Flush()
     {
-        ffmpeg.avcodec_flush_buffers(_codecContext);
+        lock (_decodeSync)
+        {
+            ffmpeg.avcodec_flush_buffers(_codecContext);
+        }
+
         while (_frameChannel.Reader.TryRead(out _))
         {
         }

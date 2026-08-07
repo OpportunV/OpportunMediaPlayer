@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private bool _isSeekingViaSlider;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
@@ -61,8 +62,14 @@ public sealed partial class MainWindow : Window
         UpdatePlayPauseIcon();
         _fullscreenController.UpdateVideoViewportMargin();
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
+
+        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
         ProgressSlider.PointerCaptureLost += (_, _) =>
+        {
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+            _isSeekingViaSlider = false;
+        };
+
         if (_mediaSessionRegistry.Current is not null)
         {
             OnSessionChanged(_mediaSessionRegistry);
@@ -101,7 +108,7 @@ public sealed partial class MainWindow : Window
 
             var current = session.CurrentTime.TotalSeconds;
 
-            if (!ProgressSlider.IsPointerOver)
+            if (!_isSeekingViaSlider)
             {
                 ProgressSlider.Value = current;
             }
