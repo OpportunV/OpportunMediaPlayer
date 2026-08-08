@@ -94,6 +94,38 @@ hot; otherwise leave it. If per-packet diagnostics are ever genuinely needed, re
 `[LoggerMessage]` source-generated partial methods (also measured at 0 B/call) rather than
 hand-written guards — but note the class has to become `partial`.
 
+## Audio output and volume
+
+`AudioOutput.Id` indexes the **MMDevice/WASAPI** enumeration (`OutputScanner`), while
+`WaveOutEvent.DeviceNumber` indexes the **WinMM** one. They do not agree — WinMM lists the default
+device first and shifts everything else down, so on a typical machine every index is off by one.
+`WaveOutDeviceResolver` matches by name instead (prefix match, because WinMM truncates product
+names to 31 characters). Never pass an `AudioOutput.Id` straight to `DeviceNumber`.
+
+Gain is applied in `GainWaveProvider.Read`, between the `BufferedWaveProvider` and the
+`WaveOutEvent`, so a volume change is audible within the driver buffer (~150 ms). Applying it
+earlier — in the PCM path or at `PumpToOutput` — puts it behind `BufferDurationSeconds` of decoded
+audio and bakes the gain into buffered data. `AudioGainProcessor` holds the arithmetic so it stays
+unit-testable, mirroring `AudioSpeedProcessor`.
+
+Volume range is `[AudioVolumeLimits.Min, AudioVolumeLimits.Max]` = `[0, 2.0]` (0–200%), not `[0, 1]`
+— sliders go past 100% on purpose, matching the "boost" ceiling other players (e.g. VLC) offer.
+`AudioGainProcessor.ToAmplitude` uses a square-law taper up to unity (perceptual) and switches to
+linear above it (a deliberate boost has no perceptual curve to approximate — 200% volume is exactly
+2x amplitude, +6dB). Clipping above unity is expected and safe: `Apply`'s `short.MinValue`/`MaxValue`
+clamp is what keeps a boosted full-scale sample from wrapping sign instead of just distorting.
+
+Master and per-output volume are composed as a *product of tapers*, so each slider's feel stays
+independent of the other's position — note two boosted sliders multiply (150% × 150% = 225%
+effective), there's no combined ceiling beyond each individual `Max`. Volume lives on
+`MediaSession`, keyed by `AudioOutput.Id`, and is re-pushed after `SetAudioRoutes` rebuilds the
+pipelines — the same way speed is. Per-output volume deliberately does **not** live on
+`AudioRoute`: `SetAudioRoutes` disposes and recreates every `WaveOutEvent`, so routing a slider
+through it would tear down devices on every tick.
+
+Persisted volume is keyed by `FriendlyName`, never by `AudioOutput.Id` — the Id shifts as soon as a
+device is plugged in or removed.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`
@@ -147,8 +179,8 @@ tried keeping those two constructors internal with an explicit factory registrat
 more conventional `AddTransient<MainWindow>()` was worth the small public surface it costs —
 hence those two constructors, and the handful of types feeding their signatures, staying public.
 `Microsoft.Extensions.Options`' binding (`IOptions<T>`/`services.Configure<T>`) does *not* have
-this restriction — internal options types (e.g. `DebugOptions`) work fine there, it's
-specifically `ServiceProvider`'s constructor-activation path that's public-only.
+this restriction — internal options types work fine there, it's specifically `ServiceProvider`'s
+constructor-activation path that's public-only.
 
 ## Resource lifetime
 

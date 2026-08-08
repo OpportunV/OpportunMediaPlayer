@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
+using OMP.Lib.Audio.Output;
 using OMP.Lib.Extensions;
 using OMP.Lib.Interop;
 
@@ -30,6 +31,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
     private readonly BufferedWaveProvider _buffer;
+    private readonly GainWaveProvider _gainProvider;
     private readonly Lock _decodeSync = new();
 
     private readonly CancellationToken _cancellationToken;
@@ -46,7 +48,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const double PumpWindowSeconds = 0.2;
     private const double BufferHighWaterMarkRatio = 0.9;
 
-    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
+    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, AudioOutput audioOutput,
         CancellationToken cancellationToken, int bufferDurationSeconds, ILoggerFactory loggerFactory)
     {
         _cancellationToken = cancellationToken;
@@ -116,13 +118,20 @@ internal sealed unsafe class AudioPipeline : IDisposable
             DiscardOnBufferOverflow = false
         };
 
-        _output = new WaveOutEvent { DeviceNumber = deviceIndex };
-        _output.Init(_buffer);
+        _gainProvider = new GainWaveProvider(_buffer);
+
+        var deviceNumber = WaveOutDeviceResolver.Resolve(audioOutput.FriendlyName, _logger);
+
+        _output = new WaveOutEvent { DeviceNumber = deviceNumber };
+        _output.Init(_gainProvider);
 
         _logger.LogDebug(
-            "Audio pipeline built: stream {StreamIndex} -> WaveOutEvent.DeviceNumber {DeviceNumber}.",
+            "Audio pipeline built: stream {StreamIndex} -> '{FriendlyName}' " +
+            "(AudioOutput.Id {OutputId}, WaveOutEvent.DeviceNumber {DeviceNumber}).",
             streamIndex,
-            deviceIndex);
+            audioOutput.FriendlyName,
+            audioOutput.Id,
+            deviceNumber);
     }
 
     public void Dispose()
@@ -334,5 +343,10 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public void SetSpeed(double speed)
     {
         _speed = speed;
+    }
+
+    public void SetAmplitude(float amplitude)
+    {
+        _gainProvider.Amplitude = amplitude;
     }
 }

@@ -5,7 +5,6 @@
     x:Class="OMP.Ui.MainWindow"
     Width="1200"
     Height="800"
-    Title="Opportun Media Player"
     x:DataType="ui:MainWindow">
 
     <Grid RowDefinitions="Auto,*">
@@ -118,30 +117,65 @@
                                VerticalAlignment="Center"
                                FontFamily="Consolas" />
 
-                    <Viewbox Grid.Column="7"
-                             Width="18"
-                             Height="18"
-                             VerticalAlignment="Center">
-                        <Canvas Width="24" Height="24">
-                            <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
-                                  Fill="White" />
-                            <Path Data="M15,9 C16.5,10.5 16.5,13.5 15,15"
-                                  Stroke="White"
-                                  StrokeThickness="2"
-                                  StrokeLineCap="Round" />
-                            <Path Data="M18,6 C21,9 21,15 18,18"
-                                  Stroke="White"
-                                  StrokeThickness="2"
-                                  StrokeLineCap="Round" />
-                        </Canvas>
-                    </Viewbox>
+                    <Button Grid.Column="7"
+                            Name="MuteButton"
+                            Width="36"
+                            Height="36">
+                        <Grid Width="18" Height="18">
+                            <Viewbox Name="SpeakerIcon"
+                                     Width="18"
+                                     Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
+                                          Fill="White" />
+                                    <Path Data="M15,9 C16.5,10.5 16.5,13.5 15,15"
+                                          Stroke="White"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                    <Path Data="M18,6 C21,9 21,15 18,18"
+                                          Stroke="White"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
 
-                    <Slider Grid.Column="8"
-                            Name="VolumeSlider"
-                            Width="120"
-                            Minimum="0"
-                            Maximum="100"
-                            Value="50" />
+                            <Viewbox Name="SpeakerMutedIcon"
+                                     Width="18"
+                                     Height="18"
+                                     IsVisible="False">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
+                                          Fill="White" />
+                                    <Path Data="M16,9 L22,15"
+                                          Stroke="White"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                    <Path Data="M22,9 L16,15"
+                                          Stroke="White"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                    </Button>
+
+                    <StackPanel Grid.Column="8"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+
+                        <Slider Name="VolumeSlider"
+                                Width="120"
+                                Minimum="0"
+                                Maximum="200"
+                                Value="100" />
+
+                        <TextBlock Name="VolumeLabel"
+                                   Text="100%"
+                                   Width="38"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
 
                     <Button Grid.Column="9"
                             Name="OptionsButton"

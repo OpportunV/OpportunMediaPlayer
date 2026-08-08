@@ -6,8 +6,8 @@ using Microsoft.Extensions.Hosting;
 using OMP.Lib;
 using OMP.Lib.Session;
 using OMP.Ui.Controls;
-using OMP.Ui.DevTools;
 using OMP.Ui.Input;
+using OMP.Ui.Settings;
 using Serilog;
 
 namespace OMP.Ui;
@@ -29,8 +29,6 @@ internal static class Program
                     .ReadFrom.Configuration(context.Configuration))
                 .ConfigureServices((context, services) =>
                 {
-                    services.Configure<DebugOptions>(context.Configuration.GetSection(DebugOptions.SectionName));
-
                     services.AddSingleton(
                         context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
                         ?? new PlaybackTuningOptions());
@@ -38,7 +36,7 @@ internal static class Program
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
                     services.AddSingleton<IWindowFactory, WindowFactory>();
-                    services.AddSingleton<DebugTrackAutoRouter>();
+                    services.AddSingleton<IUserSettingsService, UserSettingsService>();
 
                     services.AddTransient<MainWindow>();
                     services.AddTransient<OptionsWindow>();
@@ -46,9 +44,6 @@ internal static class Program
                 .Build();
 
             var services = appHost.Services;
-
-            // Resolved once, purely for its constructor side effect of subscribing to session changes.
-            services.GetRequiredService<DebugTrackAutoRouter>();
 
             Log.Information("Application starting.");
 

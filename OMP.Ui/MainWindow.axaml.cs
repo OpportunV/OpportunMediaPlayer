@@ -1,14 +1,18 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using OMP.Lib.Audio;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Input;
+using OMP.Ui.Settings;
 
 namespace OMP.Ui;
 
@@ -24,12 +28,24 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private bool IsMuted
+    {
+        get;
+        set
+        {
+            field = value;
+            _settings.Current.IsMuted = value;
+            UpdateMuteIcon();
+        }
+    }
+
     private bool _isSeekingViaSlider;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
+    private readonly IUserSettingsService _settings;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
 
@@ -37,13 +53,16 @@ public sealed partial class MainWindow : Window
         IMediaSessionRegistry mediaSessionRegistry,
         IMainWindowCommands commands,
         IMainWindowHotkeyService hotkeyService,
-        IWindowFactory windowFactory)
+        IWindowFactory windowFactory,
+        IUserSettingsService settings)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
         _commands = commands;
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
+        _settings = settings;
         InitializeComponent();
+        Title = AppInfo.DisplayName;
 
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
@@ -53,13 +72,16 @@ public sealed partial class MainWindow : Window
             GetIsPlaying = () => IsPlaying,
             GetIsFullscreen = () => _fullscreenController.IsFullscreen,
             SetIsPlaying = value => IsPlaying = value,
+            SetIsMuted = value => IsMuted = value,
             ToggleFullscreen = () => _fullscreenController.Toggle()
         });
         SetupButtons();
+        SetupVolume();
         SetupUiTimer();
         SetupHotkeys();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
+        UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
 
@@ -79,6 +101,7 @@ public sealed partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _settings.Save();
         _fullscreenController.Dispose();
         _videoRenderSurface.Dispose();
 
@@ -91,6 +114,75 @@ public sealed partial class MainWindow : Window
         registry.Current?.VideoFrameReady += Render;
         _videoRenderSurface.Reset();
         IsPlaying = false;
+
+        if (registry.Current is not null)
+        {
+            RestoreAudioRoutes(registry.Current);
+            RestoreVolume(registry.Current);
+        }
+    }
+
+    private void SetupVolume()
+    {
+        VolumeSlider.Value = _settings.Current.MasterVolume * 100;
+        VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
+        IsMuted = _settings.Current.IsMuted;
+
+        VolumeSlider.ValueChanged += (_, e) =>
+        {
+            _commands.SetMasterVolume(e.NewValue / 100);
+            _settings.Current.MasterVolume = e.NewValue / 100;
+            VolumeLabel.Text = $"{(int)e.NewValue}%";
+        };
+
+        VolumeSlider.PointerCaptureLost += (_, _) => _settings.Save();
+    }
+
+    private void RestoreAudioRoutes(IMediaSession session)
+    {
+        var preferred = _settings.Current.PreferredAudioOutputs;
+
+        if (preferred.Count == 0)
+        {
+            return;
+        }
+
+        var routes = new List<AudioRoute>();
+
+        for (var i = 0; i < session.AudioStreams.Count && i < preferred.Count; i++)
+        {
+            var output = session.AudioOutputs.FirstOrDefault(o => o.FriendlyName == preferred[i]);
+
+            if (output is not null)
+            {
+                routes.Add(new AudioRoute(session.AudioStreams[i], output));
+            }
+        }
+
+        if (routes.Count > 0)
+        {
+            session.SetAudioRoutes(routes);
+        }
+    }
+
+    private void RestoreVolume(IMediaSession session)
+    {
+        session.SetMasterVolume(_settings.Current.MasterVolume);
+        session.SetMasterMuted(_settings.Current.IsMuted);
+        IsMuted = _settings.Current.IsMuted;
+
+        foreach (var saved in _settings.Current.OutputVolumes)
+        {
+            var output = session.AudioOutputs.FirstOrDefault(o => o.FriendlyName == saved.FriendlyName);
+
+            if (output is null)
+            {
+                continue;
+            }
+
+            session.SetOutputVolume(output.Id, saved.Volume);
+            session.SetOutputMuted(output.Id, saved.Muted);
+        }
     }
 
     private void SetupUiTimer()
@@ -140,6 +232,12 @@ public sealed partial class MainWindow : Window
         PauseIcon.IsVisible = IsPlaying;
     }
 
+    private void UpdateMuteIcon()
+    {
+        SpeakerIcon.IsVisible = !IsMuted;
+        SpeakerMutedIcon.IsVisible = IsMuted;
+    }
+
     private void SetupButtons()
     {
         OpenMenuItem.Click += async (_, _) => await OpenFile();
@@ -149,6 +247,7 @@ public sealed partial class MainWindow : Window
         StepBackButton.Click += (_, _) => _commands.StepBack();
         StepForwardButton.Click += (_, _) => _commands.StepForward();
 
+        MuteButton.Click += (_, _) => _commands.ToggleMute();
         FullscreenButton.Click += (_, _) => _commands.ToggleFullscreen();
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
     }
@@ -178,7 +277,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSessionData()
     {
-        Title = $"{_mediaSessionRegistry.Current!.FileName} | Opportun Media Player";
+        Title = $"{_mediaSessionRegistry.Current!.FileName} | {AppInfo.DisplayName}";
         DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }

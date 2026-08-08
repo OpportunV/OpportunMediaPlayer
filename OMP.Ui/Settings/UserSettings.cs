@@ -1,0 +1,18 @@
+using System.Collections.Generic;
+
+namespace OMP.Ui.Settings;
+
+public sealed class UserSettings
+{
+    public int Version { get; set; } = CurrentVersion;
+
+    public double MasterVolume { get; set; } = 1.0;
+
+    public bool IsMuted { get; set; }
+
+    public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
+
+    public List<string> PreferredAudioOutputs { get; set; } = [];
+
+    public const int CurrentVersion = 1;
+}
