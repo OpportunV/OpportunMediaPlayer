@@ -53,6 +53,24 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         ChangeSpeed(-0.1);
     }
 
+    public void SetMasterVolume(double volume)
+    {
+        mediaSessionRegistry.Current?.SetMasterVolume(volume);
+    }
+
+    public void ToggleMute()
+    {
+        var session = mediaSessionRegistry.Current;
+
+        if (session == null)
+        {
+            return;
+        }
+
+        session.SetMasterMuted(!session.IsMuted);
+        _context?.SetIsMuted(session.IsMuted);
+    }
+
     public void ToggleFullscreen()
     {
         _context?.ToggleFullscreen();

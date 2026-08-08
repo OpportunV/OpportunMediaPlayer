@@ -14,6 +14,10 @@ public interface IMainWindowCommands
 
     public void DecreaseSpeed();
 
+    public void SetMasterVolume(double volume);
+
+    public void ToggleMute();
+
     public void ToggleFullscreen();
 
     public void ExitFullscreen();

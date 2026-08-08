@@ -17,7 +17,9 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
-    public IReadOnlyList<(AudioStream audioStream, AudioOutput audioOutput)> AudioRoutes => _audioRoutes.AsReadOnly();
+    public IReadOnlyList<AudioRoute> AudioRoutes => _audioRoutes.AsReadOnly();
+
+    public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _outputVolumes.AsReadOnly();
 
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
@@ -38,6 +40,10 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public string FileName { get; }
 
+    public bool IsMuted { get; private set; }
+
+    public double MasterVolume { get; private set; } = 1.0;
+
     public double Speed => _clock.Speed;
 
     public double VideoFps { get; private set; }
@@ -53,7 +59,9 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     private readonly Channel<PacketRef> _audioChannel;
     private readonly List<AudioPipeline> _audioPipelines = [];
-    private readonly List<(AudioStream audioStream, AudioOutput audioOutput)> _audioRoutes = [];
+    private readonly List<AudioRoute> _audioRoutes = [];
+
+    private readonly Dictionary<int, OutputVolumeState> _outputVolumes = [];
     private readonly int _audioBufferDurationSeconds;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly PlaybackClock _clock = new();
@@ -171,7 +179,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         if (AudioStreams.Count > 0 && AudioOutputs.Count > 0)
         {
-            SetAudioRoutes([(AudioStreams[0], AudioOutputs[0])]);
+            SetAudioRoutes([new AudioRoute(AudioStreams[0], AudioOutputs[0])]);
         }
         else
         {
@@ -182,7 +190,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
-    public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes)
+    public void SetAudioRoutes(IEnumerable<AudioRoute> routes)
     {
         var wasPlaying = _isPlaying;
         Pause();
@@ -191,15 +199,15 @@ internal sealed unsafe class MediaSession : IMediaSession
         ClearAudioPipelines();
         _audioRoutes.AddRange(routes);
 
-        foreach (var (stream, output) in _audioRoutes)
+        foreach (var route in _audioRoutes)
         {
             lock (_formatSync)
             {
                 _audioPipelines.Add(
                     new AudioPipeline(
                         _formatContext,
-                        stream.Id,
-                        output.Id,
+                        route.Stream.Id,
+                        route.Output,
                         _cancellationTokenSource.Token,
                         _audioBufferDurationSeconds,
                         _loggerFactory));
@@ -207,19 +215,46 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             _logger.LogDebug(
                 "Audio route: '{Title}' [{Language}] -> '{FriendlyName}'.",
-                stream.Title,
-                stream.Language,
-                output.FriendlyName);
+                route.Stream.Title,
+                route.Stream.Language,
+                route.Output.FriendlyName);
         }
 
         _logger.LogInformation("Set {RouteCount} audio route(s).", _audioRoutes.Count);
 
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
+        ApplyVolumeToPipelines();
 
         if (wasPlaying)
         {
             Play();
         }
+    }
+
+    public void SetMasterVolume(double volume)
+    {
+        MasterVolume = Math.Clamp(volume, AudioVolumeLimits.Min, AudioVolumeLimits.Max);
+        ApplyVolumeToPipelines();
+    }
+
+    public void SetMasterMuted(bool muted)
+    {
+        IsMuted = muted;
+        _logger.LogInformation("Master mute {State}.", muted ? "on" : "off");
+        ApplyVolumeToPipelines();
+    }
+
+    public void SetOutputVolume(int outputId, double volume)
+    {
+        _outputVolumes[outputId] = GetOutputVolumeState(outputId)
+            with { Volume = Math.Clamp(volume, AudioVolumeLimits.Min, AudioVolumeLimits.Max) };
+        ApplyVolumeToPipelines();
+    }
+
+    public void SetOutputMuted(int outputId, bool muted)
+    {
+        _outputVolumes[outputId] = GetOutputVolumeState(outputId) with { Muted = muted };
+        ApplyVolumeToPipelines();
     }
 
     public void Play()
@@ -233,6 +268,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             if (_videoPipeline is null)
             {
                 _clock.Start();
+                _awaitingFirstFrame = false;
             }
         }
 
@@ -480,6 +516,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             {
                 if (_videoPipeline is null)
                 {
+                    PumpAudioOnly();
                     Thread.Sleep(NoVideoIdleSleepMs);
                     continue;
                 }
@@ -577,6 +614,28 @@ internal sealed unsafe class MediaSession : IMediaSession
         _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
+    private void PumpAudioOnly()
+    {
+        if (_audioPipelines.Count == 0)
+        {
+            return;
+        }
+
+        lock (_seekSync)
+        {
+            if (_pendingSeekTargetSeconds.HasValue)
+            {
+                _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
+                _pendingSeekTargetSeconds = null;
+            }
+
+            _awaitingFirstFrame = false;
+        }
+
+        var playbackTime = _clock.CurrentSeconds;
+        _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
+    }
+
     private void LogLoopError(Exception ex)
     {
         if (ex.Message != _lastLoopErrorMessage)
@@ -601,6 +660,33 @@ internal sealed unsafe class MediaSession : IMediaSession
             _suppressedLoopErrors);
         _suppressedLoopErrors = 0;
         _loopErrorStopwatch.Restart();
+    }
+
+    private void ApplyVolumeToPipelines()
+    {
+        for (var i = 0; i < _audioPipelines.Count && i < _audioRoutes.Count; i++)
+        {
+            _audioPipelines[i].SetAmplitude(GetEffectiveAmplitude(_audioRoutes[i].Output.Id));
+        }
+    }
+
+    private float GetEffectiveAmplitude(int outputId)
+    {
+        var state = GetOutputVolumeState(outputId);
+
+        if (IsMuted || state.Muted)
+        {
+            return 0f;
+        }
+
+        return (float)(AudioGainProcessor.ToAmplitude(MasterVolume) * AudioGainProcessor.ToAmplitude(state.Volume));
+    }
+
+    private OutputVolumeState GetOutputVolumeState(int outputId)
+    {
+        return _outputVolumes.TryGetValue(outputId, out var state)
+            ? state
+            : new OutputVolumeState(1.0, false);
     }
 
     private void ClearAudioPipelines()
