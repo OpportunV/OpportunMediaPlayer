@@ -5,5 +5,5 @@ namespace OMP.Ui.Input;
 
 public interface IMainWindowHotkeyService
 {
-    public bool Handle(Key key, IMainWindowCommands commands);
+    public bool Handle(Key key, KeyModifiers modifiers, IMainWindowCommands commands);
 }

@@ -11,6 +11,7 @@ using OMP.Lib.Audio;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
+using OMP.Ui.Extensions;
 using OMP.Ui.Input;
 using OMP.Ui.Settings;
 
@@ -48,6 +49,7 @@ public sealed partial class MainWindow : Window
     private readonly IUserSettingsService _settings;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
+    private readonly SpeedFlyoutView _speedFlyoutView = new();
 
     public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
@@ -73,10 +75,12 @@ public sealed partial class MainWindow : Window
             GetIsFullscreen = () => _fullscreenController.IsFullscreen,
             SetIsPlaying = value => IsPlaying = value,
             SetIsMuted = value => IsMuted = value,
+            SetSpeedDisplay = OnSpeedChanged,
             ToggleFullscreen = () => _fullscreenController.Toggle()
         });
         SetupButtons();
         SetupVolume();
+        SetupSpeed();
         SetupUiTimer();
         SetupHotkeys();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
@@ -115,11 +119,41 @@ public sealed partial class MainWindow : Window
         _videoRenderSurface.Reset();
         IsPlaying = false;
 
-        if (registry.Current is not null)
+        if (registry.Current is null)
         {
-            RestoreAudioRoutes(registry.Current);
-            RestoreVolume(registry.Current);
+            return;
         }
+
+        RestoreAudioRoutes(registry.Current);
+        RestoreVolume(registry.Current);
+
+        _commands.SetSpeed(_settings.Current.PlaybackSpeed);
+    }
+
+    private void SetupSpeed()
+    {
+        SpeedButton.Flyout = new Flyout
+        {
+            Content = _speedFlyoutView,
+            Placement = PlacementMode.Top
+        };
+
+        _speedFlyoutView.SpeedCommitted += speed => _commands.SetSpeed(speed);
+
+        SetSpeedDisplayText(_settings.Current.PlaybackSpeed);
+    }
+
+    private void SetSpeedDisplayText(double speed)
+    {
+        SpeedLabel.Text = PlaybackSpeedFormat.Format(speed);
+        _speedFlyoutView.SetSpeed(speed);
+    }
+
+    private void OnSpeedChanged(double speed)
+    {
+        SetSpeedDisplayText(speed);
+        _settings.Current.PlaybackSpeed = speed;
+        _settings.Save();
     }
 
     private void SetupVolume()
@@ -299,6 +333,6 @@ public sealed partial class MainWindow : Window
 
     private void OnHotkeyPressed(object? sender, KeyEventArgs e)
     {
-        e.Handled = _hotkeyService.Handle(e.Key, _commands);
+        e.Handled = _hotkeyService.Handle(e.Key, e.KeyModifiers, _commands);
     }
 }

@@ -357,9 +357,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     public void SetSpeed(double speed)
     {
         _clock.SetSpeed(Math.Clamp(speed, PlaybackSpeedLimits.Min, PlaybackSpeedLimits.Max));
-
-        // TODO: Perhaps need to flush same way as in the seek method.
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
+        Seek(CurrentTime);
+
+        _logger.LogInformation("Playback speed set to {Speed:F2}x.", Speed);
     }
 
     public void Dispose()

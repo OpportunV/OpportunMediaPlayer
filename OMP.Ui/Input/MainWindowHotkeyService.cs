@@ -5,7 +5,17 @@ namespace OMP.Ui.Input;
 
 internal sealed class MainWindowHotkeyService : IMainWindowHotkeyService
 {
-    public bool Handle(Key key, IMainWindowCommands commands)
+    public bool Handle(Key key, KeyModifiers modifiers, IMainWindowCommands commands)
+    {
+        return modifiers switch
+        {
+            KeyModifiers.None => HandleUnmodified(key, commands),
+            KeyModifiers.Shift => HandleShift(key, commands),
+            _ => false
+        };
+    }
+
+    private static bool HandleUnmodified(Key key, IMainWindowCommands commands)
     {
         switch (key)
         {
@@ -28,15 +38,21 @@ internal sealed class MainWindowHotkeyService : IMainWindowHotkeyService
             case Key.Escape:
                 commands.ExitFullscreen();
                 return true;
+        }
 
-            case Key.OemPlus:
-            case Key.Add:
-                commands.IncreaseSpeed();
+        return false;
+    }
+
+    private static bool HandleShift(Key key, IMainWindowCommands commands)
+    {
+        switch (key)
+        {
+            case Key.OemComma:
+                commands.DecreaseSpeed();
                 return true;
 
-            case Key.OemMinus:
-            case Key.Subtract:
-                commands.DecreaseSpeed();
+            case Key.OemPeriod:
+                commands.IncreaseSpeed();
                 return true;
         }
 
