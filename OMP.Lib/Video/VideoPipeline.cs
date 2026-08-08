@@ -1,7 +1,9 @@
 ﻿using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
+using Microsoft.Extensions.Logging;
 using OMP.Lib.Extensions;
+using OMP.Lib.Interop;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace OMP.Lib.Video;
@@ -10,6 +12,9 @@ internal sealed unsafe class VideoPipeline : IDisposable
 {
     public int StreamIndex { get; }
     public double DecodeFps { get; private set; }
+
+    private readonly ILogger _logger;
+    private int _sendPacketFailures;
 
     private readonly VideoFrame _baseVideoFrame;
     private readonly AVCodecContext* _codecContext;
@@ -33,22 +38,38 @@ internal sealed unsafe class VideoPipeline : IDisposable
     private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
     private const int BufferedFrameCount = 8;
 
-    public VideoPipeline(AVFormatContext* formatContext, int streamIndex, CancellationToken cancellationToken)
+    public VideoPipeline(AVFormatContext* formatContext, int streamIndex, CancellationToken cancellationToken,
+        ILoggerFactory loggerFactory)
     {
         StreamIndex = streamIndex;
         _cancellationToken = cancellationToken;
+        _logger = loggerFactory.CreateLogger<VideoPipeline>();
 
         var stream = formatContext->streams[streamIndex];
         _timeBase = stream->time_base;
         var codec = ffmpeg.avcodec_find_decoder(stream->codecpar->codec_id);
+        if (codec == null)
+        {
+            _logger.LogError(
+                "No decoder available for video stream {StreamIndex} (codec {Codec}).",
+                streamIndex,
+                ffmpeg.avcodec_get_name(stream->codecpar->codec_id));
+            throw new ApplicationException("Could not find video decoder.");
+        }
 
         _codecContext = ffmpeg.avcodec_alloc_context3(codec);
         ffmpeg.avcodec_parameters_to_context(_codecContext, stream->codecpar);
         _codecContext->thread_count = Environment.ProcessorCount;
         _codecContext->thread_type = ffmpeg.FF_THREAD_FRAME;
 
-        if (ffmpeg.avcodec_open2(_codecContext, codec, null) < 0)
+        var openResult = ffmpeg.avcodec_open2(_codecContext, codec, null);
+        if (openResult < 0)
         {
+            _logger.LogError(
+                "Failed to open video codec {Codec} for stream {StreamIndex}: {Error}.",
+                ffmpeg.avcodec_get_name(stream->codecpar->codec_id),
+                streamIndex,
+                FFmpegError.Describe(openResult));
             throw new ApplicationException("Could not open video codec.");
         }
 
@@ -69,6 +90,17 @@ internal sealed unsafe class VideoPipeline : IDisposable
             null,
             null);
 
+        if (_sws == null)
+        {
+            _logger.LogError(
+                "Failed to create scaler for video stream {StreamIndex} ({Width}x{Height}, {PixelFormat} -> BGRA).",
+                streamIndex,
+                width,
+                height,
+                _codecContext->pix_fmt);
+            throw new ApplicationException("Could not create video scaler.");
+        }
+
         var stride = width * 4;
         var frameBufferSize = stride * height;
         _frameBuffers = new nint[BufferedFrameCount];
@@ -78,10 +110,26 @@ internal sealed unsafe class VideoPipeline : IDisposable
         }
 
         _baseVideoFrame = new VideoFrame(width, height, stride, 0, frameBufferSize, 0);
+
+        _logger.LogDebug(
+            "Video pipeline built: stream {StreamIndex}, {Width}x{Height}, {PixelFormat}, {ThreadCount} thread(s).",
+            streamIndex,
+            width,
+            height,
+            _codecContext->pix_fmt,
+            _codecContext->thread_count);
     }
 
     public void Dispose()
     {
+        if (_sendPacketFailures > 0)
+        {
+            _logger.LogWarning(
+                "Video stream {StreamIndex}: {Count} decode submission(s) failed.",
+                StreamIndex,
+                _sendPacketFailures);
+        }
+
         Flush();
         _frameChannel.Writer.Complete();
         foreach (var frameBuffer in _frameBuffers)
@@ -114,9 +162,22 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     public void Enqueue(AVPacket* packet)
     {
+        int sendResult;
         lock (_decodeSync)
         {
-            ffmpeg.avcodec_send_packet(_codecContext, packet);
+            sendResult = ffmpeg.avcodec_send_packet(_codecContext, packet);
+        }
+
+        if (sendResult < 0 && !FFmpegError.IsRetryOrEof(sendResult))
+        {
+            if (Interlocked.Increment(ref _sendPacketFailures) == 1)
+            {
+                _logger.LogWarning(
+                    "Video stream {StreamIndex}: decode submission failed: {Error}. " +
+                    "Further occurrences are counted and reported on close.",
+                    StreamIndex,
+                    FFmpegError.Describe(sendResult));
+            }
         }
 
         while (true)

@@ -1,5 +1,5 @@
-using System;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OMP.Lib.Session;
 
@@ -9,8 +9,15 @@ namespace OMP.Ui.DevTools;
 // requiring routes to be added by hand each debug run.
 internal sealed class DebugTrackAutoRouter
 {
-    public DebugTrackAutoRouter(IMediaSessionRegistry registry, IOptions<DebugOptions> options)
+    private readonly ILogger<DebugTrackAutoRouter> _logger;
+
+    public DebugTrackAutoRouter(
+        IMediaSessionRegistry registry,
+        IOptions<DebugOptions> options,
+        ILogger<DebugTrackAutoRouter> logger)
     {
+        _logger = logger;
+
         if (!options.Value.AutoRouteAllTracks)
         {
             return;
@@ -19,7 +26,7 @@ internal sealed class DebugTrackAutoRouter
         registry.SessionChanged += OnSessionChanged;
     }
 
-    private static void OnSessionChanged(IMediaSessionRegistry registry)
+    private void OnSessionChanged(IMediaSessionRegistry registry)
     {
         var session = registry.Current;
         if (session is null)
@@ -31,21 +38,29 @@ internal sealed class DebugTrackAutoRouter
             .Zip(session.AudioOutputs)
             .ToList();
 
-        Console.WriteLine($"Audio streams count: {routes.Count}");
-        Console.WriteLine(
-            string.Join(
-                Environment.NewLine,
-                session.AudioStreams.Select(stream => $"{stream.Title}, {stream.Language}")));
-        Console.WriteLine();
-        Console.WriteLine($"Audio outputs count: {routes.Count}");
-        Console.WriteLine(
-            string.Join(Environment.NewLine, session.AudioOutputs.Select(output => output.FriendlyName)));
+        if (routes.Count == 0)
+        {
+            _logger.LogWarning(
+                "Auto-routing produced no routes: {StreamCount} audio stream(s), {OutputCount} output(s).",
+                session.AudioStreams.Count,
+                session.AudioOutputs.Count);
+            return;
+        }
 
-        Console.WriteLine("Resulting routes:");
-        Console.WriteLine(
-            string.Join(
-                Environment.NewLine,
-                routes.Select(route => $"{route.First.Title} -> {route.Second.FriendlyName}")));
+        _logger.LogInformation(
+            "Auto-routing enabled: {StreamCount} audio stream(s), {OutputCount} output(s), {RouteCount} route(s).",
+            session.AudioStreams.Count,
+            session.AudioOutputs.Count,
+            routes.Count);
+
+        foreach (var (stream, output) in routes)
+        {
+            _logger.LogDebug(
+                "Auto-route: '{Title}' [{Language}] -> '{FriendlyName}'.",
+                stream.Title,
+                stream.Language,
+                output.FriendlyName);
+        }
 
         session.SetAudioRoutes(routes);
     }

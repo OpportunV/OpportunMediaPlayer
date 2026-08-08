@@ -1,22 +1,33 @@
+using Microsoft.Extensions.Logging;
+
 namespace OMP.Lib.Session;
 
-public sealed class MediaSessionRegistry : IMediaSessionRegistry
+public sealed class MediaSessionRegistry(PlaybackTuningOptions options, ILoggerFactory loggerFactory)
+    : IMediaSessionRegistry
 {
     public event Action<IMediaSessionRegistry>? SessionChanged;
 
     public IMediaSession? Current { get; private set; }
 
-    private readonly PlaybackTuningOptions _options;
-
-    public MediaSessionRegistry(PlaybackTuningOptions options)
-    {
-        _options = options;
-    }
+    private readonly ILogger _logger = loggerFactory.CreateLogger<MediaSessionRegistry>();
 
     public void Open(string filePath)
     {
+        _logger.LogInformation("Opening {FilePath}.", filePath);
+
         Current?.Dispose();
-        Current = new MediaSession(filePath, _options);
+
+        try
+        {
+            Current = new MediaSession(filePath, options, loggerFactory);
+        }
+        catch (Exception ex)
+        {
+            Current = null;
+            _logger.LogError(ex, "Failed to open {FilePath}.", filePath);
+            throw;
+        }
+
         Current.SetSpeed(1);
 
         SessionChanged?.Invoke(this);
@@ -24,6 +35,8 @@ public sealed class MediaSessionRegistry : IMediaSessionRegistry
 
     public void Close()
     {
+        _logger.LogInformation("Closing session.");
+
         Current?.Dispose();
         Current = null;
 

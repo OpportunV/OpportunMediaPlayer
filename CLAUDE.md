@@ -38,6 +38,62 @@ requires understanding playback-loop or resampling internals to change safely. D
 constant unless a specific need to tune it externally comes up; the latter is always bound from
 `OMP.Ui`'s config and pushed in.
 
+`Microsoft.Extensions.Logging.Abstractions` is a deliberate, bounded exception to "no
+`Microsoft.Extensions.*` in `OMP.Lib`". It contains only `ILogger`/`ILoggerFactory`/`LogLevel` —
+no config, no container, no hosting — so it carries none of the coupling the rule exists to
+prevent. The logging *implementation* and all of its configuration stay in `OMP.Ui`. Don't read
+this as licence to add the other `Microsoft.Extensions.*` packages.
+
+## Logging
+
+`OMP.Lib` only ever sees `ILogger`. Everything else — sinks, levels, paths, retention — lives in
+the `Serilog` section of `OMP.Ui/appsettings.json`; `Program.cs` only calls
+`ReadFrom.Configuration`. Serilog expands `%ENVVAR%` in config values, which is what lets the file
+path (`%LOCALAPPDATA%\OpportunMediaPlayer\logs\omp-.log`) stay in config rather than being built
+in code. Logs are capped at 10 MB × 7 files; `rollOnFileSizeLimit` is what makes the size limit
+roll rather than silently stop logging, so don't drop it.
+
+`ILoggerFactory`, not `ILogger<T>`, is threaded through the engine: DI gives it to
+`MediaSessionRegistry`, which hands it to `MediaSession`, which hands it to every pipeline and
+scanner, each doing `loggerFactory.CreateLogger<TSelf>()`. `ILogger<AudioPipeline>` is not an
+option — `AudioPipeline` is `internal` and `MediaSessionRegistry` is `public`, so it cannot
+appear in a public constructor signature. The factory also mints a logger per instance (the
+number of pipelines is variable) and preserves per-type category names, which is what makes
+`MinimumLevel:Override` per-subsystem filtering work. There is deliberately no
+`NullLoggerFactory` default — optional logging is how an engine goes silent again; tests pass
+`NullLoggerFactory.Instance` explicitly.
+
+| Level | Use | Examples |
+|---|---|---|
+| `Error` | Operation failed | Codec open failure, presentation-loop exception, endpoint enumeration failure |
+| `Warning` | Degraded but recovered | Seek failed, zero outputs, first decode-return-code failure per pipeline |
+| `Information` | User-visible lifecycle | App start/stop, file opened, routes changed |
+| `Debug` | Construction/teardown, scan results | Per-stream scan detail, per-route pipeline build |
+| `Trace` | Per-packet anomalies | `PumpToOutput` buffer rejection, missing metadata tags. Off in all shipped configs |
+
+**Nothing may be logged per frame, per packet, or per chunk.** Not in `VideoRenderLoop`'s
+iteration body (except its rate-limited error handler), not in either pipeline's
+`avcodec_receive_*` loop, not per demuxed packet. At 60 fps with several audio routes that is
+>10,000 calls/second. Failures that are inherently per-packet (`avcodec_send_packet`,
+`swr_convert`) log the first occurrence and then count, reporting the total on `Dispose` —
+`AudioPipeline` is the reference implementation. `MediaSession.LogLoopError` is the reference for
+collapsing a repeating exception down to one line per interval.
+
+**Use message templates, never interpolated strings.** Measured on this exact call shape with the
+level disabled: interpolated 112 B/call, template 88 B/call, template behind an `IsEnabled` guard
+0 B/call. The template still allocates because the arguments box into an `object?[]` at the call
+site, before `ILogger` gets a chance to check the level.
+
+**Do not blanket-apply Rider's "evaluation of this argument may be expensive" `IsEnabled`
+suggestion.** That 88 B is only worth an `if` when the call site is hot, and almost none here are
+— every logging call in `OMP.Lib` is once per session, once per pipeline, or already behind an
+`Interlocked.Increment(...) == 1`. Adding the guard everywhere buys nothing and costs four lines
+of noise per site. There is currently exactly one call site that earns it: the `LogTrace` in
+`AudioPipeline.PumpToOutput`, which sits on a per-chunk path. Guard a site when it is genuinely
+hot; otherwise leave it. If per-packet diagnostics are ever genuinely needed, reach for
+`[LoggerMessage]` source-generated partial methods (also measured at 0 B/call) rather than
+hand-written guards — but note the class has to become `partial`.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`

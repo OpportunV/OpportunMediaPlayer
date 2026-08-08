@@ -1,7 +1,9 @@
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
+using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using OMP.Lib.Extensions;
+using OMP.Lib.Interop;
 
 namespace OMP.Lib.Audio;
 
@@ -12,6 +14,10 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private double _currentTimeSeconds;
     private double _speed = 1.0;
     private readonly AudioSpeedProcessor _speedProcessor = new();
+    private readonly ILogger _logger;
+
+    private int _sendPacketFailures;
+    private int _resampleFailures;
 
     private readonly Channel<AudioChunk> _decodedPcmChannel = Channel.CreateBounded<AudioChunk>(
         new BoundedChannelOptions(128)
@@ -41,19 +47,35 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const double BufferHighWaterMarkRatio = 0.9;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int deviceIndex,
-        CancellationToken cancellationToken, int bufferDurationSeconds)
+        CancellationToken cancellationToken, int bufferDurationSeconds, ILoggerFactory loggerFactory)
     {
         _cancellationToken = cancellationToken;
+        _logger = loggerFactory.CreateLogger<AudioPipeline>();
         StreamIndex = streamIndex;
 
         var stream = formatContext->streams[streamIndex];
         var codec = ffmpeg.avcodec_find_decoder(stream->codecpar->codec_id);
+        if (codec == null)
+        {
+            _logger.LogError(
+                "No decoder available for audio stream {StreamIndex} (codec {Codec}).",
+                streamIndex,
+                ffmpeg.avcodec_get_name(stream->codecpar->codec_id));
+            throw new ApplicationException("Could not find audio decoder.");
+        }
 
         _timeBase = stream->time_base;
         _codecContext = ffmpeg.avcodec_alloc_context3(codec);
         ffmpeg.avcodec_parameters_to_context(_codecContext, stream->codecpar);
-        if (ffmpeg.avcodec_open2(_codecContext, codec, null) < 0)
+
+        var openResult = ffmpeg.avcodec_open2(_codecContext, codec, null);
+        if (openResult < 0)
         {
+            _logger.LogError(
+                "Failed to open audio codec {Codec} for stream {StreamIndex}: {Error}.",
+                ffmpeg.avcodec_get_name(stream->codecpar->codec_id),
+                streamIndex,
+                FFmpegError.Describe(openResult));
             throw new ApplicationException("Could not open codec.");
         }
 
@@ -72,8 +94,17 @@ internal sealed unsafe class AudioPipeline : IDisposable
         ffmpeg.av_opt_set_int(_swr, "in_sample_rate", _codecContext->sample_rate, 0);
         ffmpeg.av_opt_set_sample_fmt(_swr, "in_sample_fmt", _codecContext->sample_fmt, 0);
 
-        if (ffmpeg.swr_init(_swr) < 0)
+        var resamplerResult = ffmpeg.swr_init(_swr);
+        if (resamplerResult < 0)
         {
+            _logger.LogError(
+                "Failed to initialize resampler for stream {StreamIndex} " +
+                "(in {InputSampleRate}Hz/{InputSampleFormat} -> out {OutputSampleRate}Hz/S16): {Error}.",
+                streamIndex,
+                _codecContext->sample_rate,
+                _codecContext->sample_fmt,
+                OutputSampleRate,
+                FFmpegError.Describe(resamplerResult));
             throw new ApplicationException("Could not initialize resampler.");
         }
 
@@ -87,10 +118,31 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
         _output = new WaveOutEvent { DeviceNumber = deviceIndex };
         _output.Init(_buffer);
+
+        _logger.LogDebug(
+            "Audio pipeline built: stream {StreamIndex} -> WaveOutEvent.DeviceNumber {DeviceNumber}.",
+            streamIndex,
+            deviceIndex);
     }
 
     public void Dispose()
     {
+        if (_sendPacketFailures > 0)
+        {
+            _logger.LogWarning(
+                "Audio stream {StreamIndex}: {Count} decode submission(s) failed.",
+                StreamIndex,
+                _sendPacketFailures);
+        }
+
+        if (_resampleFailures > 0)
+        {
+            _logger.LogWarning(
+                "Audio stream {StreamIndex}: {Count} resample call(s) failed.",
+                StreamIndex,
+                _resampleFailures);
+        }
+
         _output.Dispose();
 
         fixed (AVFrame** frame = &_frame)
@@ -111,9 +163,22 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public void Enqueue(AVPacket* packet)
     {
+        int sendResult;
         lock (_decodeSync)
         {
-            ffmpeg.avcodec_send_packet(_codecContext, packet);
+            sendResult = ffmpeg.avcodec_send_packet(_codecContext, packet);
+        }
+
+        if (sendResult < 0 && !FFmpegError.IsRetryOrEof(sendResult))
+        {
+            if (Interlocked.Increment(ref _sendPacketFailures) == 1)
+            {
+                _logger.LogWarning(
+                    "Audio stream {StreamIndex}: decode submission failed: {Error}. " +
+                    "Further occurrences are counted and reported on close.",
+                    StreamIndex,
+                    FFmpegError.Describe(sendResult));
+            }
         }
 
         fixed (byte* outPtr = _managedBuffer)
@@ -144,7 +209,21 @@ internal sealed unsafe class AudioPipeline : IDisposable
                         _frame->nb_samples);
                 }
 
-                if (dstSamples <= 0)
+                if (dstSamples < 0)
+                {
+                    if (Interlocked.Increment(ref _resampleFailures) == 1)
+                    {
+                        _logger.LogWarning(
+                            "Audio stream {StreamIndex}: resample failed: {Error}. " +
+                            "Further occurrences are counted and reported on close.",
+                            StreamIndex,
+                            FFmpegError.Describe(dstSamples));
+                    }
+
+                    continue;
+                }
+
+                if (dstSamples == 0)
                 {
                     continue;
                 }
@@ -196,6 +275,14 @@ internal sealed unsafe class AudioPipeline : IDisposable
             }
             catch (InvalidOperationException)
             {
+                if (_logger.IsEnabled(LogLevel.Trace))
+                {
+                    _logger.LogTrace(
+                        "Audio stream {StreamIndex}: output buffer rejected a {Length}-byte chunk.",
+                        StreamIndex,
+                        chunk.Length);
+                }
+
                 break;
             }
         }

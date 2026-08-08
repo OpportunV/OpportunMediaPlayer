@@ -8,6 +8,7 @@ using OMP.Lib.Session;
 using OMP.Ui.Controls;
 using OMP.Ui.DevTools;
 using OMP.Ui.Input;
+using Serilog;
 
 namespace OMP.Ui;
 
@@ -16,39 +17,60 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        var appHost = Host.CreateDefaultBuilder(args)
-            .UseContentRoot(AppContext.BaseDirectory)
-            .ConfigureServices((context, services) =>
-            {
-                services.Configure<DebugOptions>(context.Configuration.GetSection(DebugOptions.SectionName));
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console()
+            .CreateBootstrapLogger();
 
-                services.AddSingleton(
-                    context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
-                    ?? new PlaybackTuningOptions());
-                services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
-                services.AddTransient<IMainWindowCommands, MainWindowCommands>();
-                services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
-                services.AddSingleton<IWindowFactory, WindowFactory>();
-                services.AddSingleton<DebugTrackAutoRouter>();
-
-                services.AddTransient<MainWindow>();
-                services.AddTransient<OptionsWindow>();
-            })
-            .Build();
-
-        var services = appHost.Services;
-
-        // Resolved once, purely for its constructor side effect of subscribing to session changes.
-        services.GetRequiredService<DebugTrackAutoRouter>();
-
-        if (args.Length > 0)
+        try
         {
-            services.GetRequiredService<IMediaSessionRegistry>().Open(args[0]);
-        }
+            var appHost = Host.CreateDefaultBuilder(args)
+                .UseContentRoot(AppContext.BaseDirectory)
+                .UseSerilog((context, _, configuration) => configuration
+                    .ReadFrom.Configuration(context.Configuration))
+                .ConfigureServices((context, services) =>
+                {
+                    services.Configure<DebugOptions>(context.Configuration.GetSection(DebugOptions.SectionName));
 
-        BuildAvaloniaApp()
-            .AfterSetup(builder => ((App)builder.Instance!).Services = services)
-            .StartWithClassicDesktopLifetime(args);
+                    services.AddSingleton(
+                        context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
+                        ?? new PlaybackTuningOptions());
+                    services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
+                    services.AddTransient<IMainWindowCommands, MainWindowCommands>();
+                    services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
+                    services.AddSingleton<IWindowFactory, WindowFactory>();
+                    services.AddSingleton<DebugTrackAutoRouter>();
+
+                    services.AddTransient<MainWindow>();
+                    services.AddTransient<OptionsWindow>();
+                })
+                .Build();
+
+            var services = appHost.Services;
+
+            // Resolved once, purely for its constructor side effect of subscribing to session changes.
+            services.GetRequiredService<DebugTrackAutoRouter>();
+
+            Log.Information("Application starting.");
+
+            if (args.Length > 0)
+            {
+                services.GetRequiredService<IMediaSessionRegistry>().Open(args[0]);
+            }
+
+            BuildAvaloniaApp()
+                .AfterSetup(builder => ((App)builder.Instance!).Services = services)
+                .StartWithClassicDesktopLifetime(args);
+
+            Log.Information("Application stopping.");
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Application terminated unexpectedly.");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 
     public static AppBuilder BuildAvaloniaApp()
