@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OMP.Ui.Controls.SpeedFlyoutView">
+
+    <StackPanel Width="360"
+                Margin="14"
+                Spacing="12">
+
+        <TextBlock Text="Playback speed"
+                   FontWeight="Bold" />
+
+        <StackPanel Name="PresetsPanel"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center" />
+
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+              ColumnSpacing="8">
+
+            <Button Grid.Column="0"
+                    Name="DecreaseButton"
+                    Content="-"
+                    Width="28"
+                    Height="28" />
+
+            <Slider Grid.Column="1"
+                    Name="SpeedSlider"
+                    TickFrequency="0.05"
+                    IsSnapToTickEnabled="True"
+                    VerticalAlignment="Center" />
+
+            <Button Grid.Column="2"
+                    Name="IncreaseButton"
+                    Content="+"
+                    Width="28"
+                    Height="28" />
+
+            <TextBlock Grid.Column="3"
+                       Name="SpeedValueLabel"
+                       Text="1x"
+                       Width="42"
+                       FontFamily="Consolas"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <Button Name="ResetButton"
+                Content="Reset to 1x"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center" />
+    </StackPanel>
+</UserControl>

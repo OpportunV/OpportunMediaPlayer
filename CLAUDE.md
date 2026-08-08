@@ -123,6 +123,31 @@ pipelines — the same way speed is. Per-output volume deliberately does **not**
 `AudioRoute`: `SetAudioRoutes` disposes and recreates every `WaveOutEvent`, so routing a slider
 through it would tear down devices on every tick.
 
+## Playback speed
+
+`MediaSession.SetSpeed` does a **narrow flush**, deliberately less than `Seek`: no seek-generation
+bump, no packet-channel drain, no `av_seek_frame`, no video flush, no session Pause/Play. The
+demuxer is already reading from the right place — only the already-decoded PCM sitting in each
+`AudioPipeline` needs discarding and re-decoding at the new rate, or it would keep playing at the
+old speed for up to `BufferDurationSeconds`. That flush loop runs under `_seekSync` (not a new
+lock): `AudioPipeline.Flush()` drains the pipeline's single-reader `_decodedPcmChannel`, and
+`PumpToOutput` on the presentation thread reads that same channel every iteration. `SetSpeed` is
+called from the UI thread, so without serializing against a concurrent `Seek()` the two could touch
+the channel's reader side from two threads at once — the channel opts into single-reader fast paths
+and isn't safe for that. This mirrors (and doesn't widen) a race that already exists around `Seek`.
+
+`PlaybackSpeedPresets` (the YouTube-style preset list) and `PlaybackSpeedLimits` both live in
+`OMP.Lib`, not `OMP.Ui`: they're the engine's own declared set of supported rates, not host
+configuration, and `OMP.Lib.Tests` is the only test project that exists. `Next`/`Previous` saturate
+at the ends rather than wrapping — jumping from 2× to 0.5× on a keypress would be user-hostile.
+
+The UI never calls `SetSpeed` per pixel of a slider drag — `SpeedFlyoutView` mirrors `ProgressSlider`'s
+drag pattern (commit `92fcfc5`): update the readout only while dragging, commit once on release.
+Every commit reads the applied value back from `session.Speed` rather than trusting the requested
+one, so the displayed speed reflects the engine's own clamp. `MediaSessionRegistry.Open` forces
+`SetSpeed(1)` unconditionally on every open, so restoring a persisted speed has to happen from
+`MainWindow.OnSessionChanged` (after that reset), not from the registry.
+
 Persisted volume is keyed by `FriendlyName`, never by `AudioOutput.Id` — the Id shifts as soon as a
 device is plugged in or removed.
 

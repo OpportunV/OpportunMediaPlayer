@@ -1,4 +1,5 @@
 using System;
+using OMP.Lib;
 using OMP.Lib.Session;
 
 namespace OMP.Ui.Controls;
@@ -45,12 +46,30 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
 
     public void IncreaseSpeed()
     {
-        ChangeSpeed(0.1);
+        var session = mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            ApplySpeed(PlaybackSpeedPresets.Next(session.Speed));
+        }
     }
 
     public void DecreaseSpeed()
     {
-        ChangeSpeed(-0.1);
+        var session = mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            ApplySpeed(PlaybackSpeedPresets.Previous(session.Speed));
+        }
+    }
+
+    public void SetSpeed(double speed)
+    {
+        ApplySpeed(speed);
+    }
+
+    public void ResetSpeed()
+    {
+        ApplySpeed(1.0);
     }
 
     public void SetMasterVolume(double volume)
@@ -84,9 +103,15 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         }
     }
 
-    private void ChangeSpeed(double delta)
+    private void ApplySpeed(double speed)
     {
         var session = mediaSessionRegistry.Current;
-        session?.SetSpeed(session.Speed + delta);
+        if (session == null)
+        {
+            return;
+        }
+
+        session.SetSpeed(speed);
+        _context?.SetSpeedDisplay(session.Speed);
     }
 }

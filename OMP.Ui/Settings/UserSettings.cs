@@ -10,6 +10,8 @@ public sealed class UserSettings
 
     public bool IsMuted { get; set; }
 
+    public double PlaybackSpeed { get; set; } = 1.0;
+
     public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
 
     public List<string> PreferredAudioOutputs { get; set; } = [];

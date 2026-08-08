@@ -12,5 +12,7 @@ public sealed class MainWindowCommandContext
 
     public required Action<bool> SetIsMuted { get; init; }
 
+    public required Action<double> SetSpeedDisplay { get; init; }
+
     public required Action ToggleFullscreen { get; init; }
 }

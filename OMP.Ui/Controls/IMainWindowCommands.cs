@@ -14,6 +14,10 @@ public interface IMainWindowCommands
 
     public void DecreaseSpeed();
 
+    public void SetSpeed(double speed);
+
+    public void ResetSpeed();
+
     public void SetMasterVolume(double volume);
 
     public void ToggleMute();
