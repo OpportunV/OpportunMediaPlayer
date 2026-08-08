@@ -1,8 +1,10 @@
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
+using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Extensions;
+using OMP.Lib.Interop;
 using OMP.Lib.Threading;
 using OMP.Lib.Video;
 using Stopwatch = System.Diagnostics.Stopwatch;
@@ -42,6 +44,13 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public double VideoDecodeFps { get; private set; }
 
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger _logger;
+
+    private string? _lastLoopErrorMessage;
+    private readonly Stopwatch _loopErrorStopwatch = Stopwatch.StartNew();
+    private int _suppressedLoopErrors;
+
     private readonly Channel<PacketRef> _audioChannel;
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<(AudioStream audioStream, AudioOutput audioOutput)> _audioRoutes = [];
@@ -77,9 +86,13 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
     private const double SeekFrameSkipEpsilonSeconds = 0.01;
     private const double SeekLookbackSeconds = 1;
+    private const double LoopErrorLogIntervalMs = 5000;
 
-    public MediaSession(string filePath, PlaybackTuningOptions options)
+    public MediaSession(string filePath, PlaybackTuningOptions options, ILoggerFactory loggerFactory)
     {
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<MediaSession>();
+
         _audioChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.AudioChannelCapacity)
             {
@@ -95,16 +108,25 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioBufferDurationSeconds = options.BufferDurationSeconds;
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
+        int openResult;
         fixed (AVFormatContext** fc = &_formatContext)
         {
-            if (ffmpeg.avformat_open_input(fc, filePath, null, null) != 0)
-            {
-                throw new ApplicationException("Could not open file.");
-            }
+            openResult = ffmpeg.avformat_open_input(fc, filePath, null, null);
         }
 
-        if (ffmpeg.avformat_find_stream_info(_formatContext, null) < 0)
+        if (openResult != 0)
         {
+            _logger.LogError("Could not open {FilePath}: {Error}.", filePath, FFmpegError.Describe(openResult));
+            throw new ApplicationException("Could not open file.");
+        }
+
+        var streamInfoResult = ffmpeg.avformat_find_stream_info(_formatContext, null);
+        if (streamInfoResult < 0)
+        {
+            _logger.LogError(
+                "Could not read stream info for {FilePath}: {Error}.",
+                filePath,
+                FFmpegError.Describe(streamInfoResult));
             throw new ApplicationException("Could not find stream info.");
         }
 
@@ -115,13 +137,13 @@ internal sealed unsafe class MediaSession : IMediaSession
             var stream = _formatContext->streams[i];
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO)
             {
-                _videoPipeline = new VideoPipeline(_formatContext, i, _cancellationTokenSource.Token);
+                _videoPipeline = new VideoPipeline(_formatContext, i, _cancellationTokenSource.Token, loggerFactory);
                 break;
             }
         }
 
-        AudioStreams = new AudioScanner().GetAudioStreams(_formatContext);
-        AudioOutputs = new OutputScanner().ScanOutputs();
+        AudioStreams = new AudioScanner(loggerFactory).GetAudioStreams(_formatContext);
+        AudioOutputs = new OutputScanner(loggerFactory).ScanOutputs();
 
         _demuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, _cancellationTokenSource.Token);
         _audioWorker = new PipelineWorker(PipelineWorkerRole.Audio, _cancellationTokenSource.Token);
@@ -138,7 +160,26 @@ internal sealed unsafe class MediaSession : IMediaSession
         _videoWorker.Start(VideoLoop);
         _videoRenderWorker.Start(VideoRenderLoop);
 
-        SetAudioRoutes([(AudioStreams[0], AudioOutputs[0])]);
+        _logger.LogInformation(
+            "Opened {FileName}: duration {Duration:c}, {AudioStreamCount} audio stream(s), " +
+            "{OutputCount} output(s), video={HasVideo}.",
+            FileName,
+            Duration,
+            AudioStreams.Count,
+            AudioOutputs.Count,
+            _videoPipeline is not null);
+
+        if (AudioStreams.Count > 0 && AudioOutputs.Count > 0)
+        {
+            SetAudioRoutes([(AudioStreams[0], AudioOutputs[0])]);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "No default audio route: {AudioStreamCount} audio stream(s), {OutputCount} output(s).",
+                AudioStreams.Count,
+                AudioOutputs.Count);
+        }
     }
 
     public void SetAudioRoutes(IEnumerable<(AudioStream stream, AudioOutput output)> routes)
@@ -160,9 +201,18 @@ internal sealed unsafe class MediaSession : IMediaSession
                         stream.Id,
                         output.Id,
                         _cancellationTokenSource.Token,
-                        _audioBufferDurationSeconds));
+                        _audioBufferDurationSeconds,
+                        _loggerFactory));
             }
+
+            _logger.LogDebug(
+                "Audio route: '{Title}' [{Language}] -> '{FriendlyName}'.",
+                stream.Title,
+                stream.Language,
+                output.FriendlyName);
         }
+
+        _logger.LogInformation("Set {RouteCount} audio route(s).", _audioRoutes.Count);
 
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
 
@@ -234,14 +284,18 @@ internal sealed unsafe class MediaSession : IMediaSession
                 : Math.Max(0, targetSeconds - SeekLookbackSeconds);
 
             bool seeked;
+            int seekResult;
             lock (_formatSync)
             {
-                seeked = TrySeekToVideoTarget(seekTargetSeconds);
+                seeked = TrySeekToVideoTarget(seekTargetSeconds, out seekResult);
             }
 
             if (!seeked)
             {
-                Console.WriteLine("Error during seek.");
+                _logger.LogWarning(
+                    "Seek to {TargetSeconds:F3}s failed: {Error}.",
+                    targetSeconds,
+                    FFmpegError.Describe(seekResult));
             }
             else
             {
@@ -274,6 +328,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void Dispose()
     {
+        _logger.LogDebug("Disposing session for {FileName}.", FileName);
+
         _cancellationTokenSource.Cancel(false);
         _cancellationTokenSource.Dispose();
 
@@ -348,6 +404,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
 
         ffmpeg.av_packet_free(&packet);
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
     private void AudioLoop(PipelineWorker worker)
@@ -379,6 +436,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             ffmpeg.av_packet_free(&packet);
         }
+
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
     private void VideoLoop(PipelineWorker worker)
@@ -404,6 +463,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             ffmpeg.av_packet_free(&packet);
         }
+
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
     private void VideoRenderLoop(PipelineWorker worker)
@@ -508,10 +569,38 @@ internal sealed unsafe class MediaSession : IMediaSession
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"VideoRenderLoop error: {ex.Message}");
+                LogLoopError(ex);
                 Thread.Sleep(RenderErrorBackoffSleepMs);
             }
         }
+
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
+    }
+
+    private void LogLoopError(Exception ex)
+    {
+        if (ex.Message != _lastLoopErrorMessage)
+        {
+            _lastLoopErrorMessage = ex.Message;
+            _suppressedLoopErrors = 0;
+            _loopErrorStopwatch.Restart();
+            _logger.LogError(ex, "Presentation loop iteration failed.");
+            return;
+        }
+
+        _suppressedLoopErrors++;
+
+        if (_loopErrorStopwatch.ElapsedMilliseconds < LoopErrorLogIntervalMs)
+        {
+            return;
+        }
+
+        _logger.LogError(
+            ex,
+            "Presentation loop iteration failed ({SuppressedCount} identical failure(s) suppressed).",
+            _suppressedLoopErrors);
+        _suppressedLoopErrors = 0;
+        _loopErrorStopwatch.Restart();
     }
 
     private void ClearAudioPipelines()
@@ -530,9 +619,8 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
-    private bool TrySeekToVideoTarget(double targetSeconds)
+    private bool TrySeekToVideoTarget(double targetSeconds, out int result)
     {
-        int result;
         if (_videoPipeline is null)
         {
             var targetPts = (long)Math.Round(targetSeconds * ffmpeg.AV_TIME_BASE);
