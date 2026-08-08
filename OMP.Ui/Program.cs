@@ -40,6 +40,7 @@ internal static class Program
 
                     services.AddTransient<MainWindow>();
                     services.AddTransient<OptionsWindow>();
+                    services.AddTransient<SubtitleZoneEditorWindow>();
                 })
                 .Build();
 

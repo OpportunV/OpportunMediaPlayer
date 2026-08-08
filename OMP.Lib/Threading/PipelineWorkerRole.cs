@@ -5,5 +5,6 @@ internal enum PipelineWorkerRole
     Demux,
     Audio,
     Video,
-    VideoRender
+    VideoRender,
+    Subtitle
 }

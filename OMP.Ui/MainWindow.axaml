@@ -25,6 +25,9 @@
 
                 <Image Name="VideoView"
                        Stretch="Uniform" />
+
+                <Canvas Name="SubtitleOverlay"
+                        IsHitTestVisible="False" />
             </Grid>
 
             <Border Name="OverlayControls"
@@ -50,7 +53,8 @@
 
                         <Button Name="StepBackButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="M7,12 L17,5 V19 Z"
@@ -63,7 +67,8 @@
 
                         <Button Name="PlayPauseButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Grid Width="18" Height="18">
                                 <Viewbox Name="PlayIcon"
                                          Width="18"
@@ -90,7 +95,8 @@
 
                         <Button Name="StepForwardButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="M17,12 L7,5 V19 Z"
@@ -111,7 +117,8 @@
                             Name="ProgressSlider"
                             Minimum="0"
                             Maximum="1"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center"
+                            Focusable="False" />
 
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"
@@ -125,7 +132,8 @@
 
                         <Button Name="MuteButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Grid Width="18" Height="18">
                                 <Viewbox Name="SpeakerIcon"
                                          Width="18"
@@ -172,7 +180,8 @@
                                     Width="120"
                                     Minimum="0"
                                     Maximum="200"
-                                    Value="100" />
+                                    Value="100"
+                                    Focusable="False" />
 
                             <TextBlock Name="VolumeLabel"
                                        Text="100%"
@@ -185,6 +194,7 @@
                                 MinWidth="48"
                                 Height="36"
                                 Padding="8,0"
+                                Focusable="False"
                                 ToolTip.Tip="Playback speed">
                             <TextBlock Name="SpeedLabel"
                                        Text="1x"
@@ -194,9 +204,29 @@
                                        VerticalAlignment="Center" />
                         </Button>
 
+                        <ToggleButton Name="SubtitlesButton"
+                                      Width="36"
+                                      Height="36"
+                                      Focusable="False"
+                                      ToolTip.Tip="Toggle subtitles">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M3,5 H21 V17 H3 Z"
+                                          Stroke="White"
+                                          StrokeThickness="2"
+                                          Fill="Transparent" />
+                                    <Path Data="M6,10 H11 M6,13 H9 M13,10 H18 M13,13 H16"
+                                          Stroke="White"
+                                          StrokeThickness="1.5"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </ToggleButton>
+
                         <Button Name="OptionsButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="M12,8.5 A3.5,3.5 0 1 1 12,15.5 A3.5,3.5 0 1 1 12,8.5"
@@ -209,7 +239,8 @@
 
                         <Button Name="FullscreenButton"
                                 Width="36"
-                                Height="36">
+                                Height="36"
+                                Focusable="False">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="M4,10 V4 H10"

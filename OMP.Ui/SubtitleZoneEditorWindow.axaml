@@ -1,0 +1,159 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OMP.Ui.SubtitleZoneEditorWindow"
+        Width="920"
+        SizeToContent="Height"
+        Title="Edit Subtitle Zone">
+
+    <Grid ColumnDefinitions="Auto,340"
+          Margin="20"
+          ColumnSpacing="24">
+
+        <StackPanel Grid.Column="0"
+                    Spacing="10">
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Screen:"
+                           Width="50"
+                           VerticalAlignment="Center" />
+                <ComboBox Name="ScreenAspectRatioSelector"
+                          Width="100" />
+                <TextBlock Text="Video:"
+                           Width="40"
+                           VerticalAlignment="Center" />
+                <ComboBox Name="VideoAspectRatioSelector"
+                          Width="100" />
+            </StackPanel>
+
+            <Border Name="ScreenBorder"
+                    BorderBrush="#808080"
+                    BorderThickness="1">
+                <Canvas Name="PreviewCanvas"
+                        Width="480"
+                        Height="270"
+                        ClipToBounds="True">
+
+                    <Border Name="VideoAreaBorder">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%"
+                                                  EndPoint="0%,100%">
+                                <GradientStop Color="#2A2A2A"
+                                              Offset="0" />
+                                <GradientStop Color="#141414"
+                                              Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <Border Name="ZoneBorder"
+                            Background="#4000AEEF"
+                            BorderBrush="#AA00AEEF"
+                            BorderThickness="1"
+                            Cursor="SizeAll">
+                        <TextBlock Name="SampleText"
+                                   TextWrapping="Wrap" />
+                    </Border>
+
+                    <Border Name="ResizeHandle"
+                            Width="12"
+                            Height="12"
+                            Background="White"
+                            BorderBrush="#AA00AEEF"
+                            BorderThickness="1"
+                            Cursor="BottomRightCorner" />
+                </Canvas>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1"
+                    Spacing="10">
+
+            <TextBox Name="NameTextBox"
+                     Watermark="Zone name" />
+            <TextBlock Text="Just for you to tell zones apart - not shown on screen."
+                       Opacity="0.7"
+                       FontSize="11"
+                       Margin="0,-6,0,0" />
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Font:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <ComboBox Name="FontFamilySelector"
+                          Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Size:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <Slider Name="FontSizeSlider"
+                        Minimum="2"
+                        Maximum="12"
+                        Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Text color:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <ColorPicker Name="FontColorPicker"
+                             IsAlphaEnabled="False"
+                             Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Bg color:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <ColorPicker Name="BackgroundColorPicker"
+                             IsAlphaEnabled="False"
+                             Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Bg opacity:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <Slider Name="BackgroundOpacitySlider"
+                        Minimum="0"
+                        Maximum="100"
+                        Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Align H:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <ComboBox Name="HorizontalAlignSelector"
+                          Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10">
+                <TextBlock Text="Align V:"
+                           Width="70"
+                           VerticalAlignment="Center" />
+                <ComboBox Name="VerticalAlignSelector"
+                          Width="200" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10"
+                        HorizontalAlignment="Right"
+                        Margin="0,20,0,0">
+                <Button Name="CancelButton"
+                        Content="Cancel" />
+                <Button Name="SaveButton"
+                        Content="Save" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -35,6 +35,10 @@ internal sealed class MainWindowHotkeyService : IMainWindowHotkeyService
                 commands.ToggleFullscreen();
                 return true;
 
+            case Key.C:
+                commands.ToggleSubtitles();
+                return true;
+
             case Key.Escape:
                 commands.ExitFullscreen();
                 return true;

@@ -1,119 +1,266 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:OMP.Ui.Models"
+        xmlns:settings="clr-namespace:OMP.Ui.Settings"
         xmlns:output="clr-namespace:OMP.Lib.Audio.Output;assembly=OMP.Lib"
         x:Class="OMP.Ui.OptionsWindow"
         Width="700"
         SizeToContent="Height"
-        Title="Audio Routing Options">
+        Title="Options">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto"
-          Margin="20">
+    <TabControl>
 
-        <TextBlock Grid.Row="0"
-                   Text="Audio Routing"
-                   FontSize="18"
-                   FontWeight="Bold"
-                   Margin="0,0,0,10"/>
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="Audio Routing"
+                           FontSize="13" />
+            </TabItem.Header>
 
-        <ItemsControl Grid.Row="1"
-                      Name="RoutesList">
+            <Grid RowDefinitions="Auto,*"
+                  Margin="20">
 
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="models:AudioRouteRow">
+                <ItemsControl Grid.Row="0"
+                              Name="RoutesList">
 
-                    <Grid ColumnDefinitions="*,*,Auto,Auto,Auto,Auto"
-                          Margin="0,4">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:AudioRouteRow">
 
-                        <TextBlock Grid.Column="0"
-                                   Text="{Binding StreamLabel}"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
+                            <Grid ColumnDefinitions="*,*,Auto,Auto,Auto,Auto"
+                                  Margin="0,4">
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding OutputLabel}"
-                                   Margin="10,0"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding StreamLabel}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
 
-                        <ToggleButton Grid.Column="2"
-                                      Name="RouteMuteButton"
-                                      IsChecked="{Binding Muted, Mode=TwoWay}"
-                                      IsCheckedChanged="OnRouteMuteChanged"
-                                      Content="🔇"
-                                      Width="32"
-                                      Height="28"
-                                      Margin="0,0,6,0"
-                                      ToolTip.Tip="Mute this output"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding OutputLabel}"
+                                           Margin="10,0"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
 
-                        <Slider Grid.Column="3"
-                                Name="RouteVolumeSlider"
-                                Value="{Binding Volume, Mode=TwoWay}"
-                                ValueChanged="OnRouteVolumeChanged"
-                                PointerCaptureLost="OnRouteVolumeReleased"
-                                Minimum="0"
-                                Maximum="200"
-                                Width="130"
-                                VerticalAlignment="Center"/>
+                                <ToggleButton Grid.Column="2"
+                                              Name="RouteMuteButton"
+                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                              IsCheckedChanged="OnRouteMuteChanged"
+                                              Content="🔇"
+                                              Width="32"
+                                              Height="28"
+                                              Margin="0,0,6,0"
+                                              ToolTip.Tip="Mute this output" />
 
-                        <TextBlock Grid.Column="4"
-                                   Text="{Binding Volume, StringFormat={}{0:0}%}"
-                                   Width="42"
-                                   Margin="6,0,0,0"
-                                   FontFamily="Consolas"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                                <Slider Grid.Column="3"
+                                        Name="RouteVolumeSlider"
+                                        Value="{Binding Volume, Mode=TwoWay}"
+                                        ValueChanged="OnRouteVolumeChanged"
+                                        PointerCaptureLost="OnRouteVolumeReleased"
+                                        Minimum="0"
+                                        Maximum="200"
+                                        Width="130"
+                                        VerticalAlignment="Center" />
 
-                        <Button Grid.Column="5"
-                                Name="DeleteRouteButton"
-                                Click="OnDeleteRoute"
-                                IsEnabled="{Binding CanDelete}"
-                                Content="✕"
-                                Width="28"
-                                Height="28"
-                                Margin="6,0,0,0"/>
-                    </Grid>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
+                                <TextBlock Grid.Column="4"
+                                           Text="{Binding Volume, StringFormat={}{0:0}%}"
+                                           Width="42"
+                                           Margin="6,0,0,0"
+                                           FontFamily="Consolas"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
 
-        </ItemsControl>
+                                <Button Grid.Column="5"
+                                        Name="DeleteRouteButton"
+                                        Click="OnDeleteRoute"
+                                        IsEnabled="{Binding CanDelete}"
+                                        Content="✕"
+                                        Width="28"
+                                        Height="28"
+                                        Margin="6,0,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
 
-        <!-- Add New Route -->
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    Spacing="10"
-                    Margin="0,15,0,0">
+                </ItemsControl>
 
-            <ComboBox Name="StreamSelector"
-                      Width="280">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:AudioStreamOption">
-                        <TextBlock Text="{Binding Label}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            Margin="0,15,0,0">
 
-            <ComboBox Name="OutputSelector"
-                      Width="260">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="output:AudioOutput">
-                        <TextBlock Text="{Binding FriendlyName}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                    <ComboBox Name="StreamSelector"
+                              Width="280">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:AudioStreamOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 
-            <Button Name="AddRouteButton"
-                    Content="+"
-                    Width="32"/>
-        </StackPanel>
+                    <ComboBox Name="OutputSelector"
+                              Width="260">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="output:AudioOutput">
+                                <TextBlock Text="{Binding FriendlyName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 
-        <!-- Save -->
-        <Button Grid.Row="3"
-                Name="SaveButton"
-                Content="Save"
-                HorizontalAlignment="Right"
-                Margin="0,20,0,0"
-                Width="100"/>
+                    <Button Name="AddRouteButton"
+                            Content="+"
+                            Width="32" />
+                </StackPanel>
 
-    </Grid>
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="Subtitles"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,*,Auto"
+                  Margin="20">
+
+                <TextBlock Grid.Row="0"
+                           Text="Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed."
+                           TextWrapping="Wrap"
+                           Opacity="0.7"
+                           Margin="0,0,0,10" />
+
+                <ItemsControl Grid.Row="1"
+                              Name="SubtitleRoutesList">
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SubtitleRouteRow">
+
+                            <Grid ColumnDefinitions="*,*,Auto"
+                                  Margin="0,4">
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding StreamLabel}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding ZoneLabel}"
+                                           Margin="10,0"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <Button Grid.Column="2"
+                                        Name="DeleteSubtitleRouteButton"
+                                        Click="OnDeleteSubtitleRoute"
+                                        Content="✕"
+                                        Width="28"
+                                        Height="28" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <StackPanel Grid.Row="2"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            Margin="0,15,0,0">
+
+                    <ComboBox Name="SubtitleStreamSelector"
+                              Width="260">
+                        <ComboBox.Styles>
+                            <Style Selector="ComboBoxItem"
+                                   x:DataType="models:SubtitleStreamOption">
+                                <Setter Property="IsEnabled"
+                                        Value="{Binding IsSupported}" />
+                            </Style>
+                        </ComboBox.Styles>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:SubtitleStreamOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Name="SubtitleZoneSelector"
+                              Width="200">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="settings:SubtitleZone">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Name="AddSubtitleRouteButton"
+                            Content="+"
+                            Width="32" />
+                </StackPanel>
+
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="Subtitle Zones"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,*,Auto"
+                  Margin="20">
+
+                <TextBlock Grid.Row="0"
+                           Text="Zones define where subtitles are shown on screen. Top and Bottom are built in and can't be removed."
+                           TextWrapping="Wrap"
+                           Opacity="0.7"
+                           Margin="0,0,0,10" />
+
+                <ItemsControl Grid.Row="1"
+                              Name="ZonesList">
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="settings:SubtitleZone">
+
+                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                  Margin="0,4">
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Name}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <Button Grid.Column="1"
+                                        Name="EditZoneButton"
+                                        Click="OnEditZone"
+                                        Content="Edit"
+                                        Margin="0,0,6,0" />
+
+                                <Button Grid.Column="2"
+                                        Name="ResetZoneButton"
+                                        Click="OnResetZone"
+                                        IsVisible="{Binding IsBuiltIn}"
+                                        Content="Reset"
+                                        ToolTip.Tip="Restore this zone's default position, size and style" />
+
+                                <Button Grid.Column="2"
+                                        Name="DeleteZoneButton"
+                                        Click="OnDeleteZone"
+                                        IsVisible="{Binding IsDeletable}"
+                                        Content="✕"
+                                        Width="28"
+                                        Height="28"
+                                        HorizontalAlignment="Right" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <Button Grid.Row="2"
+                        Name="AddZoneButton"
+                        Content="+ New Zone"
+                        HorizontalAlignment="Left"
+                        Margin="0,15,0,0" />
+
+            </Grid>
+        </TabItem>
+
+    </TabControl>
 </Window>
