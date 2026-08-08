@@ -5,6 +5,7 @@ using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Extensions;
 using OMP.Lib.Interop;
+using OMP.Lib.Subtitle;
 using OMP.Lib.Threading;
 using OMP.Lib.Video;
 using Stopwatch = System.Diagnostics.Stopwatch;
@@ -22,6 +23,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _outputVolumes.AsReadOnly();
 
     public IReadOnlyList<AudioStream> AudioStreams { get; }
+
+    public IReadOnlyList<SubtitleStream> SubtitleStreams { get; }
+
+    public IReadOnlyList<SubtitleRoute> SubtitleRoutes => _subtitleRoutes.AsReadOnly();
 
     public TimeSpan CurrentTime => TimeSpan.FromSeconds(_clock.CurrentSeconds);
 
@@ -61,6 +66,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<AudioRoute> _audioRoutes = [];
 
+    private readonly Channel<PacketRef> _subtitleChannel;
+    private readonly List<SubtitlePipeline> _subtitlePipelines = [];
+    private readonly List<SubtitleRoute> _subtitleRoutes = [];
+
     private readonly Dictionary<int, OutputVolumeState> _outputVolumes = [];
     private readonly int _audioBufferDurationSeconds;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -70,6 +79,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly PipelineWorker _audioWorker;
     private readonly PipelineWorker _videoWorker;
     private readonly PipelineWorker _videoRenderWorker;
+    private readonly PipelineWorker _subtitleWorker;
     private readonly Lock _formatSync = new();
     private readonly Lock _seekSync = new();
 
@@ -113,6 +123,12 @@ internal sealed unsafe class MediaSession : IMediaSession
                 FullMode = BoundedChannelFullMode.Wait
             });
 
+        _subtitleChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(options.SubtitleChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest
+            });
+
         _audioBufferDurationSeconds = options.BufferDurationSeconds;
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
@@ -152,28 +168,33 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         AudioStreams = new AudioScanner(loggerFactory).GetAudioStreams(_formatContext);
         AudioOutputs = new OutputScanner(loggerFactory).ScanOutputs();
+        SubtitleStreams = new SubtitleScanner(loggerFactory).GetSubtitleStreams(_formatContext);
 
         _demuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, _cancellationTokenSource.Token);
         _audioWorker = new PipelineWorker(PipelineWorkerRole.Audio, _cancellationTokenSource.Token);
         _videoWorker = new PipelineWorker(PipelineWorkerRole.Video, _cancellationTokenSource.Token);
         _videoRenderWorker = new PipelineWorker(PipelineWorkerRole.VideoRender, _cancellationTokenSource.Token);
+        _subtitleWorker = new PipelineWorker(PipelineWorkerRole.Subtitle, _cancellationTokenSource.Token);
 
         _demuxWorker.Pause();
         _audioWorker.Pause();
         _videoWorker.Pause();
         _videoRenderWorker.Pause();
+        _subtitleWorker.Pause();
 
         _demuxWorker.Start(DemuxLoop);
         _audioWorker.Start(AudioLoop);
         _videoWorker.Start(VideoLoop);
         _videoRenderWorker.Start(VideoRenderLoop);
+        _subtitleWorker.Start(SubtitleLoop);
 
         _logger.LogInformation(
             "Opened {FileName}: duration {Duration:c}, {AudioStreamCount} audio stream(s), " +
-            "{OutputCount} output(s), video={HasVideo}.",
+            "{SubtitleStreamCount} subtitle stream(s), {OutputCount} output(s), video={HasVideo}.",
             FileName,
             Duration,
             AudioStreams.Count,
+            SubtitleStreams.Count,
             AudioOutputs.Count,
             _videoPipeline is not null);
 
@@ -231,6 +252,74 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
+    public void SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes)
+    {
+        var wasPlaying = _isPlaying;
+        Pause();
+
+        var newRoutes = routes.ToList();
+
+        var pipelinesToKeep = _subtitlePipelines
+            .Where(p => newRoutes.Any(r => r.Stream.Id == p.StreamIndex && r.ZoneId == p.ZoneId))
+            .ToList();
+
+        _subtitlePipelines.Except(pipelinesToKeep).ToList().ForEach(p => p.Dispose());
+        _subtitlePipelines.Clear();
+        _subtitlePipelines.AddRange(pipelinesToKeep);
+
+        _subtitleRoutes.Clear();
+        _subtitleRoutes.AddRange(newRoutes);
+
+        foreach (var route in _subtitleRoutes)
+        {
+            if (_subtitlePipelines.Any(p => p.StreamIndex == route.Stream.Id && p.ZoneId == route.ZoneId))
+            {
+                continue;
+            }
+
+            lock (_formatSync)
+            {
+                _subtitlePipelines.Add(
+                    new SubtitlePipeline(
+                        _formatContext,
+                        route.Stream.Id,
+                        route.ZoneId,
+                        _loggerFactory));
+            }
+
+            _logger.LogDebug(
+                "Subtitle route: '{Title}' [{Language}] -> zone '{ZoneId}'.",
+                route.Stream.Title,
+                route.Stream.Language,
+                route.ZoneId);
+        }
+
+        _logger.LogInformation("Set {RouteCount} subtitle route(s).", _subtitleRoutes.Count);
+
+        if (wasPlaying)
+        {
+            Play();
+        }
+    }
+
+    public IReadOnlyList<SubtitleCue> GetActiveSubtitleCues()
+    {
+        if (_subtitlePipelines.Count == 0)
+        {
+            return [];
+        }
+
+        var currentSeconds = _clock.CurrentSeconds;
+        var cues = new List<SubtitleCue>();
+
+        foreach (var pipeline in _subtitlePipelines)
+        {
+            cues.AddRange(pipeline.GetActiveCues(currentSeconds));
+        }
+
+        return cues;
+    }
+
     public void SetMasterVolume(double volume)
     {
         MasterVolume = Math.Clamp(volume, AudioVolumeLimits.Min, AudioVolumeLimits.Max);
@@ -276,6 +365,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioWorker.Resume();
         _videoWorker.Resume();
         _videoRenderWorker.Resume();
+        _subtitleWorker.Resume();
 
         _audioPipelines.ForEach(p => p.Play());
     }
@@ -289,6 +379,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioWorker.Pause();
         _videoWorker.Pause();
         _videoRenderWorker.Pause();
+        _subtitleWorker.Pause();
 
         _audioPipelines.ForEach(p => p.Pause());
     }
@@ -315,6 +406,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             Pause();
             DrainPacketChannel(_audioChannel);
             DrainPacketChannel(_videoChannel);
+            DrainPacketChannel(_subtitleChannel);
             var seekTargetSeconds = _videoPipeline is null
                 ? targetSeconds
                 : Math.Max(0, targetSeconds - SeekLookbackSeconds);
@@ -345,6 +437,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                     pipeline.ResetClock(targetSeconds);
                 });
                 _videoPipeline?.Flush();
+                _subtitlePipelines.ForEach(p => p.Flush());
             }
 
             if (wasPlaying)
@@ -374,14 +467,17 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioWorker.Join();
         _videoWorker.Join();
         _videoRenderWorker.Join();
+        _subtitleWorker.Join();
 
         _demuxWorker.Dispose();
         _audioWorker.Dispose();
         _videoWorker.Dispose();
         _videoRenderWorker.Dispose();
+        _subtitleWorker.Dispose();
 
         VideoFrameReady = null;
         ClearAudioPipelines();
+        ClearSubtitlePipelines();
         _videoPipeline?.Dispose();
 
         fixed (AVFormatContext** fc = &_formatContext)
@@ -432,6 +528,17 @@ internal sealed unsafe class MediaSession : IMediaSession
                 ffmpeg.av_packet_ref(cloned, packet);
                 var packetRef = new PacketRef(cloned, generation);
                 if (!_videoChannel.Writer.TryWriteBlocking(packetRef, _cancellationTokenSource.Token))
+                {
+                    ffmpeg.av_packet_free(&cloned);
+                }
+            }
+
+            if (_subtitlePipelines.Any(pipeline => pipeline.StreamIndex == streamIndex))
+            {
+                var cloned = ffmpeg.av_packet_alloc();
+                ffmpeg.av_packet_ref(cloned, packet);
+                var packetRef = new PacketRef(cloned, generation);
+                if (!_subtitleChannel.Writer.TryWrite(packetRef))
                 {
                     ffmpeg.av_packet_free(&cloned);
                 }
@@ -496,6 +603,39 @@ internal sealed unsafe class MediaSession : IMediaSession
             if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
             {
                 _videoPipeline?.Enqueue(packet);
+            }
+
+            ffmpeg.av_packet_free(&packet);
+        }
+
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
+    }
+
+    private void SubtitleLoop(PipelineWorker worker)
+    {
+        while (!_cancellationTokenSource.IsCancellationRequested)
+        {
+            if (!worker.TryWaitIfPaused())
+            {
+                break;
+            }
+
+            if (!_subtitleChannel.Reader.TryReadBlocking(out var packetRef, _cancellationTokenSource.Token))
+            {
+                break;
+            }
+
+            var packet = packetRef.Packet;
+
+            if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
+            {
+                foreach (var pipeline in _subtitlePipelines)
+                {
+                    if (pipeline.StreamIndex == packet->stream_index)
+                    {
+                        pipeline.Enqueue(packet);
+                    }
+                }
             }
 
             ffmpeg.av_packet_free(&packet);
@@ -695,6 +835,13 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioPipelines.ForEach(p => p.Dispose());
         _audioPipelines.Clear();
         _audioRoutes.Clear();
+    }
+
+    private void ClearSubtitlePipelines()
+    {
+        _subtitlePipelines.ForEach(p => p.Dispose());
+        _subtitlePipelines.Clear();
+        _subtitleRoutes.Clear();
     }
 
     private static void DrainPacketChannel(Channel<PacketRef> channel)

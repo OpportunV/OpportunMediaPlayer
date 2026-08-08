@@ -1,5 +1,6 @@
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
+using OMP.Lib.Subtitle;
 using OMP.Lib.Video;
 
 namespace OMP.Lib.Session;
@@ -13,6 +14,10 @@ public interface IMediaSession : IDisposable
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
     public IReadOnlyList<AudioRoute> AudioRoutes { get; }
+
+    public IReadOnlyList<SubtitleStream> SubtitleStreams { get; }
+
+    public IReadOnlyList<SubtitleRoute> SubtitleRoutes { get; }
 
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes { get; }
 
@@ -33,6 +38,10 @@ public interface IMediaSession : IDisposable
     public double VideoDecodeFps { get; }
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes);
+
+    public void SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes);
+
+    public IReadOnlyList<SubtitleCue> GetActiveSubtitleCues();
 
     public void Play();
 

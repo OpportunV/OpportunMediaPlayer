@@ -16,5 +16,7 @@ public sealed class UserSettings
 
     public List<string> PreferredAudioOutputs { get; set; } = [];
 
+    public List<SubtitleZone> SubtitleZones { get; set; } = SubtitleZone.CreateBuiltIns();
+
     public const int CurrentVersion = 1;
 }

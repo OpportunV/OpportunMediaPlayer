@@ -15,4 +15,6 @@ public sealed class MainWindowCommandContext
     public required Action<double> SetSpeedDisplay { get; init; }
 
     public required Action ToggleFullscreen { get; init; }
+
+    public required Action ToggleSubtitles { get; init; }
 }

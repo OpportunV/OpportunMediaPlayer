@@ -90,6 +90,11 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         _context?.SetIsMuted(session.IsMuted);
     }
 
+    public void ToggleSubtitles()
+    {
+        _context?.ToggleSubtitles();
+    }
+
     public void ToggleFullscreen()
     {
         _context?.ToggleFullscreen();

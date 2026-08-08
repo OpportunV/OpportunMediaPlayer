@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
     }
 
     private bool _isSeekingViaSlider;
+    private bool _areSubtitlesEnabled;
+    private int _lastKnownSubtitleRouteCount;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
@@ -49,6 +51,7 @@ public sealed partial class MainWindow : Window
     private readonly IUserSettingsService _settings;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
+    private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
 
     public MainWindow(
@@ -68,6 +71,7 @@ public sealed partial class MainWindow : Window
 
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
+        _subtitleOverlayRenderer = new SubtitleOverlayRenderer(SubtitleOverlay);
 
         _commands.Attach(new MainWindowCommandContext
         {
@@ -76,11 +80,13 @@ public sealed partial class MainWindow : Window
             SetIsPlaying = value => IsPlaying = value,
             SetIsMuted = value => IsMuted = value,
             SetSpeedDisplay = OnSpeedChanged,
-            ToggleFullscreen = () => _fullscreenController.Toggle()
+            ToggleFullscreen = () => _fullscreenController.Toggle(),
+            ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
         });
         SetupButtons();
         SetupVolume();
         SetupSpeed();
+        SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
@@ -117,7 +123,12 @@ public sealed partial class MainWindow : Window
         registry.Current?.VideoFrameReady -= Render;
         registry.Current?.VideoFrameReady += Render;
         _videoRenderSurface.Reset();
+        _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
+
+        _areSubtitlesEnabled = false;
+        _lastKnownSubtitleRouteCount = 0;
+        SubtitlesButton.IsChecked = false;
 
         if (registry.Current is null)
         {
@@ -154,6 +165,21 @@ public sealed partial class MainWindow : Window
         SetSpeedDisplayText(speed);
         _settings.Current.PlaybackSpeed = speed;
         _settings.Save();
+    }
+
+    private void SetupSubtitles()
+    {
+        SubtitlesButton.IsChecked = _areSubtitlesEnabled;
+
+        SubtitlesButton.IsCheckedChanged += (_, _) =>
+        {
+            _areSubtitlesEnabled = SubtitlesButton.IsChecked == true;
+
+            if (!_areSubtitlesEnabled)
+            {
+                _subtitleOverlayRenderer.Clear();
+            }
+        };
     }
 
     private void SetupVolume()
@@ -240,9 +266,30 @@ public sealed partial class MainWindow : Window
             }
 
             CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
+
+            var subtitleRouteCount = session.SubtitleRoutes.Count;
+            if (subtitleRouteCount > 0 && _lastKnownSubtitleRouteCount == 0)
+            {
+                _areSubtitlesEnabled = true;
+                SubtitlesButton.IsChecked = true;
+            }
+
+            _lastKnownSubtitleRouteCount = subtitleRouteCount;
+
+            if (_areSubtitlesEnabled)
+            {
+                UpdateSubtitleOverlay(session);
+            }
         };
 
         _uiTimer.Start();
+    }
+
+    private void UpdateSubtitleOverlay(IMediaSession session)
+    {
+        var cues = session.GetActiveSubtitleCues();
+        var videoContentRect = _videoRenderSurface.GetVideoContentRect(VideoSurface.Bounds.Size);
+        _subtitleOverlayRenderer.Render(cues, _settings.Current.SubtitleZones, videoContentRect);
     }
 
     private void Render(VideoFrame frame)

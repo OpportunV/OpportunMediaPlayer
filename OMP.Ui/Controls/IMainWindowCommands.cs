@@ -22,6 +22,8 @@ public interface IMainWindowCommands
 
     public void ToggleMute();
 
+    public void ToggleSubtitles();
+
     public void ToggleFullscreen();
 
     public void ExitFullscreen();
