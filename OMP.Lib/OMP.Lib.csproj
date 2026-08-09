@@ -24,6 +24,10 @@
             <Link>%(Filename)%(Extension)</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
+        <Content Condition="$([MSBuild]::IsOSPlatform('Linux'))" Include="Libs\linux-x64\**">
+            <Link>%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
 </Project>
