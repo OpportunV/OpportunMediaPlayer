@@ -18,8 +18,11 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid Margin="20">
-                <StackPanel Orientation="Horizontal"
+            <Grid RowDefinitions="Auto,Auto"
+                  Margin="20">
+
+                <StackPanel Grid.Row="0"
+                            Orientation="Horizontal"
                             Spacing="10"
                             VerticalAlignment="Top">
 
@@ -35,6 +38,33 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Top"
+                            Margin="0,15,0,0">
+
+                    <TextBlock Text="{x:Static loc:Strings.Options_LanguageLabel}"
+                               VerticalAlignment="Center" />
+
+                    <ComboBox Name="LanguageSelector"
+                              Width="200"
+                              SelectionChanged="OnLanguageChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:LanguageOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Name="RestartNowButton"
+                            Content="{x:Static loc:Strings.Options_LanguageRestartButton}"
+                            Click="OnRestartNowClick"
+                            VerticalAlignment="Center"
+                            IsVisible="False" />
 
                 </StackPanel>
             </Grid>

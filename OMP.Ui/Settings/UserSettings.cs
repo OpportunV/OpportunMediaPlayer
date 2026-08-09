@@ -14,6 +14,8 @@ public sealed class UserSettings
 
     public ThemeMode Theme { get; set; } = ThemeMode.System;
 
+    public string? Language { get; set; }
+
     public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
 
     public List<string> PreferredAudioOutputs { get; set; } = [];

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -13,6 +15,7 @@ using OMP.Lib.Session;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
+using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
 
@@ -74,6 +77,15 @@ public sealed partial class OptionsWindow : Window
             .Cast<ThemeModeOption>()
             .First(option => option.Mode == _settings.Current.Theme);
 
+        var languageOptions = new List<LanguageOption> { new(null, Strings.Common_SystemDefault) };
+        languageOptions.AddRange(AvailableLanguages.Cultures
+            .OrderBy(culture => culture.NativeName)
+            .Select(culture => new LanguageOption(culture.Name, culture.NativeName)));
+
+        LanguageSelector.ItemsSource = languageOptions;
+        LanguageSelector.SelectedItem = languageOptions
+            .FirstOrDefault(option => option.CultureCode == _settings.Current.Language) ?? languageOptions[0];
+
         RoutesList.ItemsSource = _audioRouteRows;
         StreamSelector.ItemsSource = _streamOptions;
         ZonesList.ItemsSource = _subtitleZones;
@@ -101,6 +113,42 @@ public sealed partial class OptionsWindow : Window
         if (Application.Current is not null)
         {
             Application.Current.RequestedThemeVariant = option.Mode.ToThemeVariant();
+        }
+    }
+
+    private void OnLanguageChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (LanguageSelector.SelectedItem is not LanguageOption option)
+        {
+            return;
+        }
+
+        if (option.CultureCode != _settings.Current.Language)
+        {
+            RestartNowButton.IsVisible = true;
+        }
+
+        _settings.Current.Language = option.CultureCode;
+        _settings.Save();
+    }
+
+    private void OnRestartNowClick(object? sender, RoutedEventArgs e)
+    {
+        if (Environment.ProcessPath is { } exePath)
+        {
+            var startInfo = new ProcessStartInfo(exePath);
+
+            if (_mediaSessionRegistry.Current?.FilePath is { } filePath)
+            {
+                startInfo.ArgumentList.Add(filePath);
+            }
+
+            Process.Start(startInfo);
+        }
+
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+        {
+            lifetime.Shutdown();
         }
     }
 

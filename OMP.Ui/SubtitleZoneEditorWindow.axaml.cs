@@ -6,7 +6,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
+using OMP.Ui.Extensions;
 using OMP.Ui.Localization;
+using OMP.Ui.Models;
 using OMP.Ui.Settings;
 
 namespace OMP.Ui;
@@ -61,11 +63,11 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         HorizontalAlignSelector.ItemsSource = new[]
         {
             HorizontalAlignment.Left, HorizontalAlignment.Center, HorizontalAlignment.Right
-        };
+        }.Select(value => new HorizontalAlignmentOption(value, value.ToDisplayLabel())).ToList();
         VerticalAlignSelector.ItemsSource = new[]
         {
             VerticalAlignment.Top, VerticalAlignment.Center, VerticalAlignment.Bottom
-        };
+        }.Select(value => new VerticalAlignmentOption(value, value.ToDisplayLabel())).ToList();
         FontFamilySelector.ItemsSource = FontManager.Current.SystemFonts
             .Select(f => f.Name)
             .Distinct()
@@ -102,12 +104,12 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         };
         HorizontalAlignSelector.SelectionChanged += (_, _) =>
         {
-            _zone.HorizontalAlignment = (HorizontalAlignment)HorizontalAlignSelector.SelectedItem!;
+            _zone.HorizontalAlignment = ((HorizontalAlignmentOption)HorizontalAlignSelector.SelectedItem!).Value;
             UpdateSampleTextStyle();
         };
         VerticalAlignSelector.SelectionChanged += (_, _) =>
         {
-            _zone.VerticalAlignment = (VerticalAlignment)VerticalAlignSelector.SelectedItem!;
+            _zone.VerticalAlignment = ((VerticalAlignmentOption)VerticalAlignSelector.SelectedItem!).Value;
             UpdateSampleTextStyle();
         };
 
@@ -129,8 +131,12 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         FontColorPicker.Color = Color.Parse(zone.FontColor);
         BackgroundColorPicker.Color = Color.Parse(zone.BackgroundColor);
         BackgroundOpacitySlider.Value = zone.BackgroundOpacity * 100;
-        HorizontalAlignSelector.SelectedItem = zone.HorizontalAlignment;
-        VerticalAlignSelector.SelectedItem = zone.VerticalAlignment;
+        HorizontalAlignSelector.SelectedItem = HorizontalAlignSelector.Items
+            .Cast<HorizontalAlignmentOption>()
+            .First(option => option.Value == zone.HorizontalAlignment);
+        VerticalAlignSelector.SelectedItem = VerticalAlignSelector.Items
+            .Cast<VerticalAlignmentOption>()
+            .First(option => option.Value == zone.VerticalAlignment);
 
         RebuildCanvas();
     }
