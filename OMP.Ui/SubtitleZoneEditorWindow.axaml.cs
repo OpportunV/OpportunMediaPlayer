@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
+using OMP.Ui.Localization;
 using OMP.Ui.Settings;
 
 namespace OMP.Ui;
@@ -43,13 +44,13 @@ public sealed partial class SubtitleZoneEditorWindow : Window
 
         SampleText.Inlines =
         [
-            new Run("Sample subtitle text"),
+            new Run(Strings.SubtitleZoneEditor_SamplePrefix),
             new LineBreak(),
-            new Run("with "),
-            new Run("bold") { FontWeight = FontWeight.Bold },
-            new Run(" and "),
-            new Run("italic") { FontStyle = FontStyle.Italic },
-            new Run(" styles")
+            new Run(Strings.SubtitleZoneEditor_SampleWith),
+            new Run(Strings.SubtitleZoneEditor_SampleBold) { FontWeight = FontWeight.Bold },
+            new Run(Strings.SubtitleZoneEditor_SampleAnd),
+            new Run(Strings.SubtitleZoneEditor_SampleItalic) { FontStyle = FontStyle.Italic },
+            new Run(Strings.SubtitleZoneEditor_SampleStyles)
         ];
 
         ScreenAspectRatioSelector.ItemsSource = _aspectRatios;
@@ -120,7 +121,7 @@ public sealed partial class SubtitleZoneEditorWindow : Window
     public void Load(SubtitleZone zone, bool isNew)
     {
         _zone = zone;
-        Title = isNew ? "New Subtitle Zone" : $"Edit Subtitle Zone - {zone.Name}";
+        Title = isNew ? Strings.SubtitleZoneEditor_NewTitle : string.Format(Strings.SubtitleZoneEditor_EditTitleFormat, zone.Name);
 
         NameTextBox.Text = zone.Name;
         FontFamilySelector.SelectedItem = zone.FontFamily;

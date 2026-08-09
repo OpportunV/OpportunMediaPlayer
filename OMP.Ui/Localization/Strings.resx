@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="MainWindow_FileMenu" xml:space="preserve"><value>_File</value></data>
+  <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>_Open...</value></data>
+  <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>_Options...</value></data>
+  <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>E_xit</value></data>
+  <data name="MainWindow_HelpMenu" xml:space="preserve"><value>_Help</value></data>
+  <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>_Keyboard Shortcuts...</value></data>
+  <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>_About...</value></data>
+  <data name="MainWindow_SpeedButtonTooltip" xml:space="preserve"><value>Playback speed</value></data>
+  <data name="MainWindow_SubtitlesButtonTooltip" xml:space="preserve"><value>Toggle subtitles</value></data>
+  <data name="MainWindow_OpenFileDialogTitle" xml:space="preserve"><value>Open media file</value></data>
+
+  <data name="Options_Title" xml:space="preserve"><value>Options</value></data>
+  <data name="Options_GeneralTab" xml:space="preserve"><value>General</value></data>
+  <data name="Options_AudioRoutingTab" xml:space="preserve"><value>Audio Routing</value></data>
+  <data name="Options_SubtitlesTab" xml:space="preserve"><value>Subtitles</value></data>
+  <data name="Options_SubtitleZonesTab" xml:space="preserve"><value>Subtitle Zones</value></data>
+  <data name="Options_ThemeLabel" xml:space="preserve"><value>Theme:</value></data>
+  <data name="Options_MuteOutputTooltip" xml:space="preserve"><value>Mute this output</value></data>
+  <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed.</value></data>
+  <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. Top and Bottom are built in and can't be removed.</value></data>
+  <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
+  <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>
+  <data name="Options_ResetZoneTooltip" xml:space="preserve"><value>Restore this zone's default position, size and style</value></data>
+  <data name="Options_AddZoneButton" xml:space="preserve"><value>+ New Zone</value></data>
+
+  <data name="ThemeMode_Light" xml:space="preserve"><value>Light</value></data>
+  <data name="ThemeMode_Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="ThemeMode_System" xml:space="preserve"><value>System (follow OS)</value></data>
+
+  <data name="Hotkeys_Title" xml:space="preserve"><value>Keyboard Shortcuts</value></data>
+  <data name="Hotkeys_PlayPause" xml:space="preserve"><value>Play / pause</value></data>
+  <data name="Hotkeys_StepBack" xml:space="preserve"><value>Step back</value></data>
+  <data name="Hotkeys_StepForward" xml:space="preserve"><value>Step forward</value></data>
+  <data name="Hotkeys_ToggleFullscreen" xml:space="preserve"><value>Toggle fullscreen</value></data>
+  <data name="Hotkeys_ToggleSubtitles" xml:space="preserve"><value>Toggle subtitles</value></data>
+  <data name="Hotkeys_ExitFullscreen" xml:space="preserve"><value>Exit fullscreen</value></data>
+  <data name="Hotkeys_DecreaseSpeed" xml:space="preserve"><value>Decrease playback speed</value></data>
+  <data name="Hotkeys_IncreaseSpeed" xml:space="preserve"><value>Increase playback speed</value></data>
+
+  <data name="About_Title" xml:space="preserve"><value>About</value></data>
+  <data name="About_LicenseText" xml:space="preserve"><value>Licensed under PolyForm Noncommercial 1.0.0</value></data>
+  <data name="About_GitHubButton" xml:space="preserve"><value>View on GitHub</value></data>
+  <data name="About_VersionFormat" xml:space="preserve"><value>Version {0}</value></data>
+
+  <data name="Common_Close" xml:space="preserve"><value>Close</value></data>
+
+  <data name="AudioWarning_Title" xml:space="preserve"><value>Audio Output Unavailable</value></data>
+  <data name="AudioWarning_Heading" xml:space="preserve"><value>Audio output couldn't be initialized.</value></data>
+  <data name="AudioWarning_TechnicalDetailLabel" xml:space="preserve"><value>Technical detail:</value></data>
+  <data name="AudioWarning_LinuxGuidance" xml:space="preserve">
+    <value>This usually means a system audio library is missing. Try installing JACK's shared library, then restart the app:
+
+sudo apt install libjack-jackd2-0</value>
+    <comment>Keep the "sudo apt install ..." line literal - it is a real shell command, not prose.</comment>
+  </data>
+  <data name="AudioWarning_DefaultGuidance" xml:space="preserve"><value>Playback will continue without audio output.</value></data>
+
+  <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>New Subtitle Zone</value></data>
+  <data name="SubtitleZoneEditor_EditTitleFormat" xml:space="preserve"><value>Edit Subtitle Zone - {0}</value></data>
+  <data name="SubtitleZoneEditor_ScreenLabel" xml:space="preserve"><value>Screen:</value></data>
+  <data name="SubtitleZoneEditor_VideoLabel" xml:space="preserve"><value>Video:</value></data>
+  <data name="SubtitleZoneEditor_NameWatermark" xml:space="preserve"><value>Zone name</value></data>
+  <data name="SubtitleZoneEditor_NameHint" xml:space="preserve"><value>Just for you to tell zones apart - not shown on screen.</value></data>
+  <data name="SubtitleZoneEditor_FontLabel" xml:space="preserve"><value>Font:</value></data>
+  <data name="SubtitleZoneEditor_SizeLabel" xml:space="preserve"><value>Size:</value></data>
+  <data name="SubtitleZoneEditor_TextColorLabel" xml:space="preserve"><value>Text color:</value></data>
+  <data name="SubtitleZoneEditor_BgColorLabel" xml:space="preserve"><value>Bg color:</value></data>
+  <data name="SubtitleZoneEditor_BgOpacityLabel" xml:space="preserve"><value>Bg opacity:</value></data>
+  <data name="SubtitleZoneEditor_AlignHLabel" xml:space="preserve"><value>Align H:</value></data>
+  <data name="SubtitleZoneEditor_AlignVLabel" xml:space="preserve"><value>Align V:</value></data>
+  <data name="SubtitleZoneEditor_CancelButton" xml:space="preserve"><value>Cancel</value></data>
+  <data name="SubtitleZoneEditor_SaveButton" xml:space="preserve"><value>Save</value></data>
+  <data name="SubtitleZoneEditor_SamplePrefix" xml:space="preserve"><value>Sample subtitle text</value></data>
+  <data name="SubtitleZoneEditor_SampleWith" xml:space="preserve"><value>with </value></data>
+  <data name="SubtitleZoneEditor_SampleBold" xml:space="preserve"><value>bold</value></data>
+  <data name="SubtitleZoneEditor_SampleAnd" xml:space="preserve"><value> and </value></data>
+  <data name="SubtitleZoneEditor_SampleItalic" xml:space="preserve"><value>italic</value></data>
+  <data name="SubtitleZoneEditor_SampleStyles" xml:space="preserve"><value> styles</value></data>
+</root>

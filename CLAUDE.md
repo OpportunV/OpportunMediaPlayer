@@ -49,9 +49,14 @@ this as licence to add the other `Microsoft.Extensions.*` packages.
 `OMP.Lib` only ever sees `ILogger`. Everything else — sinks, levels, paths, retention — lives in
 the `Serilog` section of `OMP.Ui/appsettings.json`; `Program.cs` only calls
 `ReadFrom.Configuration`. Serilog expands `%ENVVAR%` in config values, which is what lets the file
-path (`%LOCALAPPDATA%\OpportunMediaPlayer\logs\omp-.log`) stay in config rather than being built
-in code. Logs are capped at 10 MB × 7 files; `rollOnFileSizeLimit` is what makes the size limit
-roll rather than silently stop logging, so don't drop it.
+path (`%OMP_LOG_DIR%/OpportunMediaPlayer/logs/omp-.log`) stay in config rather than being built in
+code — `%OMP_LOG_DIR%` itself is set by `Program.cs` from `Environment.SpecialFolder
+.LocalApplicationData` (a genuinely cross-platform BCL API) before Serilog reads config, rather
+than hardcoding the Windows-only `%LOCALAPPDATA%` env var directly in the config string, which
+silently wrote to the wrong place on Linux (unresolved `%VAR%` tokens are left literal by
+`Environment.ExpandEnvironmentVariables`, not replaced with empty string). Logs are capped at
+10 MB × 7 files; `rollOnFileSizeLimit` is what makes the size limit roll rather than silently stop
+logging, so don't drop it.
 
 `ILoggerFactory`, not `ILogger<T>`, is threaded through the engine: DI gives it to
 `MediaSessionRegistry`, which hands it to `MediaSession`, which hands it to every pipeline and
@@ -96,17 +101,29 @@ hand-written guards — but note the class has to become `partial`.
 
 ## Audio output and volume
 
-`AudioOutput.Id` indexes the **MMDevice/WASAPI** enumeration (`OutputScanner`), while
-`WaveOutEvent.DeviceNumber` indexes the **WinMM** one. They do not agree — WinMM lists the default
-device first and shifts everything else down, so on a typical machine every index is off by one.
-`WaveOutDeviceResolver` matches by name instead (prefix match, because WinMM truncates product
-names to 31 characters). Never pass an `AudioOutput.Id` straight to `DeviceNumber`.
+`AudioOutput.Id` is PortAudio's own global device index (`OutputScanner`, in
+`OMP.Lib/Audio/Output/`) — the same index both enumerates a device and opens a stream on it via
+`PortAudioOutput`, so unlike the pre-PortAudio NAudio implementation there's no separate
+enumeration-vs-open index space to reconcile (that mismatch, and the `WaveOutDeviceResolver`
+name-matching hack it needed, no longer exist). On Windows, PortAudio otherwise lists every
+physical device once per host API (MME, DirectSound, WASAPI, WDM-KS); `OutputScanner` filters to
+the WASAPI host API's devices only — `OMP.Lib/Interop/PortAudioHostApi.cs` adds supplemental
+P/Invoke for `Pa_GetHostApiInfo`, which PortAudioSharp2 doesn't bind itself — to avoid showing
+3-4 duplicate entries per physical device. Linux/macOS don't have this duplication (ALSA and
+CoreAudio each expose a single host API), so the filter is a no-op there. WASAPI shared-mode
+streams also reject a sample rate that doesn't match the device's own mix rate (confirmed via
+`PaErrorCode.InvalidSampleRate`), so `AudioPipeline` resamples to `IAudioOutput.PreferredSampleRate`
+(queried from the target device) rather than a fixed constant.
 
-Gain is applied in `GainWaveProvider.Read`, between the `BufferedWaveProvider` and the
-`WaveOutEvent`, so a volume change is audible within the driver buffer (~150 ms). Applying it
-earlier — in the PCM path or at `PumpToOutput` — puts it behind `BufferDurationSeconds` of decoded
-audio and bakes the gain into buffered data. `AudioGainProcessor` holds the arithmetic so it stays
-unit-testable, mirroring `AudioSpeedProcessor`.
+PortAudioSharp2's binding is callback-based only (no blocking `Pa_WriteStream`) — `PortAudioOutput`
+pulls PCM from the routed `IWaveProvider` inside PortAudio's own native audio-thread callback,
+rather than from a dedicated managed thread the way `WaveOutEvent` used to.
+
+Gain is applied in `GainWaveProvider.Read`, between the `BufferedWaveProvider` and `IAudioOutput`,
+so a volume change is audible within the driver buffer (~150 ms). Applying it earlier — in the PCM
+path or at `PumpToOutput` — puts it behind `BufferDurationSeconds` of decoded audio and bakes the
+gain into buffered data. `AudioGainProcessor` holds the arithmetic so it stays unit-testable,
+mirroring `AudioSpeedProcessor`.
 
 Volume range is `[AudioVolumeLimits.Min, AudioVolumeLimits.Max]` = `[0, 2.0]` (0–200%), not `[0, 1]`
 — sliders go past 100% on purpose, matching the "boost" ceiling other players (e.g. VLC) offer.
@@ -120,7 +137,7 @@ independent of the other's position — note two boosted sliders multiply (150% 
 effective), there's no combined ceiling beyond each individual `Max`. Volume lives on
 `MediaSession`, keyed by `AudioOutput.Id`, and is re-pushed after `SetAudioRoutes` rebuilds the
 pipelines — the same way speed is. Per-output volume deliberately does **not** live on
-`AudioRoute`: `SetAudioRoutes` disposes and recreates every `WaveOutEvent`, so routing a slider
+`AudioRoute`: `SetAudioRoutes` disposes and recreates every `IAudioOutput`, so routing a slider
 through it would tear down devices on every tick.
 
 ## Playback speed

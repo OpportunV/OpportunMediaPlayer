@@ -1,5 +1,6 @@
 using System;
 using Avalonia.Controls;
+using OMP.Ui.Localization;
 
 namespace OMP.Ui;
 
@@ -15,9 +16,8 @@ public sealed partial class AudioOutputWarningWindow : Window
     public void Load(string reason)
     {
         GuidanceText.Text = OperatingSystem.IsLinux()
-            ? "This usually means a system audio library is missing. Try installing JACK's " +
-              "shared library, then restart the app:\n\nsudo apt install libjack-jackd2-0"
-            : "Playback will continue without audio output.";
+            ? Strings.AudioWarning_LinuxGuidance
+            : Strings.AudioWarning_DefaultGuidance;
 
         ReasonText.Text = reason;
     }
