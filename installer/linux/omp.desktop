@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Opportun Media Player
+Exec=OMP %f
+Icon=omp
+Categories=AudioVideo;Player;
+Terminal=false
