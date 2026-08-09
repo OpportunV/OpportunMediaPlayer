@@ -8,7 +8,7 @@
         SizeToContent="Height"
         Title="Options">
 
-    <TabControl>
+    <TabControl Name="MainTabControl">
 
         <TabItem>
             <TabItem.Header>
@@ -44,7 +44,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*"
+            <Grid RowDefinitions="Auto,Auto"
                   Margin="20">
 
                 <ItemsControl Grid.Row="0"
@@ -146,7 +146,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*,Auto"
+            <Grid RowDefinitions="Auto,Auto,Auto"
                   Margin="20">
 
                 <TextBlock Grid.Row="0"
@@ -231,7 +231,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*,Auto"
+            <Grid RowDefinitions="Auto,Auto,Auto"
                   Margin="20">
 
                 <TextBlock Grid.Row="0"

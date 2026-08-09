@@ -42,6 +42,7 @@ public sealed partial class MainWindow : Window
 
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
+    private bool _hasShownAudioOutputWarning;
     private int _lastKnownSubtitleRouteCount;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
@@ -139,6 +140,14 @@ public sealed partial class MainWindow : Window
         RestoreVolume(registry.Current);
 
         _commands.SetSpeed(_settings.Current.PlaybackSpeed);
+
+        if (!_hasShownAudioOutputWarning && registry.Current.AudioOutputUnavailableReason is { } reason)
+        {
+            _hasShownAudioOutputWarning = true;
+            var warning = _windowFactory.Create<AudioOutputWarningWindow>();
+            warning.Load(reason);
+            warning.ShowDialog(this);
+        }
     }
 
     private void SetupSpeed()
