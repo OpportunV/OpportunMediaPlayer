@@ -17,6 +17,10 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        Environment.SetEnvironmentVariable(
+            "OMP_LOG_DIR",
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
             .CreateBootstrapLogger();
@@ -43,6 +47,7 @@ internal static class Program
                     services.AddTransient<SubtitleZoneEditorWindow>();
                     services.AddTransient<HotkeysWindow>();
                     services.AddTransient<AboutWindow>();
+                    services.AddTransient<AudioOutputWarningWindow>();
                 })
                 .Build();
 

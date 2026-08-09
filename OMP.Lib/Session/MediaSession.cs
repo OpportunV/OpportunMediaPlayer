@@ -18,6 +18,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
+    public string? AudioOutputUnavailableReason { get; }
+
     public IReadOnlyList<AudioRoute> AudioRoutes => _audioRoutes.AsReadOnly();
 
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _outputVolumes.AsReadOnly();
@@ -167,7 +169,9 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
 
         AudioStreams = new AudioScanner(loggerFactory).GetAudioStreams(_formatContext);
-        AudioOutputs = new OutputScanner(loggerFactory).ScanOutputs();
+        var outputScanner = new OutputScanner(loggerFactory);
+        AudioOutputs = outputScanner.ScanOutputs();
+        AudioOutputUnavailableReason = outputScanner.UnavailableReason;
         SubtitleStreams = new SubtitleScanner(loggerFactory).GetSubtitleStreams(_formatContext);
 
         _demuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, _cancellationTokenSource.Token);
@@ -218,21 +222,36 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioPipelines.ForEach(p => p.Flush());
 
         ClearAudioPipelines();
-        _audioRoutes.AddRange(routes);
 
-        foreach (var route in _audioRoutes)
+        foreach (var route in routes)
         {
+            AudioPipeline pipeline;
             lock (_formatSync)
             {
-                _audioPipelines.Add(
-                    new AudioPipeline(
+                try
+                {
+                    pipeline = new AudioPipeline(
                         _formatContext,
                         route.Stream.Id,
                         route.Output,
                         _cancellationTokenSource.Token,
                         _audioBufferDurationSeconds,
-                        _loggerFactory));
+                        _loggerFactory);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Could not route '{Title}' [{Language}] -> '{FriendlyName}'; skipping this route.",
+                        route.Stream.Title,
+                        route.Stream.Language,
+                        route.Output.FriendlyName);
+                    continue;
+                }
             }
+
+            _audioRoutes.Add(route);
+            _audioPipelines.Add(pipeline);
 
             _logger.LogDebug(
                 "Audio route: '{Title}' [{Language}] -> '{FriendlyName}'.",

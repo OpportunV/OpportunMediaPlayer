@@ -6,6 +6,7 @@
         x:Class="OMP.Ui.OptionsWindow"
         Width="700"
         SizeToContent="Height"
+        CanResize="False"
         Title="Options">
 
     <TabControl>
@@ -44,7 +45,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*"
+            <Grid RowDefinitions="Auto,Auto"
                   Margin="20">
 
                 <ItemsControl Grid.Row="0"
@@ -146,7 +147,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*,Auto"
+            <Grid RowDefinitions="Auto,Auto,Auto"
                   Margin="20">
 
                 <TextBlock Grid.Row="0"
@@ -231,7 +232,7 @@
                            FontSize="13" />
             </TabItem.Header>
 
-            <Grid RowDefinitions="Auto,*,Auto"
+            <Grid RowDefinitions="Auto,Auto,Auto"
                   Margin="20">
 
                 <TextBlock Grid.Row="0"
