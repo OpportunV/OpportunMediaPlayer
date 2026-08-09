@@ -17,8 +17,6 @@ internal sealed class FullscreenController : IDisposable
     private readonly DispatcherTimer _overlayTimer = new();
     private WindowState _previousWindowState;
 
-    private const double WindowedOverlaySpacing = 8;
-
     public FullscreenController(Window window, Control topMenu, Control overlayControls, Control videoSurface)
     {
         _window = window;
@@ -72,7 +70,7 @@ internal sealed class FullscreenController : IDisposable
 
     public void UpdateVideoViewportMargin()
     {
-        var bottomMargin = IsFullscreen ? 0 : _overlayControls.Bounds.Height + WindowedOverlaySpacing;
+        var bottomMargin = IsFullscreen ? 0 : _overlayControls.Bounds.Height;
         _videoSurface.Margin = new Thickness(0, 0, 0, bottomMargin);
     }
 

@@ -8,6 +8,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AssemblyName>OMP</AssemblyName>
+    <Product>Opportun Media Player</Product>
+    <Version>0.1.0</Version>
+    <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
     <!--AVLN3001: MainWindow/OptionsWindow have no parameterless constructor by design (DI
     constructor injection) — that's what Avalonia's design-time/previewer loader wants one for,
     not the app's own runtime loading, which always goes through the DI container. Confirmed by
@@ -48,5 +52,9 @@
 
   <ItemGroup>
     <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 </Project>

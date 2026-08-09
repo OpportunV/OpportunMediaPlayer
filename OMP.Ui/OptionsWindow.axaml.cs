@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -10,6 +12,7 @@ using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Controls;
+using OMP.Ui.Extensions;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
 
@@ -66,6 +69,11 @@ public sealed partial class OptionsWindow : Window
             }
         }
 
+        ThemeSelector.ItemsSource = Enum.GetValues<ThemeMode>().Select(mode => new ThemeModeOption(mode)).ToList();
+        ThemeSelector.SelectedItem = ThemeSelector.Items
+            .Cast<ThemeModeOption>()
+            .First(option => option.Mode == _settings.Current.Theme);
+
         RoutesList.ItemsSource = _rows;
         StreamSelector.ItemsSource = _streamOptions;
         ZonesList.ItemsSource = _zones;
@@ -78,6 +86,22 @@ public sealed partial class OptionsWindow : Window
         UpdateSubtitleStreamSelector();
         UpdateSubtitleZoneSelector();
         RefreshRows();
+    }
+
+    private void OnThemeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (ThemeSelector.SelectedItem is not ThemeModeOption option)
+        {
+            return;
+        }
+
+        _settings.Current.Theme = option.Mode;
+        _settings.Save();
+
+        if (Application.Current is not null)
+        {
+            Application.Current.RequestedThemeVariant = option.Mode.ToThemeVariant();
+        }
     }
 
     private void OnAddRouteButton(object? sender, RoutedEventArgs e)

@@ -12,6 +12,34 @@
 
         <TabItem>
             <TabItem.Header>
+                <TextBlock Text="General"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid Margin="20">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Top">
+
+                    <TextBlock Text="Theme:"
+                               VerticalAlignment="Center" />
+
+                    <ComboBox Name="ThemeSelector"
+                              Width="200"
+                              SelectionChanged="OnThemeChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ThemeModeOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                </StackPanel>
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
                 <TextBlock Text="Audio Routing"
                            FontSize="13" />
             </TabItem.Header>
