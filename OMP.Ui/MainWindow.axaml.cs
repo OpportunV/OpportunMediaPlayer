@@ -41,6 +41,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private static readonly FilePickerFileType _mediaFileTypeFilter = new(Strings.MainWindow_OpenFileTypeFilterName)
+    {
+        Patterns =
+        [
+            "*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov", "*.flv", "*.wmv",
+            "*.mp3", "*.flac", "*.wav", "*.ogg", "*.m4a", "*.aac"
+        ]
+    };
+
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
@@ -61,7 +70,8 @@ public sealed partial class MainWindow : Window
         IMainWindowCommands commands,
         IMainWindowHotkeyService hotkeyService,
         IWindowFactory windowFactory,
-        IUserSettingsService settings)
+        IUserSettingsService settings,
+        StartupOptions startupOptions)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
         _commands = commands;
@@ -108,6 +118,10 @@ public sealed partial class MainWindow : Window
         {
             OnSessionChanged(_mediaSessionRegistry);
             UpdateSessionData();
+        }
+        else if (startupOptions.FilePath is { } startupFilePath)
+        {
+            Opened += async (_, _) => await OpenPath(startupFilePath);
         }
     }
 
@@ -352,7 +366,8 @@ public sealed partial class MainWindow : Window
             new FilePickerOpenOptions
             {
                 Title = Strings.MainWindow_OpenFileDialogTitle,
-                AllowMultiple = false
+                AllowMultiple = false,
+                FileTypeFilter = [_mediaFileTypeFilter]
             });
 
         if (files.Count == 0)
@@ -362,11 +377,29 @@ public sealed partial class MainWindow : Window
 
         var path = files[0].TryGetLocalPath();
 
-        if (path != null)
+        if (path == null)
+        {
+            return;
+        }
+
+        await OpenPath(path);
+    }
+
+    private async Task OpenPath(string path)
+    {
+        try
         {
             _mediaSessionRegistry.Open(path);
-            UpdateSessionData();
         }
+        catch (Exception ex)
+        {
+            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
+            errorWindow.Load(ex.Message);
+            await errorWindow.ShowDialog(this);
+            return;
+        }
+
+        UpdateSessionData();
     }
 
     private void UpdateSessionData()
