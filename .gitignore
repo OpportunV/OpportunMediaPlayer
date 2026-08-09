@@ -3,6 +3,13 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# Local packaging output (installer/portable builds, AppImage staging)
+/artifacts/
+/AppDir/
+/publish/
+*.AppImage
+appimagetool-*.AppImage
+
 # dotenv files
 .env
 

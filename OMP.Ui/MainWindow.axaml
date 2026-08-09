@@ -2,6 +2,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="clr-namespace:OMP.Ui"
+    xmlns:loc="clr-namespace:OMP.Ui.Localization"
     x:Class="OMP.Ui.MainWindow"
     Icon="avares://OMP/Assets/app-icon.png"
     Width="1200"
@@ -11,15 +12,15 @@
     <Grid RowDefinitions="Auto,*">
 
         <Menu Name="TopMenu" Grid.Row="0">
-            <MenuItem Header="_File">
-                <MenuItem Header="_Open..." Name="OpenMenuItem" />
-                <MenuItem Header="_Options..." Name="OptionsMenuItem" />
+            <MenuItem Header="{x:Static loc:Strings.MainWindow_FileMenu}">
+                <MenuItem Header="{x:Static loc:Strings.MainWindow_OpenMenuItem}" Name="OpenMenuItem" />
+                <MenuItem Header="{x:Static loc:Strings.MainWindow_OptionsMenuItem}" Name="OptionsMenuItem" />
                 <Separator />
-                <MenuItem Header="E_xit" Name="ExitMenuItem" />
+                <MenuItem Header="{x:Static loc:Strings.MainWindow_ExitMenuItem}" Name="ExitMenuItem" />
             </MenuItem>
-            <MenuItem Header="_Help">
-                <MenuItem Header="_Keyboard Shortcuts..." Name="HotkeysMenuItem" />
-                <MenuItem Header="_About..." Name="AboutMenuItem" />
+            <MenuItem Header="{x:Static loc:Strings.MainWindow_HelpMenu}">
+                <MenuItem Header="{x:Static loc:Strings.MainWindow_HotkeysMenuItem}" Name="HotkeysMenuItem" />
+                <MenuItem Header="{x:Static loc:Strings.MainWindow_AboutMenuItem}" Name="AboutMenuItem" />
             </MenuItem>
         </Menu>
 
@@ -216,7 +217,7 @@
                                 Height="36"
                                 Padding="8,0"
                                 Focusable="False"
-                                ToolTip.Tip="Playback speed">
+                                ToolTip.Tip="{x:Static loc:Strings.MainWindow_SpeedButtonTooltip}">
                             <TextBlock Name="SpeedLabel"
                                        Text="1x"
                                        Foreground="White"
@@ -230,7 +231,7 @@
                                       Width="36"
                                       Height="36"
                                       Focusable="False"
-                                      ToolTip.Tip="Toggle subtitles">
+                                      ToolTip.Tip="{x:Static loc:Strings.MainWindow_SubtitlesButtonTooltip}">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="M3,5 H21 V17 H3 Z"

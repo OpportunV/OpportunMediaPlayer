@@ -29,6 +29,8 @@ public interface IMediaSession : IDisposable
 
     public string FileName { get; }
 
+    public string FilePath { get; }
+
     public bool IsMuted { get; }
 
     public double MasterVolume { get; }

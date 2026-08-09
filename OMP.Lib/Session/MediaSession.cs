@@ -47,6 +47,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public string FileName { get; }
 
+    public string FilePath { get; }
+
     public bool IsMuted { get; private set; }
 
     public double MasterVolume { get; private set; } = 1.0;
@@ -157,6 +159,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
 
         FileName = Path.GetFileNameWithoutExtension(filePath);
+        FilePath = filePath;
 
         for (var i = 0; i < _formatContext->nb_streams; i++)
         {

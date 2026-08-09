@@ -1,4 +1,5 @@
 using Avalonia.Styling;
+using OMP.Ui.Localization;
 using OMP.Ui.Settings;
 
 namespace OMP.Ui.Extensions;
@@ -16,9 +17,9 @@ internal static class ThemeModeExt
 
         public string ToDisplayLabel() => mode switch
         {
-            ThemeMode.Light => "Light",
-            ThemeMode.Dark => "Dark",
-            _ => "System (follow OS)",
+            ThemeMode.Light => Strings.ThemeMode_Light,
+            ThemeMode.Dark => Strings.ThemeMode_Dark,
+            _ => Strings.Common_SystemDefault,
         };
     }
 }

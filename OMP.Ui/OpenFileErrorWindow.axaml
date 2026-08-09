@@ -1,25 +1,22 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
-        x:Class="OMP.Ui.AudioOutputWarningWindow"
+        x:Class="OMP.Ui.OpenFileErrorWindow"
         Width="420"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Title="{x:Static loc:Strings.AudioWarning_Title}">
+        Title="{x:Static loc:Strings.OpenFileError_Title}">
 
     <StackPanel Margin="24"
                 Spacing="10">
 
-        <TextBlock Text="{x:Static loc:Strings.AudioWarning_Heading}"
+        <TextBlock Text="{x:Static loc:Strings.OpenFileError_Heading}"
                    FontSize="15"
                    FontWeight="Bold"
                    TextWrapping="Wrap" />
 
-        <TextBlock Name="GuidanceText"
-                   TextWrapping="Wrap" />
-
-        <TextBlock Text="{x:Static loc:Strings.AudioWarning_TechnicalDetailLabel}"
+        <TextBlock Text="{x:Static loc:Strings.OpenFileError_TechnicalDetailLabel}"
                    Opacity="0.7"
                    Margin="0,10,0,0" />
 
