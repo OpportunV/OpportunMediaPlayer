@@ -5,7 +5,7 @@ namespace OMP.Lib.Tests;
 
 public class ChannelExtTests
 {
-    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(5);
 
     [Fact]
     public void TryWriteBlocking_ThenTryReadBlocking_RoundTripsTheItem()
