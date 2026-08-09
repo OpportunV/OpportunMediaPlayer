@@ -6,9 +6,10 @@
         x:Class="OMP.Ui.OptionsWindow"
         Width="700"
         SizeToContent="Height"
+        CanResize="False"
         Title="Options">
 
-    <TabControl Name="MainTabControl">
+    <TabControl>
 
         <TabItem>
             <TabItem.Header>

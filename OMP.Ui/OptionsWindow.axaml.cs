@@ -23,8 +23,8 @@ public sealed partial class OptionsWindow : Window
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IUserSettingsService _settings;
     private readonly IWindowFactory _windowFactory;
-    private readonly ObservableCollection<AudioRouteRow> _rows = [];
-    private readonly ObservableCollection<SubtitleZone> _zones = [];
+    private readonly ObservableCollection<AudioRouteRow> _audioRouteRows = [];
+    private readonly ObservableCollection<SubtitleZone> _subtitleZones = [];
     private readonly ObservableCollection<SubtitleRouteRow> _subtitleRows = [];
 
     private readonly List<AudioStreamOption> _streamOptions = [];
@@ -50,19 +50,19 @@ public sealed partial class OptionsWindow : Window
                 ? state
                 : new OutputVolumeState(1.0, false);
 
-            _rows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted));
+            _audioRouteRows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted));
         }
 
         foreach (var zone in _settings.Current.SubtitleZones)
         {
-            _zones.Add(zone.Clone());
+            _subtitleZones.Add(zone.Clone());
         }
 
         _subtitleStreamOptions.AddRange((session?.SubtitleStreams ?? []).Select(s => new SubtitleStreamOption(s)));
 
         foreach (var route in session?.SubtitleRoutes ?? [])
         {
-            var zone = _zones.FirstOrDefault(z => z.Id == route.ZoneId);
+            var zone = _subtitleZones.FirstOrDefault(z => z.Id == route.ZoneId);
             if (zone is not null)
             {
                 _subtitleRows.Add(new SubtitleRouteRow(route.Stream, zone));
@@ -74,9 +74,9 @@ public sealed partial class OptionsWindow : Window
             .Cast<ThemeModeOption>()
             .First(option => option.Mode == _settings.Current.Theme);
 
-        RoutesList.ItemsSource = _rows;
+        RoutesList.ItemsSource = _audioRouteRows;
         StreamSelector.ItemsSource = _streamOptions;
-        ZonesList.ItemsSource = _zones;
+        ZonesList.ItemsSource = _subtitleZones;
         SubtitleRoutesList.ItemsSource = _subtitleRows;
 
         AddRouteButton.Click += OnAddRouteButton;
@@ -112,7 +112,7 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        _rows.Add(new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false));
+        _audioRouteRows.Add(new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false));
         UpdateOutputSelector();
         RefreshRows();
         ApplyAndPersistRoutes();
@@ -120,12 +120,12 @@ public sealed partial class OptionsWindow : Window
 
     private void OnDeleteRoute(object? sender, RoutedEventArgs e)
     {
-        if (((Control)sender!).DataContext is not AudioRouteRow row || _rows.Count <= 1)
+        if (((Control)sender!).DataContext is not AudioRouteRow row || _audioRouteRows.Count <= 1)
         {
             return;
         }
 
-        _rows.Remove(row);
+        _audioRouteRows.Remove(row);
         UpdateOutputSelector();
         RefreshRows();
         ApplyAndPersistRoutes();
@@ -172,7 +172,7 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        _zones.Add(result);
+        _subtitleZones.Add(result);
         PersistZones();
         UpdateSubtitleZoneSelector();
     }
@@ -193,10 +193,10 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        var index = _zones.IndexOf(zone);
+        var index = _subtitleZones.IndexOf(zone);
         if (index >= 0)
         {
-            _zones[index] = result;
+            _subtitleZones[index] = result;
             PersistZones();
             UpdateSubtitleZoneSelector();
         }
@@ -209,13 +209,13 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        var index = _zones.IndexOf(zone);
+        var index = _subtitleZones.IndexOf(zone);
         if (index < 0)
         {
             return;
         }
 
-        _zones[index] = SubtitleZone.CreateBuiltIns().First(z => z.Id == zone.Id);
+        _subtitleZones[index] = SubtitleZone.CreateBuiltIns().First(z => z.Id == zone.Id);
         PersistZones();
         UpdateSubtitleZoneSelector();
     }
@@ -227,7 +227,7 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        _zones.Remove(zone);
+        _subtitleZones.Remove(zone);
         PersistZones();
         UpdateSubtitleZoneSelector();
 
@@ -299,7 +299,7 @@ public sealed partial class OptionsWindow : Window
     {
         var usedZoneIds = _subtitleRows.Select(row => row.Zone.Id).ToHashSet();
 
-        var availableZones = _zones
+        var availableZones = _subtitleZones
             .Where(z => !usedZoneIds.Contains(z.Id))
             .ToList();
 
@@ -313,13 +313,13 @@ public sealed partial class OptionsWindow : Window
 
     private void ApplyAndPersistRoutes()
     {
-        _mediaSessionRegistry.Current?.SetAudioRoutes(_rows.Select(row => row.Route));
+        _mediaSessionRegistry.Current?.SetAudioRoutes(_audioRouteRows.Select(row => row.Route));
 
-        _settings.Current.PreferredAudioOutputs = _rows
+        _settings.Current.PreferredAudioOutputs = _audioRouteRows
             .Select(row => row.Route.Output.FriendlyName)
             .ToList();
 
-        foreach (var row in _rows)
+        foreach (var row in _audioRouteRows)
         {
             UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted);
         }
@@ -329,7 +329,7 @@ public sealed partial class OptionsWindow : Window
 
     private void PersistZones()
     {
-        _settings.Current.SubtitleZones = _zones.ToList();
+        _settings.Current.SubtitleZones = _subtitleZones.ToList();
         _settings.Save();
     }
 
@@ -350,7 +350,7 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateOutputSelector()
     {
-        var usedOutputs = _rows.Select(row => row.Route.Output.FriendlyName).ToHashSet();
+        var usedOutputs = _audioRouteRows.Select(row => row.Route.Output.FriendlyName).ToHashSet();
 
         var availableOutputs = _outputs
             .Where(o => !usedOutputs.Contains(o.FriendlyName))
@@ -366,19 +366,19 @@ public sealed partial class OptionsWindow : Window
 
     private void RefreshRows()
     {
-        var canDelete = _rows.Count > 1;
-        var snapshot = _rows.ToList();
+        var canDelete = _audioRouteRows.Count > 1;
+        var snapshot = _audioRouteRows.ToList();
 
         foreach (var row in snapshot)
         {
             row.CanDelete = canDelete;
         }
 
-        _rows.Clear();
+        _audioRouteRows.Clear();
 
         foreach (var row in snapshot)
         {
-            _rows.Add(row);
+            _audioRouteRows.Add(row);
         }
     }
 }
