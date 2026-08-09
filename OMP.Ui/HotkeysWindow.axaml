@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:input="clr-namespace:OMP.Ui.Input"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
         x:Class="OMP.Ui.HotkeysWindow"
         Width="380"
         SizeToContent="Height"
         CanResize="False"
-        Title="Keyboard Shortcuts">
+        Title="{x:Static loc:Strings.Hotkeys_Title}">
 
     <ItemsControl Name="HotkeysList"
                   Margin="20">

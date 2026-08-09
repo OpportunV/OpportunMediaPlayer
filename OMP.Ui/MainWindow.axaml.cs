@@ -13,6 +13,7 @@ using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
 using OMP.Ui.Input;
+using OMP.Ui.Localization;
 using OMP.Ui.Settings;
 
 namespace OMP.Ui;
@@ -350,7 +351,7 @@ public sealed partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(
             new FilePickerOpenOptions
             {
-                Title = "Open media file",
+                Title = Strings.MainWindow_OpenFileDialogTitle,
                 AllowMultiple = false
             });
 

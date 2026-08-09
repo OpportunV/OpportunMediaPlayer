@@ -3,17 +3,18 @@
         xmlns:models="clr-namespace:OMP.Ui.Models"
         xmlns:settings="clr-namespace:OMP.Ui.Settings"
         xmlns:output="clr-namespace:OMP.Lib.Audio.Output;assembly=OMP.Lib"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
         x:Class="OMP.Ui.OptionsWindow"
         Width="700"
         SizeToContent="Height"
         CanResize="False"
-        Title="Options">
+        Title="{x:Static loc:Strings.Options_Title}">
 
     <TabControl>
 
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="General"
+                <TextBlock Text="{x:Static loc:Strings.Options_GeneralTab}"
                            FontSize="13" />
             </TabItem.Header>
 
@@ -22,7 +23,7 @@
                             Spacing="10"
                             VerticalAlignment="Top">
 
-                    <TextBlock Text="Theme:"
+                    <TextBlock Text="{x:Static loc:Strings.Options_ThemeLabel}"
                                VerticalAlignment="Center" />
 
                     <ComboBox Name="ThemeSelector"
@@ -41,7 +42,7 @@
 
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="Audio Routing"
+                <TextBlock Text="{x:Static loc:Strings.Options_AudioRoutingTab}"
                            FontSize="13" />
             </TabItem.Header>
 
@@ -76,7 +77,7 @@
                                               Width="32"
                                               Height="28"
                                               Margin="0,0,6,0"
-                                              ToolTip.Tip="Mute this output" />
+                                              ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}" />
 
                                 <Slider Grid.Column="3"
                                         Name="RouteVolumeSlider"
@@ -143,7 +144,7 @@
 
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="Subtitles"
+                <TextBlock Text="{x:Static loc:Strings.Options_SubtitlesTab}"
                            FontSize="13" />
             </TabItem.Header>
 
@@ -151,7 +152,7 @@
                   Margin="20">
 
                 <TextBlock Grid.Row="0"
-                           Text="Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed."
+                           Text="{x:Static loc:Strings.Options_SubtitlesHelpText}"
                            TextWrapping="Wrap"
                            Opacity="0.7"
                            Margin="0,0,0,10" />
@@ -228,7 +229,7 @@
 
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="Subtitle Zones"
+                <TextBlock Text="{x:Static loc:Strings.Options_SubtitleZonesTab}"
                            FontSize="13" />
             </TabItem.Header>
 
@@ -236,7 +237,7 @@
                   Margin="20">
 
                 <TextBlock Grid.Row="0"
-                           Text="Zones define where subtitles are shown on screen. Top and Bottom are built in and can't be removed."
+                           Text="{x:Static loc:Strings.Options_ZonesHelpText}"
                            TextWrapping="Wrap"
                            Opacity="0.7"
                            Margin="0,0,0,10" />
@@ -258,15 +259,15 @@
                                 <Button Grid.Column="1"
                                         Name="EditZoneButton"
                                         Click="OnEditZone"
-                                        Content="Edit"
+                                        Content="{x:Static loc:Strings.Options_EditZoneButton}"
                                         Margin="0,0,6,0" />
 
                                 <Button Grid.Column="2"
                                         Name="ResetZoneButton"
                                         Click="OnResetZone"
                                         IsVisible="{Binding IsBuiltIn}"
-                                        Content="Reset"
-                                        ToolTip.Tip="Restore this zone's default position, size and style" />
+                                        Content="{x:Static loc:Strings.Options_ResetZoneButton}"
+                                        ToolTip.Tip="{x:Static loc:Strings.Options_ResetZoneTooltip}" />
 
                                 <Button Grid.Column="2"
                                         Name="DeleteZoneButton"
@@ -284,7 +285,7 @@
 
                 <Button Grid.Row="2"
                         Name="AddZoneButton"
-                        Content="+ New Zone"
+                        Content="{x:Static loc:Strings.Options_AddZoneButton}"
                         HorizontalAlignment="Left"
                         Margin="0,15,0,0" />
 
