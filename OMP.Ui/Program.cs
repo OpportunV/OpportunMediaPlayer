@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,6 +37,7 @@ internal static class Program
                     services.AddSingleton(
                         context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
                         ?? new PlaybackTuningOptions());
+                    services.AddSingleton(new StartupOptions(args.Length > 0 ? args[0] : null));
                     services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
@@ -48,17 +50,15 @@ internal static class Program
                     services.AddTransient<HotkeysWindow>();
                     services.AddTransient<AboutWindow>();
                     services.AddTransient<AudioOutputWarningWindow>();
+                    services.AddTransient<OpenFileErrorWindow>();
                 })
                 .Build();
 
             var services = appHost.Services;
 
-            Log.Information("Application starting.");
+            ApplyLanguageOverride(services.GetRequiredService<IUserSettingsService>().Current.Language);
 
-            if (args.Length > 0)
-            {
-                services.GetRequiredService<IMediaSessionRegistry>().Open(args[0]);
-            }
+            Log.Information("Application starting.");
 
             BuildAvaloniaApp()
                 .AfterSetup(builder => ((App)builder.Instance!).Services = services)
@@ -81,4 +81,16 @@ internal static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private static void ApplyLanguageOverride(string? languageCode)
+    {
+        if (string.IsNullOrEmpty(languageCode))
+        {
+            return;
+        }
+
+        var culture = CultureInfo.GetCultureInfo(languageCode);
+        CultureInfo.CurrentUICulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+    }
 }

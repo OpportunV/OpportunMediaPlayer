@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Extract version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Publish win-x64
+        run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r win-x64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/win-x64
+
+      - name: Create portable zip
+        shell: pwsh
+        run: Compress-Archive -Path "publish/win-x64/*" -DestinationPath "OMP-${{ env.VERSION }}-win-x64-portable.zip"
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ env.VERSION }} /DSourceDir="${{ github.workspace }}\publish\win-x64" installer\windows\omp.iss
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-artifacts
+          path: |
+            OMP-${{ env.VERSION }}-win-x64-portable.zip
+            artifacts/OMP-Setup-${{ env.VERSION }}.exe
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Extract version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Publish linux-x64
+        run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r linux-x64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/linux-x64
+
+      - name: Create portable tarball
+        run: tar -czf "OMP-${VERSION}-linux-x64-portable.tar.gz" -C publish/linux-x64 .
+
+      - name: Build AppImage
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp -r publish/linux-x64/* AppDir/usr/bin/
+          cp installer/linux/AppRun AppDir/AppRun
+          chmod +x AppDir/AppRun AppDir/usr/bin/OMP
+          cp installer/linux/omp.desktop AppDir/omp.desktop
+          cp OMP.Ui/Assets/app-icon.png AppDir/omp.png
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir "OMP-${VERSION}-x86_64.AppImage"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-artifacts
+          path: |
+            OMP-${{ env.VERSION }}-linux-x64-portable.tar.gz
+            OMP-${{ env.VERSION }}-x86_64.AppImage
+
+  release:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v3.0.2
+        with:
+          files: dist/*
+          draft: true

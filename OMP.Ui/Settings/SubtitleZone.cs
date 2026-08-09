@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Layout;
+using OMP.Ui.Localization;
 
 namespace OMP.Ui.Settings;
 
@@ -8,7 +9,7 @@ public sealed class SubtitleZone
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
-    public string Name { get; set; } = "New Zone";
+    public string Name { get; set; } = Strings.SubtitleZoneEditor_DefaultZoneName;
 
     public bool IsBuiltIn { get; set; }
 

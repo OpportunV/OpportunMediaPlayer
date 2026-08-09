@@ -11,6 +11,7 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyName>OMP</AssemblyName>
     <Product>Opportun Media Player</Product>
+    <!--Dev-build placeholder only - release.yml overrides this via -p:Version from the git tag, which is the actual source of truth for shipped versions.-->
     <Version>0.1.0</Version>
     <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
     <!--AVLN3001: MainWindow/OptionsWindow have no parameterless constructor by design (DI

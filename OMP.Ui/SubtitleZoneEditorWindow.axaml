@@ -1,9 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        xmlns:models="clr-namespace:OMP.Ui.Models"
         x:Class="OMP.Ui.SubtitleZoneEditorWindow"
         Width="920"
         SizeToContent="Height"
-        Title="Edit Subtitle Zone">
+        Title="{x:Static loc:Strings.SubtitleZoneEditor_NewTitle}">
 
     <Grid ColumnDefinitions="Auto,340"
           Margin="20"
@@ -14,12 +16,12 @@
 
             <StackPanel Orientation="Horizontal"
                         Spacing="10">
-                <TextBlock Text="Screen:"
+                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_ScreenLabel}"
                            Width="50"
                            VerticalAlignment="Center" />
                 <ComboBox Name="ScreenAspectRatioSelector"
                           Width="100" />
-                <TextBlock Text="Video:"
+                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_VideoLabel}"
                            Width="40"
                            VerticalAlignment="Center" />
                 <ComboBox Name="VideoAspectRatioSelector"
@@ -70,89 +72,100 @@
                     Spacing="10">
 
             <TextBox Name="NameTextBox"
-                     Watermark="Zone name" />
-            <TextBlock Text="Just for you to tell zones apart - not shown on screen."
+                     Watermark="{x:Static loc:Strings.SubtitleZoneEditor_NameWatermark}" />
+            <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_NameHint}"
                        Opacity="0.7"
                        FontSize="11"
                        Margin="0,-6,0,0" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Font:"
-                           Width="70"
-                           VerticalAlignment="Center" />
-                <ComboBox Name="FontFamilySelector"
-                          Width="200" />
-            </StackPanel>
+            <Grid ColumnDefinitions="Auto,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="10"
+                  RowSpacing="10">
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Size:"
-                           Width="70"
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_FontLabel}"
                            VerticalAlignment="Center" />
-                <Slider Name="FontSizeSlider"
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          Name="FontFamilySelector"
+                          Width="200"
+                          HorizontalAlignment="Left" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_SizeLabel}"
+                           VerticalAlignment="Center" />
+                <Slider Grid.Row="1" Grid.Column="1"
+                        Name="FontSizeSlider"
                         Minimum="2"
                         Maximum="12"
-                        Width="200" />
-            </StackPanel>
+                        Width="200"
+                        HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Text color:"
-                           Width="70"
+                <TextBlock Grid.Row="2" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_TextColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Name="FontColorPicker"
+                <ColorPicker Grid.Row="2" Grid.Column="1"
+                             Name="FontColorPicker"
                              IsAlphaEnabled="False"
-                             Width="200" />
-            </StackPanel>
+                             Width="200"
+                             HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Bg color:"
-                           Width="70"
+                <TextBlock Grid.Row="3" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_BgColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Name="BackgroundColorPicker"
+                <ColorPicker Grid.Row="3" Grid.Column="1"
+                             Name="BackgroundColorPicker"
                              IsAlphaEnabled="False"
-                             Width="200" />
-            </StackPanel>
+                             Width="200"
+                             HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Bg opacity:"
-                           Width="70"
+                <TextBlock Grid.Row="4" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_BgOpacityLabel}"
                            VerticalAlignment="Center" />
-                <Slider Name="BackgroundOpacitySlider"
+                <Slider Grid.Row="4" Grid.Column="1"
+                        Name="BackgroundOpacitySlider"
                         Minimum="0"
                         Maximum="100"
-                        Width="200" />
-            </StackPanel>
+                        Width="200"
+                        HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Align H:"
-                           Width="70"
+                <TextBlock Grid.Row="5" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignHLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Name="HorizontalAlignSelector"
-                          Width="200" />
-            </StackPanel>
+                <ComboBox Grid.Row="5" Grid.Column="1"
+                          Name="HorizontalAlignSelector"
+                          Width="200"
+                          HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:HorizontalAlignmentOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="Align V:"
-                           Width="70"
+                <TextBlock Grid.Row="6" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignVLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Name="VerticalAlignSelector"
-                          Width="200" />
-            </StackPanel>
+                <ComboBox Grid.Row="6" Grid.Column="1"
+                          Name="VerticalAlignSelector"
+                          Width="200"
+                          HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:VerticalAlignmentOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
 
             <StackPanel Orientation="Horizontal"
                         Spacing="10"
                         HorizontalAlignment="Right"
                         Margin="0,20,0,0">
                 <Button Name="CancelButton"
-                        Content="Cancel" />
+                        Content="{x:Static loc:Strings.SubtitleZoneEditor_CancelButton}" />
                 <Button Name="SaveButton"
-                        Content="Save" />
+                        Content="{x:Static loc:Strings.SubtitleZoneEditor_SaveButton}" />
             </StackPanel>
         </StackPanel>
     </Grid>
