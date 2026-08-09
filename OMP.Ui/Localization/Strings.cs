@@ -26,6 +26,8 @@ internal static class Strings
 
     public static string MainWindow_OpenFileDialogTitle => Get("MainWindow_OpenFileDialogTitle");
 
+    public static string MainWindow_OpenFileTypeFilterName => Get("MainWindow_OpenFileTypeFilterName");
+
     public static string Options_Title => Get("Options_Title");
 
     public static string Options_GeneralTab => Get("Options_GeneralTab");
@@ -99,6 +101,12 @@ internal static class Strings
     public static string AudioWarning_LinuxGuidance => Get("AudioWarning_LinuxGuidance");
 
     public static string AudioWarning_DefaultGuidance => Get("AudioWarning_DefaultGuidance");
+
+    public static string OpenFileError_Title => Get("OpenFileError_Title");
+
+    public static string OpenFileError_Heading => Get("OpenFileError_Heading");
+
+    public static string OpenFileError_TechnicalDetailLabel => Get("OpenFileError_TechnicalDetailLabel");
 
     public static string SubtitleZoneEditor_NewTitle => Get("SubtitleZoneEditor_NewTitle");
 

@@ -37,6 +37,7 @@ internal static class Program
                     services.AddSingleton(
                         context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
                         ?? new PlaybackTuningOptions());
+                    services.AddSingleton(new StartupOptions(args.Length > 0 ? args[0] : null));
                     services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
@@ -49,6 +50,7 @@ internal static class Program
                     services.AddTransient<HotkeysWindow>();
                     services.AddTransient<AboutWindow>();
                     services.AddTransient<AudioOutputWarningWindow>();
+                    services.AddTransient<OpenFileErrorWindow>();
                 })
                 .Build();
 
@@ -57,11 +59,6 @@ internal static class Program
             ApplyLanguageOverride(services.GetRequiredService<IUserSettingsService>().Current.Language);
 
             Log.Information("Application starting.");
-
-            if (args.Length > 0)
-            {
-                services.GetRequiredService<IMediaSessionRegistry>().Open(args[0]);
-            }
 
             BuildAvaloniaApp()
                 .AfterSetup(builder => ((App)builder.Instance!).Services = services)
