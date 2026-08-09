@@ -12,6 +12,8 @@ internal sealed unsafe class AudioPipeline : IDisposable
 {
     public int StreamIndex { get; }
 
+    public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
+
     private double _currentTimeSeconds;
     private double _speed = 1.0;
     private readonly AudioSpeedProcessor _speedProcessor = new();

@@ -138,6 +138,8 @@ public sealed partial class MainWindow : Window
     {
         registry.Current?.VideoFrameReady -= Render;
         registry.Current?.VideoFrameReady += Render;
+        registry.Current?.PlaybackEnded -= OnPlaybackEnded;
+        registry.Current?.PlaybackEnded += OnPlaybackEnded;
         _videoRenderSurface.Reset();
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
@@ -319,6 +321,11 @@ public sealed partial class MainWindow : Window
     private void Render(VideoFrame frame)
     {
         Dispatcher.UIThread.Post(() => _videoRenderSurface.Render(frame));
+    }
+
+    private void OnPlaybackEnded()
+    {
+        Dispatcher.UIThread.Post(() => IsPlaying = false);
     }
 
     private static string FormatTime(TimeSpan time)

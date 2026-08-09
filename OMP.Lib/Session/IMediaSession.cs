@@ -9,6 +9,8 @@ public interface IMediaSession : IDisposable
 {
     public event Action<VideoFrame>? VideoFrameReady;
 
+    public event Action? PlaybackEnded;
+
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }

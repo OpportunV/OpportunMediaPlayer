@@ -16,6 +16,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 {
     public event Action<VideoFrame>? VideoFrameReady;
 
+    public event Action? PlaybackEnded;
+
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
     public string? AudioOutputUnavailableReason { get; }
@@ -100,6 +102,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
     private int _seekGeneration;
+    private readonly EndOfStreamTracker _endOfStreamTracker = new();
 
     private const int NoVideoIdleSleepMs = 2;
     private const int FrameNotReadySleepMs = 1;
@@ -452,6 +455,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                 _clock.Rebase(targetSeconds);
                 _awaitingFirstFrame = true;
                 _pendingSeekTargetSeconds = targetSeconds;
+                _endOfStreamTracker.MarkStreamReadable();
 
                 _audioPipelines.ForEach(pipeline =>
                 {
@@ -498,6 +502,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         _subtitleWorker.Dispose();
 
         VideoFrameReady = null;
+        PlaybackEnded = null;
         ClearAudioPipelines();
         ClearSubtitlePipelines();
         _videoPipeline?.Dispose();
@@ -527,8 +532,12 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             if (readResult < 0)
             {
-                break;
+                _endOfStreamTracker.MarkEndOfStream();
+                worker.Pause();
+                continue;
             }
+
+            _endOfStreamTracker.MarkStreamReadable();
 
             var streamIndex = packet->stream_index;
             var generation = Volatile.Read(ref _seekGeneration);
@@ -680,6 +689,12 @@ internal sealed unsafe class MediaSession : IMediaSession
                 if (_videoPipeline is null)
                 {
                     PumpAudioOnly();
+
+                    if (_endOfStreamTracker.HasReachedEnd(HasPendingPlayableContent()))
+                    {
+                        HandlePlaybackEnded();
+                    }
+
                     Thread.Sleep(NoVideoIdleSleepMs);
                     continue;
                 }
@@ -697,6 +712,12 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 if (!_videoPipeline.TryPeek(out var frame))
                 {
+                    if (_endOfStreamTracker.HasReachedEnd(HasPendingPlayableContent()))
+                    {
+                        HandlePlaybackEnded();
+                        continue;
+                    }
+
                     Thread.Sleep(FrameNotReadySleepMs);
                     continue;
                 }
@@ -797,6 +818,25 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         var playbackTime = _clock.CurrentSeconds;
         _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
+    }
+
+    private bool HasPendingPlayableContent()
+    {
+        if (_videoPipeline is not null && _videoPipeline.TryPeek(out _))
+        {
+            return true;
+        }
+
+        return _audioPipelines.Any(p => p.HasBufferedAudio);
+    }
+
+    private void HandlePlaybackEnded()
+    {
+        Pause();
+        _clock.Rebase(Duration.TotalSeconds);
+
+        _logger.LogInformation("Reached end of stream for {FileName}.", FileName);
+        PlaybackEnded?.Invoke();
     }
 
     private void LogLoopError(Exception ex)
