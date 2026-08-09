@@ -47,6 +47,7 @@ internal static class Program
                     services.AddTransient<SubtitleZoneEditorWindow>();
                     services.AddTransient<HotkeysWindow>();
                     services.AddTransient<AboutWindow>();
+                    services.AddTransient<AudioOutputWarningWindow>();
                 })
                 .Build();
 

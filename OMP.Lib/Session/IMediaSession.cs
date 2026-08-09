@@ -13,6 +13,8 @@ public interface IMediaSession : IDisposable
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
+    public string? AudioOutputUnavailableReason { get; }
+
     public IReadOnlyList<AudioRoute> AudioRoutes { get; }
 
     public IReadOnlyList<SubtitleStream> SubtitleStreams { get; }

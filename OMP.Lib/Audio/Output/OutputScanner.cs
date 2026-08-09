@@ -6,6 +6,8 @@ namespace OMP.Lib.Audio.Output;
 
 internal sealed class OutputScanner(ILoggerFactory loggerFactory)
 {
+    public string? UnavailableReason { get; private set; }
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<OutputScanner>();
 
     public IReadOnlyList<AudioOutput> ScanOutputs()
@@ -36,6 +38,12 @@ internal sealed class OutputScanner(ILoggerFactory loggerFactory)
 
                 outputs.Add(new AudioOutput(deviceIndex, info.name));
             }
+        }
+        catch (DllNotFoundException ex)
+        {
+            UnavailableReason = ex.Message;
+            _logger.LogError(ex, "PortAudio native library failed to load.");
+            return [];
         }
         catch (Exception ex)
         {
