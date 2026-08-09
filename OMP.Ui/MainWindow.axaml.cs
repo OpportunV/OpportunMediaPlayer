@@ -322,7 +322,10 @@ public sealed partial class MainWindow : Window
     private void SetupButtons()
     {
         OpenMenuItem.Click += async (_, _) => await OpenFile();
+        OptionsMenuItem.Click += (_, _) => ShowOptionsWindow();
         ExitMenuItem.Click += (_, _) => Close();
+        HotkeysMenuItem.Click += (_, _) => _windowFactory.Create<HotkeysWindow>().Show(this);
+        AboutMenuItem.Click += (_, _) => _windowFactory.Create<AboutWindow>().ShowDialog(this);
 
         PlayPauseButton.Click += (_, _) => _commands.TogglePlayPause();
         StepBackButton.Click += (_, _) => _commands.StepBack();

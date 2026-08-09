@@ -12,6 +12,8 @@ public sealed class UserSettings
 
     public double PlaybackSpeed { get; set; } = 1.0;
 
+    public ThemeMode Theme { get; set; } = ThemeMode.System;
+
     public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
 
     public List<string> PreferredAudioOutputs { get; set; } = [];

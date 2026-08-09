@@ -3,6 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="clr-namespace:OMP.Ui"
     x:Class="OMP.Ui.MainWindow"
+    Icon="avares://OMP/Assets/app-icon.png"
     Width="1200"
     Height="800"
     x:DataType="ui:MainWindow">
@@ -12,8 +13,13 @@
         <Menu Name="TopMenu" Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open..." Name="OpenMenuItem" />
+                <MenuItem Header="_Options..." Name="OptionsMenuItem" />
                 <Separator />
                 <MenuItem Header="E_xit" Name="ExitMenuItem" />
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Keyboard Shortcuts..." Name="HotkeysMenuItem" />
+                <MenuItem Header="_About..." Name="AboutMenuItem" />
             </MenuItem>
         </Menu>
 
@@ -33,8 +39,20 @@
             <Border Name="OverlayControls"
                     Background="#66000000"
                     VerticalAlignment="Bottom"
-                    Padding="10"
+                    Padding="10,18,10,10"
                     Opacity="1">
+
+                <Border.Resources>
+                    <SolidColorBrush x:Key="ButtonBackground" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#4DFFFFFF" />
+                    <SolidColorBrush x:Key="ToggleButtonBackground" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#550078D4" />
+                    <SolidColorBrush x:Key="SliderTrackFill" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#44FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#55FFFFFF" />
+                </Border.Resources>
 
                 <Border.Transitions>
                     <Transitions>
@@ -109,6 +127,7 @@
 
                         <TextBlock Name="CurrentTimeLabel"
                                    Text="00:00"
+                                   Foreground="White"
                                    VerticalAlignment="Center"
                                    FontFamily="Consolas" />
                     </StackPanel>
@@ -127,6 +146,7 @@
 
                         <TextBlock Name="DurationLabel"
                                    Text="00:00"
+                                   Foreground="White"
                                    VerticalAlignment="Center"
                                    FontFamily="Consolas" />
 
@@ -186,6 +206,7 @@
                             <TextBlock Name="VolumeLabel"
                                        Text="100%"
                                        Width="38"
+                                       Foreground="White"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center" />
                         </StackPanel>
@@ -198,6 +219,7 @@
                                 ToolTip.Tip="Playback speed">
                             <TextBlock Name="SpeedLabel"
                                        Text="1x"
+                                       Foreground="White"
                                        FontFamily="Consolas"
                                        FontSize="13"
                                        HorizontalAlignment="Center"
