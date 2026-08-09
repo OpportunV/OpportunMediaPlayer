@@ -45,12 +45,17 @@ jobs:
             throw "Installer exe not found at artifacts\OMP-Setup-${{ env.VERSION }}.exe"
           }
 
+      - name: Flatten installer output
+        shell: pwsh
+        run: |
+          Move-Item "artifacts\OMP-Setup-${{ env.VERSION }}.exe" "OMP-Setup-${{ env.VERSION }}.exe"
+
       - uses: actions/upload-artifact@v7
         with:
           name: windows-artifacts
           path: |
             OMP-${{ env.VERSION }}-win-x64-portable.zip
-            artifacts/OMP-Setup-${{ env.VERSION }}.exe
+            OMP-Setup-${{ env.VERSION }}.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -105,5 +110,5 @@ jobs:
 
       - uses: softprops/action-gh-release@v3.0.2
         with:
-          files: dist/*
+          files: dist/**/*
           draft: true
