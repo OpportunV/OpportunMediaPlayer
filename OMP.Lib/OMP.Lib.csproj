@@ -19,15 +19,10 @@
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)..\stylecop.json" Link="stylecop.json" />
     </ItemGroup>
 
-    <ItemGroup>
-        <Content Condition="$([MSBuild]::IsOSPlatform('Windows'))" Include="Libs\win\**">
-            <Link>%(Filename)%(Extension)</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-        <Content Condition="$([MSBuild]::IsOSPlatform('Linux'))" Include="Libs\linux-x64\**">
-            <Link>%(Filename)%(Extension)</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
+    <!--FFmpeg native libs live here (next to the P/Invoke code that uses them) but are bundled
+    by OMP.Ui.csproj, not here - $(RuntimeIdentifier) does not flow into a referenced library
+    project's own Content items via ProjectReference (confirmed: even an explicit
+    `dotnet build OMP.Ui -r win-x64` copied nothing when this Content block lived in this file),
+    so RID-conditional bundling only works reliably in the project that is actually published.-->
 
 </Project>

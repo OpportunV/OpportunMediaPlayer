@@ -214,6 +214,32 @@ a native-backed resource like `WriteableBitmap`) implement `IDisposable` and get
 explicitly by whoever owns their lifetime (e.g. `MainWindow.OnClosed` disposes
 `FullscreenController` and `VideoRenderSurface`). Don't rely on GC/finalizers for these.
 
+## Native library bundling
+
+FFmpeg's (and, going forward, any other engine dependency's) native libs live under
+`OMP.Lib/Libs/<rid>/` — co-located with the P/Invoke code in `OMP.Lib` that consumes them — but
+the RID-conditional `Content`/`CopyToOutputDirectory` items that actually bundle them into a
+build live in `OMP.Ui.csproj`, not `OMP.Lib.csproj`, reaching into `OMP.Lib`'s `Libs` folder by
+relative path. This looks like it violates the file's own home, but it's forced: confirmed by
+testing that `$(RuntimeIdentifier)` does not reliably flow into a referenced library project's
+own item evaluation via `ProjectReference` — even an explicit `dotnet build OMP.Ui -r win-x64`
+copied nothing when the Content block lived in `OMP.Lib.csproj`. Only the project actually being
+published is guaranteed to have `$(RuntimeIdentifier)` resolved, so RID-conditional bundling has
+to be declared there.
+
+This also matters for cross-publishing — e.g. `dotnet publish -r linux-x64` run from a Windows
+host, as when testing via a VirtualBox shared folder. An `IsOSPlatform()`-based condition checks
+the build host's OS, not the target RID, and silently skips the target platform's libs in that
+scenario; `$(RuntimeIdentifier.StartsWith(...))` is the correct check, and it only works reliably
+in `OMP.Ui.csproj` for the reason above.
+
+`OMP.Ui.csproj` also pins `<PublishSingleFile>false</PublishSingleFile>` — `FFmpeg.AutoGen`'s
+`DynamicallyLoadedBindings` resolves native functions via `Marshal.GetDelegateForFunctionPointer`,
+which throws `NotSupportedException` when the app is bundled into a single file. A publish
+profile that passes `-p:PublishSingleFile=true` overrides this, so it isn't foolproof — if a
+Linux/macOS publish throws `NotSupportedException` out of `DynamicallyLoadedBindings.Initialize`,
+check for that first.
+
 ## Testing
 
 `OMP.Lib.Tests` covers logic that's genuinely unit-testable without FFmpeg or a real audio
