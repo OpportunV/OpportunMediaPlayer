@@ -36,11 +36,11 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     private readonly CancellationToken _cancellationToken;
     private readonly byte[] _managedBuffer = new byte[MaxResampledSamplesPerConvert * BytesPerSampleFrame];
-    private readonly WaveOutEvent _output;
+    private readonly IAudioOutput _output;
+    private readonly int _outputSampleRate;
     private readonly SwrContext* _swr;
     private readonly AVRational _timeBase;
 
-    private const int OutputSampleRate = 44100;
     private const int OutputBitsPerSample = 16;
     private const int OutputChannelCount = 2;
     private const int BytesPerSampleFrame = OutputChannelCount * OutputBitsPerSample / 8;
@@ -83,13 +83,16 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
         _frame = ffmpeg.av_frame_alloc();
 
+        _output = new PortAudioOutput(audioOutput.Id, loggerFactory);
+        _outputSampleRate = _output.PreferredSampleRate;
+
         _swr = ffmpeg.swr_alloc();
 
         AVChannelLayout outLayout;
         ffmpeg.av_channel_layout_default(&outLayout, OutputChannelCount);
 
         ffmpeg.av_opt_set_chlayout(_swr, "out_chlayout", &outLayout, 0);
-        ffmpeg.av_opt_set_int(_swr, "out_sample_rate", OutputSampleRate, 0);
+        ffmpeg.av_opt_set_int(_swr, "out_sample_rate", _outputSampleRate, 0);
         ffmpeg.av_opt_set_sample_fmt(_swr, "out_sample_fmt", AVSampleFormat.AV_SAMPLE_FMT_S16, 0);
 
         ffmpeg.av_opt_set_chlayout(_swr, "in_chlayout", &_codecContext->ch_layout, 0);
@@ -105,12 +108,12 @@ internal sealed unsafe class AudioPipeline : IDisposable
                 streamIndex,
                 _codecContext->sample_rate,
                 _codecContext->sample_fmt,
-                OutputSampleRate,
+                _outputSampleRate,
                 FFmpegError.Describe(resamplerResult));
             throw new ApplicationException("Could not initialize resampler.");
         }
 
-        var waveFormat = new WaveFormat(OutputSampleRate, OutputBitsPerSample, OutputChannelCount);
+        var waveFormat = new WaveFormat(_outputSampleRate, OutputBitsPerSample, OutputChannelCount);
 
         _buffer = new BufferedWaveProvider(waveFormat)
         {
@@ -119,19 +122,15 @@ internal sealed unsafe class AudioPipeline : IDisposable
         };
 
         _gainProvider = new GainWaveProvider(_buffer);
-
-        var deviceNumber = WaveOutDeviceResolver.Resolve(audioOutput.FriendlyName, _logger);
-
-        _output = new WaveOutEvent { DeviceNumber = deviceNumber };
         _output.Init(_gainProvider);
 
         _logger.LogDebug(
             "Audio pipeline built: stream {StreamIndex} -> '{FriendlyName}' " +
-            "(AudioOutput.Id {OutputId}, WaveOutEvent.DeviceNumber {DeviceNumber}).",
+            "(AudioOutput.Id {OutputId}, {OutputSampleRate}Hz).",
             streamIndex,
             audioOutput.FriendlyName,
             audioOutput.Id,
-            deviceNumber);
+            _outputSampleRate);
     }
 
     public void Dispose()
@@ -238,7 +237,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
                 }
 
                 var outBytes = dstSamples * BytesPerSampleFrame;
-                var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, OutputSampleRate);
+                var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, _outputSampleRate);
 
                 var chunkBytes = new byte[speedAdjustedBytes];
                 Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);

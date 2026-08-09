@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
-using NAudio.CoreAudioApi;
+using OMP.Lib.Interop;
+using PortAudioSharp;
 
 namespace OMP.Lib.Audio.Output;
 
@@ -13,11 +14,28 @@ internal sealed class OutputScanner(ILoggerFactory loggerFactory)
 
         try
         {
-            var enumerator = new MMDeviceEnumerator();
-            outputs = enumerator
-                .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-                .Select((device, i) => new AudioOutput(i, device.FriendlyName))
-                .ToList();
+            PortAudioEnvironment.EnsureInitialized(_logger);
+
+            var wasapiHostApiIndex = OperatingSystem.IsWindows()
+                ? PortAudioHostApi.TryGetWasapiHostApiIndex(_logger)
+                : null;
+
+            outputs = [];
+            for (var deviceIndex = 0; deviceIndex < PortAudio.DeviceCount; deviceIndex++)
+            {
+                var info = PortAudio.GetDeviceInfo(deviceIndex);
+                if (info.maxOutputChannels <= 0)
+                {
+                    continue;
+                }
+
+                if (wasapiHostApiIndex is { } wasapiIndex && info.hostApi != wasapiIndex)
+                {
+                    continue;
+                }
+
+                outputs.Add(new AudioOutput(deviceIndex, info.name));
+            }
         }
         catch (Exception ex)
         {

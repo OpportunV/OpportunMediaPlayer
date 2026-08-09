@@ -10,7 +10,8 @@
     <ItemGroup>
         <PackageReference Include="FFmpeg.AutoGen" Version="7.1.1" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-        <PackageReference Include="NAudio" Version="2.2.1" />
+        <PackageReference Include="NAudio.Core" Version="2.2.1" />
+        <PackageReference Include="PortAudioSharp2" Version="1.0.6" />
         <PackageReference Include="StyleCop.Analyzers.Unstable" Version="1.2.0.556" PrivateAssets="all" />
     </ItemGroup>
 
