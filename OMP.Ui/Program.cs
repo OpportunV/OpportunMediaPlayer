@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -53,6 +54,8 @@ internal static class Program
 
             var services = appHost.Services;
 
+            ApplyLanguageOverride(services.GetRequiredService<IUserSettingsService>().Current.Language);
+
             Log.Information("Application starting.");
 
             if (args.Length > 0)
@@ -81,4 +84,16 @@ internal static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private static void ApplyLanguageOverride(string? languageCode)
+    {
+        if (string.IsNullOrEmpty(languageCode))
+        {
+            return;
+        }
+
+        var culture = CultureInfo.GetCultureInfo(languageCode);
+        CultureInfo.CurrentUICulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+    }
 }

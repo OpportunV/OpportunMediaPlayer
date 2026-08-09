@@ -19,7 +19,7 @@ internal static class ThemeModeExt
         {
             ThemeMode.Light => Strings.ThemeMode_Light,
             ThemeMode.Dark => Strings.ThemeMode_Dark,
-            _ => Strings.ThemeMode_System,
+            _ => Strings.Common_SystemDefault,
         };
     }
 }

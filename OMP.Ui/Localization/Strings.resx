@@ -32,15 +32,17 @@
   <data name="Options_ThemeLabel" xml:space="preserve"><value>Theme:</value></data>
   <data name="Options_MuteOutputTooltip" xml:space="preserve"><value>Mute this output</value></data>
   <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed.</value></data>
-  <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. Top and Bottom are built in and can't be removed.</value></data>
+  <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. The first two zones are default and can't be removed.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>
   <data name="Options_ResetZoneTooltip" xml:space="preserve"><value>Restore this zone's default position, size and style</value></data>
   <data name="Options_AddZoneButton" xml:space="preserve"><value>+ New Zone</value></data>
+  <data name="Options_LanguageLabel" xml:space="preserve"><value>Language:</value></data>
+  <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Restart Now</value></data>
 
   <data name="ThemeMode_Light" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeMode_Dark" xml:space="preserve"><value>Dark</value></data>
-  <data name="ThemeMode_System" xml:space="preserve"><value>System (follow OS)</value></data>
+  <data name="Common_SystemDefault" xml:space="preserve"><value>System (follow OS)</value></data>
 
   <data name="Hotkeys_Title" xml:space="preserve"><value>Keyboard Shortcuts</value></data>
   <data name="Hotkeys_PlayPause" xml:space="preserve"><value>Play / pause</value></data>
@@ -81,8 +83,8 @@ sudo apt install libjack-jackd2-0</value>
   <data name="SubtitleZoneEditor_TextColorLabel" xml:space="preserve"><value>Text color:</value></data>
   <data name="SubtitleZoneEditor_BgColorLabel" xml:space="preserve"><value>Bg color:</value></data>
   <data name="SubtitleZoneEditor_BgOpacityLabel" xml:space="preserve"><value>Bg opacity:</value></data>
-  <data name="SubtitleZoneEditor_AlignHLabel" xml:space="preserve"><value>Align H:</value></data>
-  <data name="SubtitleZoneEditor_AlignVLabel" xml:space="preserve"><value>Align V:</value></data>
+  <data name="SubtitleZoneEditor_AlignHLabel" xml:space="preserve"><value>Horizontal alignment:</value></data>
+  <data name="SubtitleZoneEditor_AlignVLabel" xml:space="preserve"><value>Vertical alignment:</value></data>
   <data name="SubtitleZoneEditor_CancelButton" xml:space="preserve"><value>Cancel</value></data>
   <data name="SubtitleZoneEditor_SaveButton" xml:space="preserve"><value>Save</value></data>
   <data name="SubtitleZoneEditor_SamplePrefix" xml:space="preserve"><value>Sample subtitle text</value></data>
@@ -91,4 +93,11 @@ sudo apt install libjack-jackd2-0</value>
   <data name="SubtitleZoneEditor_SampleAnd" xml:space="preserve"><value> and </value></data>
   <data name="SubtitleZoneEditor_SampleItalic" xml:space="preserve"><value>italic</value></data>
   <data name="SubtitleZoneEditor_SampleStyles" xml:space="preserve"><value> styles</value></data>
+  <data name="SubtitleZoneEditor_DefaultZoneName" xml:space="preserve"><value>New Zone</value></data>
+
+  <data name="Common_AlignLeft" xml:space="preserve"><value>Left</value></data>
+  <data name="Common_AlignCenter" xml:space="preserve"><value>Center</value></data>
+  <data name="Common_AlignRight" xml:space="preserve"><value>Right</value></data>
+  <data name="Common_AlignTop" xml:space="preserve"><value>Top</value></data>
+  <data name="Common_AlignBottom" xml:space="preserve"><value>Bottom</value></data>
 </root>

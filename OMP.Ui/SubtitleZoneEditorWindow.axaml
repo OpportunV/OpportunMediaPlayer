@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        xmlns:models="clr-namespace:OMP.Ui.Models"
         x:Class="OMP.Ui.SubtitleZoneEditorWindow"
         Width="920"
         SizeToContent="Height"
@@ -77,74 +78,85 @@
                        FontSize="11"
                        Margin="0,-6,0,0" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_FontLabel}"
-                           Width="70"
-                           VerticalAlignment="Center" />
-                <ComboBox Name="FontFamilySelector"
-                          Width="200" />
-            </StackPanel>
+            <Grid ColumnDefinitions="Auto,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="10"
+                  RowSpacing="10">
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_SizeLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_FontLabel}"
                            VerticalAlignment="Center" />
-                <Slider Name="FontSizeSlider"
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          Name="FontFamilySelector"
+                          Width="200"
+                          HorizontalAlignment="Left" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_SizeLabel}"
+                           VerticalAlignment="Center" />
+                <Slider Grid.Row="1" Grid.Column="1"
+                        Name="FontSizeSlider"
                         Minimum="2"
                         Maximum="12"
-                        Width="200" />
-            </StackPanel>
+                        Width="200"
+                        HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_TextColorLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="2" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_TextColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Name="FontColorPicker"
+                <ColorPicker Grid.Row="2" Grid.Column="1"
+                             Name="FontColorPicker"
                              IsAlphaEnabled="False"
-                             Width="200" />
-            </StackPanel>
+                             Width="200"
+                             HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_BgColorLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="3" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_BgColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Name="BackgroundColorPicker"
+                <ColorPicker Grid.Row="3" Grid.Column="1"
+                             Name="BackgroundColorPicker"
                              IsAlphaEnabled="False"
-                             Width="200" />
-            </StackPanel>
+                             Width="200"
+                             HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_BgOpacityLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="4" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_BgOpacityLabel}"
                            VerticalAlignment="Center" />
-                <Slider Name="BackgroundOpacitySlider"
+                <Slider Grid.Row="4" Grid.Column="1"
+                        Name="BackgroundOpacitySlider"
                         Minimum="0"
                         Maximum="100"
-                        Width="200" />
-            </StackPanel>
+                        Width="200"
+                        HorizontalAlignment="Left" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignHLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="5" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignHLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Name="HorizontalAlignSelector"
-                          Width="200" />
-            </StackPanel>
+                <ComboBox Grid.Row="5" Grid.Column="1"
+                          Name="HorizontalAlignSelector"
+                          Width="200"
+                          HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:HorizontalAlignmentOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignVLabel}"
-                           Width="70"
+                <TextBlock Grid.Row="6" Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignVLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Name="VerticalAlignSelector"
-                          Width="200" />
-            </StackPanel>
+                <ComboBox Grid.Row="6" Grid.Column="1"
+                          Name="VerticalAlignSelector"
+                          Width="200"
+                          HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:VerticalAlignmentOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
 
             <StackPanel Orientation="Horizontal"
                         Spacing="10"

@@ -3,6 +3,7 @@ using System.Resources;
 
 namespace OMP.Ui.Localization;
 
+// ReSharper disable InconsistentNaming - property names mirror Strings.resx keys 1:1.
 internal static class Strings
 {
     public static string MainWindow_FileMenu => Get("MainWindow_FileMenu");
@@ -51,11 +52,15 @@ internal static class Strings
 
     public static string Options_AddZoneButton => Get("Options_AddZoneButton");
 
+    public static string Options_LanguageLabel => Get("Options_LanguageLabel");
+
+    public static string Options_LanguageRestartButton => Get("Options_LanguageRestartButton");
+
     public static string ThemeMode_Light => Get("ThemeMode_Light");
 
     public static string ThemeMode_Dark => Get("ThemeMode_Dark");
 
-    public static string ThemeMode_System => Get("ThemeMode_System");
+    public static string Common_SystemDefault => Get("Common_SystemDefault");
 
     public static string Hotkeys_Title => Get("Hotkeys_Title");
 
@@ -137,7 +142,20 @@ internal static class Strings
 
     public static string SubtitleZoneEditor_SampleStyles => Get("SubtitleZoneEditor_SampleStyles");
 
+    public static string SubtitleZoneEditor_DefaultZoneName => Get("SubtitleZoneEditor_DefaultZoneName");
+
+    public static string Common_AlignLeft => Get("Common_AlignLeft");
+
+    public static string Common_AlignCenter => Get("Common_AlignCenter");
+
+    public static string Common_AlignRight => Get("Common_AlignRight");
+
+    public static string Common_AlignTop => Get("Common_AlignTop");
+
+    public static string Common_AlignBottom => Get("Common_AlignBottom");
+
     private static readonly ResourceManager _resourceManager = new(typeof(Strings));
 
     private static string Get(string key) => _resourceManager.GetString(key, CultureInfo.CurrentUICulture) ?? key;
 }
+// ReSharper restore InconsistentNaming
