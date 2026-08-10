@@ -30,6 +30,11 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
             return;
         }
 
+        if (session.Duration > TimeSpan.Zero && session.CurrentTime >= session.Duration)
+        {
+            session.Seek(TimeSpan.Zero);
+        }
+
         session.Play();
         _context.SetIsPlaying(true);
     }
