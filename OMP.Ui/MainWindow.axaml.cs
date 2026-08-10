@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -101,6 +102,7 @@ public sealed partial class MainWindow : Window
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
+        SetupDragDrop();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
@@ -407,6 +409,36 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateSessionData();
+    }
+
+    private void SetupDragDrop()
+    {
+        AddHandler(DragDrop.DropEvent, OnFileDrop);
+        AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
+    }
+
+    private static void OnFileDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private async void OnFileDrop(object? sender, DragEventArgs e)
+    {
+        var path = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
+
+        if (path == null || !IsSupportedMediaFile(path))
+        {
+            return;
+        }
+
+        await OpenPath(path);
+    }
+
+    private static bool IsSupportedMediaFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+
+        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern => pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
     }
 
     private void UpdateSessionData()

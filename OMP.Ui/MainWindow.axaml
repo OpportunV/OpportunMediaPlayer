@@ -7,7 +7,8 @@
     Icon="avares://OMP/Assets/app-icon.png"
     Width="1200"
     Height="800"
-    x:DataType="ui:MainWindow">
+    x:DataType="ui:MainWindow"
+    DragDrop.AllowDrop="True">
 
     <Grid RowDefinitions="Auto,*">
 
