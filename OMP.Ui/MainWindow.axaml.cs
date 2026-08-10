@@ -55,6 +55,7 @@ public sealed partial class MainWindow : Window
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
     private int _lastKnownSubtitleRouteCount;
+    private int _sessionGeneration;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
@@ -138,6 +139,8 @@ public sealed partial class MainWindow : Window
 
     private void OnSessionChanged(IMediaSessionRegistry registry)
     {
+        _sessionGeneration++;
+
         registry.Current?.VideoFrameReady -= Render;
         registry.Current?.VideoFrameReady += Render;
         registry.Current?.PlaybackEnded -= OnPlaybackEnded;
@@ -322,7 +325,17 @@ public sealed partial class MainWindow : Window
 
     private void Render(VideoFrame frame)
     {
-        Dispatcher.UIThread.Post(() => _videoRenderSurface.Render(frame));
+        var generation = _sessionGeneration;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (generation != _sessionGeneration)
+            {
+                return;
+            }
+
+            _videoRenderSurface.Render(frame);
+        });
     }
 
     private void OnPlaybackEnded()
