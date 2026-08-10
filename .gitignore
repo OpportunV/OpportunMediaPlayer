@@ -10,6 +10,9 @@
 *.AppImage
 appimagetool-*.AppImage
 
+# Manually-generated format-coverage test clips (large binaries, not for commit)
+/test-fixtures/
+
 # dotenv files
 .env
 
