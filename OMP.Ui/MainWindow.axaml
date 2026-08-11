@@ -4,7 +4,7 @@
     xmlns:ui="clr-namespace:OMP.Ui"
     xmlns:loc="clr-namespace:OMP.Ui.Localization"
     x:Class="OMP.Ui.MainWindow"
-    Icon="avares://OMP/Assets/app-icon.png"
+    Icon="avares://OMP/Assets/app-icon.ico"
     Width="1200"
     Height="800"
     x:DataType="ui:MainWindow"
