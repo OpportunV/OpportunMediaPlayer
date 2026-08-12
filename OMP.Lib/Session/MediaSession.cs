@@ -121,7 +121,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         _audioChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.AudioChannelCapacity)
             {
-                FullMode = BoundedChannelFullMode.Wait
+                FullMode = BoundedChannelFullMode.DropOldest
             });
 
         _videoChannel = Channel.CreateBounded<PacketRef>(
@@ -378,6 +378,12 @@ internal sealed unsafe class MediaSession : IMediaSession
         if (!_clock.IsRunning)
         {
             _awaitingFirstFrame = true;
+
+            if (_videoPipeline is null)
+            {
+                _clock.Start();
+                _awaitingFirstFrame = false;
+            }
         }
 
         _demuxWorker.Resume();
@@ -434,7 +440,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             int seekResult;
             lock (_formatSync)
             {
-                seeked = TrySeekToTarget(seekTargetSeconds, out seekResult);
+                seeked = TrySeekToVideoTarget(seekTargetSeconds, out seekResult);
             }
 
             if (!seeked)
@@ -541,7 +547,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                 var cloned = ffmpeg.av_packet_alloc();
                 ffmpeg.av_packet_ref(cloned, packet);
                 var packetRef = new PacketRef(cloned, generation);
-                if (!_audioChannel.Writer.TryWriteBlocking(packetRef, _cancellationTokenSource.Token))
+                if (!_audioChannel.Writer.TryWrite(packetRef))
                 {
                     ffmpeg.av_packet_free(&cloned);
                 }
@@ -799,22 +805,15 @@ internal sealed unsafe class MediaSession : IMediaSession
             return;
         }
 
-        if (_awaitingFirstFrame)
+        lock (_seekSync)
         {
-            if (!HasPendingPlayableContent())
+            if (_pendingSeekTargetSeconds.HasValue)
             {
-                return;
+                _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
+                _pendingSeekTargetSeconds = null;
             }
 
-            lock (_seekSync)
-            {
-                var anchorSeconds = _pendingSeekTargetSeconds ?? 0;
-                _audioPipelines.ForEach(p => p.DiscardBefore(anchorSeconds));
-                _pendingSeekTargetSeconds = null;
-                _clock.Rebase(anchorSeconds);
-                _clock.Start();
-                _awaitingFirstFrame = false;
-            }
+            _awaitingFirstFrame = false;
         }
 
         var playbackTime = _clock.CurrentSeconds;
@@ -916,14 +915,32 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
-    private bool TrySeekToTarget(double targetSeconds, out int result)
+    private bool TrySeekToVideoTarget(double targetSeconds, out int result)
     {
-        var seekStreamIndex = _videoPipeline?.StreamIndex ?? _audioPipelines[0].StreamIndex;
-        var stream = _formatContext->streams[seekStreamIndex];
-        var targetPtsInStreamTimeBase = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(stream->time_base));
+        if (_videoPipeline is null)
+        {
+            var targetPts = (long)Math.Round(targetSeconds * ffmpeg.AV_TIME_BASE);
+            result = ffmpeg.av_seek_frame(
+                _formatContext,
+                -1,
+                targetPts,
+                ffmpeg.AVSEEK_FLAG_BACKWARD);
+
+            if (result >= 0)
+            {
+                ffmpeg.avformat_flush(_formatContext);
+                return true;
+            }
+
+            return false;
+        }
+
+        var stream = _formatContext->streams[_videoPipeline.StreamIndex];
+        var streamTimeBase = stream->time_base;
+        var targetPtsInStreamTimeBase = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(streamTimeBase));
         result = ffmpeg.av_seek_frame(
             _formatContext,
-            seekStreamIndex,
+            _videoPipeline.StreamIndex,
             targetPtsInStreamTimeBase,
             ffmpeg.AVSEEK_FLAG_BACKWARD);
 
