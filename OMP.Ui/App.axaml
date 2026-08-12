@@ -3,6 +3,16 @@
              x:Class="OMP.Ui.App"
              RequestedThemeVariant="Default">
 
+    <Application.Resources>
+        <Color x:Key="SystemAccentColor">#4FAE7C</Color>
+        <Color x:Key="SystemAccentColorLight1">#6FC494</Color>
+        <Color x:Key="SystemAccentColorLight2"> #8FDBAD</Color>
+        <Color x:Key="SystemAccentColorLight3">#AFEFC5</Color>
+        <Color x:Key="SystemAccentColorDark1">#3B8C63</Color>
+        <Color x:Key="SystemAccentColorDark2">#2A6A4A</Color>
+        <Color x:Key="SystemAccentColorDark3">#1B4A32</Color>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />

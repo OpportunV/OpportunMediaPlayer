@@ -44,18 +44,6 @@
                     Padding="10,18,10,10"
                     Opacity="1">
 
-                <Border.Resources>
-                    <SolidColorBrush x:Key="ButtonBackground" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#4DFFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackground" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#550078D4" />
-                    <SolidColorBrush x:Key="SliderTrackFill" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#44FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#55FFFFFF" />
-                </Border.Resources>
-
                 <Border.Transitions>
                     <Transitions>
                         <DoubleTransition Property="Opacity"
