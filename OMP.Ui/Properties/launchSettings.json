@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "OMP.Ui": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

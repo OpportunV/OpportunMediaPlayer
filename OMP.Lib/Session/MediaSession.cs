@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
@@ -98,20 +99,19 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly double _fpsSampleWindowMs;
     private int _videoFramesRendered;
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
+    private readonly Stopwatch _syncLogStopwatch = Stopwatch.StartNew();
     private bool _isPlaying;
     private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
     private int _seekGeneration;
     private readonly EndOfStreamTracker _endOfStreamTracker = new();
 
-    private const int NoVideoIdleSleepMs = 2;
-    private const int FrameNotReadySleepMs = 1;
-    private const int RenderErrorBackoffSleepMs = 5;
-    private const double MaxFrameLagSeconds = 0.2;
+    private const double MaxFrameLagSeconds = 0.05;
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
     private const double SeekFrameSkipEpsilonSeconds = 0.01;
     private const double SeekLookbackSeconds = 1;
     private const double LoopErrorLogIntervalMs = 5000;
+    private const double SyncLogIntervalMs = 1000;
 
     public MediaSession(string filePath, PlaybackTuningOptions options, ILoggerFactory loggerFactory)
     {
@@ -695,7 +695,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                         HandlePlaybackEnded();
                     }
 
-                    Thread.Sleep(NoVideoIdleSleepMs);
+                    Thread.Yield();
                     continue;
                 }
 
@@ -710,6 +710,8 @@ internal sealed unsafe class MediaSession : IMediaSession
                     _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
                 }
 
+                LogSyncDiagnosticsIfDue(playbackTime);
+
                 if (!_videoPipeline.TryPeek(out var frame))
                 {
                     if (_endOfStreamTracker.HasReachedEnd(HasPendingPlayableContent()))
@@ -718,7 +720,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                         continue;
                     }
 
-                    Thread.Sleep(FrameNotReadySleepMs);
+                    Thread.Yield();
                     continue;
                 }
 
@@ -772,7 +774,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 if (leadSeconds > EarlyFrameWaitThresholdSeconds)
                 {
-                    Thread.Sleep(FrameNotReadySleepMs);
+                    Thread.Yield();
                     continue;
                 }
 
@@ -791,7 +793,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             catch (Exception ex)
             {
                 LogLoopError(ex);
-                Thread.Sleep(RenderErrorBackoffSleepMs);
+                Thread.Yield();
             }
         }
 
@@ -818,6 +820,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         var playbackTime = _clock.CurrentSeconds;
         _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
+        LogSyncDiagnosticsIfDue(playbackTime);
     }
 
     private bool HasPendingPlayableContent()
@@ -863,6 +866,29 @@ internal sealed unsafe class MediaSession : IMediaSession
             _suppressedLoopErrors);
         _suppressedLoopErrors = 0;
         _loopErrorStopwatch.Restart();
+    }
+
+    private void LogSyncDiagnosticsIfDue(double clockSeconds)
+    {
+        if (_audioPipelines.Count == 0 || _syncLogStopwatch.ElapsedMilliseconds < SyncLogIntervalMs)
+        {
+            return;
+        }
+
+        _syncLogStopwatch.Restart();
+
+        var parts = new string[_audioPipelines.Count];
+        for (var i = 0; i < _audioPipelines.Count; i++)
+        {
+            var outputSeconds = _audioPipelines[i].OutputTimeSeconds;
+            var driftMs = (outputSeconds - clockSeconds) * 1000;
+            var friendlyName = i < _audioRoutes.Count ? _audioRoutes[i].Output.FriendlyName : "?";
+            parts[i] = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{friendlyName}={outputSeconds:F3}s(drift={driftMs:F0}ms)");
+        }
+
+        _logger.LogDebug("Sync: clock={ClockSeconds:F3}s, outputs=[{Outputs}].", clockSeconds, string.Join(", ", parts));
     }
 
     private void ApplyVolumeToPipelines()
