@@ -6,6 +6,8 @@ internal interface IAudioOutput : IDisposable
 {
     public int PreferredSampleRate { get; }
 
+    public double OutputLatencySeconds { get; }
+
     public void Init(IWaveProvider source);
 
     public void Play();

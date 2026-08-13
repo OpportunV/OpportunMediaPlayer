@@ -11,6 +11,8 @@ internal sealed class PortAudioOutput : IAudioOutput
 {
     public int PreferredSampleRate { get; }
 
+    public double OutputLatencySeconds { get; private set; }
+
     private readonly int _deviceIndex;
     private readonly ILogger _logger;
 
@@ -74,7 +76,8 @@ internal sealed class PortAudioOutput : IAudioOutput
             _stream = Open(PortAudio.FramesPerBufferUnspecified);
         }
 
-        PortAudioStreamInfo.LogNegotiatedLatency(_stream, _logger);
+        PortAudioStreamInfo.TryGetNegotiatedOutputLatencySeconds(_stream, _logger, out var outputLatencySeconds);
+        OutputLatencySeconds = outputLatencySeconds;
     }
 
     public void Play()

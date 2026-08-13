@@ -110,6 +110,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double SeekLookbackSeconds = 1;
     private const double LoopErrorLogIntervalMs = 5000;
     private const double SyncLogIntervalMs = 1000;
+    private const double MaxAudioSyncDivergenceSeconds = 2;
 
     public MediaSession(string filePath, PlaybackTuningOptions options, ILoggerFactory loggerFactory)
     {
@@ -708,7 +709,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                     continue;
                 }
 
-                var leadSeconds = frame.TimeSeconds - playbackTime;
+                var leadSeconds = frame.TimeSeconds - GetVideoSyncReferenceSeconds(playbackTime);
 
                 if (leadSeconds < -MaxFrameLagSeconds)
                 {
@@ -773,6 +774,17 @@ internal sealed unsafe class MediaSession : IMediaSession
                 }
             }
         }
+    }
+
+    private double GetVideoSyncReferenceSeconds(double clockSeconds)
+    {
+        if (_audioPipelines.Count == 0)
+        {
+            return clockSeconds;
+        }
+
+        var audioSeconds = _audioPipelines[0].OutputTimeSeconds;
+        return Math.Abs(audioSeconds - clockSeconds) <= MaxAudioSyncDivergenceSeconds ? audioSeconds : clockSeconds;
     }
 
     private bool HasPendingPlayableContent()

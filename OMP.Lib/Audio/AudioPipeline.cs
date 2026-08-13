@@ -17,10 +17,14 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public bool HasDecodedChunkReady => _decodedPcmChannel.Reader.Count > 0;
 
     public double OutputTimeSeconds =>
-        Math.Max(0, _lastBufferedTimeSeconds - (double)_buffer.BufferedBytes / (_outputSampleRate * BytesPerSampleFrame));
+        Math.Max(
+            0,
+            _bufferedThroughSeconds -
+            (double)_buffer.BufferedBytes / (_outputSampleRate * BytesPerSampleFrame) * _speed -
+            _output.OutputLatencySeconds * _speed);
 
     private double _currentTimeSeconds;
-    private double _lastBufferedTimeSeconds;
+    private double _bufferedThroughSeconds;
     private double _speed = 1.0;
     private readonly AudioSpeedProcessor _speedProcessor = new();
     private readonly ILogger _logger;
@@ -288,7 +292,8 @@ internal sealed unsafe class AudioPipeline : IDisposable
             try
             {
                 _buffer.AddSamples(chunk.Data, 0, chunk.Length);
-                _lastBufferedTimeSeconds = chunk.TimeSeconds;
+                _bufferedThroughSeconds =
+                    chunk.TimeSeconds + (double)chunk.Length / (_outputSampleRate * BytesPerSampleFrame) * _speed;
             }
             catch (InvalidOperationException)
             {
@@ -346,7 +351,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public void ResetClock(double timeSeconds)
     {
         _currentTimeSeconds = Math.Max(0, timeSeconds);
-        _lastBufferedTimeSeconds = _currentTimeSeconds;
+        _bufferedThroughSeconds = _currentTimeSeconds;
     }
 
     public void SetSpeed(double speed)

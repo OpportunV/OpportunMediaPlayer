@@ -14,17 +14,20 @@ internal static class PortAudioStreamInfo
     private const int OutputLatencyOffset = 16;
     private const int SampleRateOffset = 24;
 
-    public static void LogNegotiatedLatency(PortAudioStream stream, ILogger logger)
+    public static bool TryGetNegotiatedOutputLatencySeconds(
+        PortAudioStream stream, ILogger logger, out double outputLatencySeconds)
     {
         if (_streamPtrField?.GetValue(stream) is not IntPtr streamPtr || streamPtr == IntPtr.Zero)
         {
             logger.LogDebug("Could not resolve the native PortAudio stream handle to report negotiated latency.");
-            return;
+            outputLatencySeconds = 0;
+            return false;
         }
 
         if (!NativeLibrary.TryLoad("portaudio", out var handle))
         {
-            return;
+            outputLatencySeconds = 0;
+            return false;
         }
 
         var getStreamInfo = Marshal.GetDelegateForFunctionPointer<GetStreamInfoDelegate>(
@@ -34,12 +37,13 @@ internal static class PortAudioStreamInfo
         if (infoPtr == IntPtr.Zero)
         {
             logger.LogDebug("PortAudio returned no stream info; cannot report negotiated latency.");
-            return;
+            outputLatencySeconds = 0;
+            return false;
         }
 
         var inputLatencySeconds = ReadDouble(infoPtr, InputLatencyOffset);
-        var outputLatencySeconds = ReadDouble(infoPtr, OutputLatencyOffset);
         var sampleRate = ReadDouble(infoPtr, SampleRateOffset);
+        outputLatencySeconds = ReadDouble(infoPtr, OutputLatencyOffset);
 
         logger.LogDebug(
             "PortAudio negotiated stream: outputLatency={OutputLatencyMs:F1}ms, " +
@@ -47,6 +51,8 @@ internal static class PortAudioStreamInfo
             outputLatencySeconds * 1000,
             inputLatencySeconds * 1000,
             sampleRate);
+
+        return true;
     }
 
     private static double ReadDouble(IntPtr ptr, int offset) =>
