@@ -101,14 +101,12 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
     private readonly Stopwatch _syncLogStopwatch = Stopwatch.StartNew();
     private bool _isPlaying;
-    private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
     private int _seekGeneration;
     private readonly EndOfStreamTracker _endOfStreamTracker = new();
 
     private const double MaxFrameLagSeconds = 0.05;
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
-    private const double SeekFrameSkipEpsilonSeconds = 0.01;
     private const double SeekLookbackSeconds = 1;
     private const double LoopErrorLogIntervalMs = 5000;
     private const double SyncLogIntervalMs = 1000;
@@ -374,17 +372,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     public void Play()
     {
         _isPlaying = true;
-
-        if (!_clock.IsRunning)
-        {
-            _awaitingFirstFrame = true;
-
-            if (_videoPipeline is null)
-            {
-                _clock.Start();
-                _awaitingFirstFrame = false;
-            }
-        }
+        _clock.Start();
 
         _demuxWorker.Resume();
         _audioWorker.Resume();
@@ -453,7 +441,6 @@ internal sealed unsafe class MediaSession : IMediaSession
             else
             {
                 _clock.Rebase(targetSeconds);
-                _awaitingFirstFrame = true;
                 _pendingSeekTargetSeconds = targetSeconds;
                 _endOfStreamTracker.MarkStreamReadable();
 
@@ -699,13 +686,10 @@ internal sealed unsafe class MediaSession : IMediaSession
                     continue;
                 }
 
-                if (_awaitingFirstFrame && _pendingSeekTargetSeconds.HasValue)
-                {
-                    _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
-                }
-
+                ConsumePendingSeekTarget();
                 var playbackTime = _clock.CurrentSeconds;
-                if (_audioPipelines.Count > 0 && !_awaitingFirstFrame)
+
+                if (_audioPipelines.Count > 0)
                 {
                     _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
                 }
@@ -722,46 +706,6 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                     Thread.Yield();
                     continue;
-                }
-
-                if (_awaitingFirstFrame)
-                {
-                    bool skipFrame;
-                    lock (_seekSync)
-                    {
-                        if (_pendingSeekTargetSeconds.HasValue)
-                        {
-                            var pendingSeekTargetSeconds = _pendingSeekTargetSeconds.Value;
-
-                            if (frame.TimeSeconds + SeekFrameSkipEpsilonSeconds < pendingSeekTargetSeconds)
-                            {
-                                skipFrame = true;
-                            }
-                            else
-                            {
-                                _clock.Rebase(pendingSeekTargetSeconds);
-                                _pendingSeekTargetSeconds = null;
-                                _clock.Start();
-                                _awaitingFirstFrame = false;
-                                skipFrame = false;
-                            }
-                        }
-                        else
-                        {
-                            _clock.Rebase(frame.TimeSeconds);
-                            _clock.Start();
-                            _awaitingFirstFrame = false;
-                            skipFrame = false;
-                        }
-                    }
-
-                    if (skipFrame)
-                    {
-                        _videoPipeline.Pop();
-                        continue;
-                    }
-
-                    playbackTime = _clock.CurrentSeconds;
                 }
 
                 var leadSeconds = frame.TimeSeconds - playbackTime;
@@ -807,20 +751,28 @@ internal sealed unsafe class MediaSession : IMediaSession
             return;
         }
 
-        lock (_seekSync)
-        {
-            if (_pendingSeekTargetSeconds.HasValue)
-            {
-                _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
-                _pendingSeekTargetSeconds = null;
-            }
-
-            _awaitingFirstFrame = false;
-        }
+        ConsumePendingSeekTarget();
 
         var playbackTime = _clock.CurrentSeconds;
         _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
         LogSyncDiagnosticsIfDue(playbackTime);
+    }
+
+    private void ConsumePendingSeekTarget()
+    {
+        lock (_seekSync)
+        {
+            if (_pendingSeekTargetSeconds.HasValue)
+            {
+                var targetSeconds = _pendingSeekTargetSeconds.Value;
+                _audioPipelines.ForEach(p => p.DiscardBefore(targetSeconds));
+
+                if (_audioPipelines.Count == 0 || _audioPipelines.All(p => p.HasDecodedChunkReady))
+                {
+                    _pendingSeekTargetSeconds = null;
+                }
+            }
+        }
     }
 
     private bool HasPendingPlayableContent()

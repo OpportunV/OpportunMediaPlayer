@@ -14,8 +14,10 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
 
+    public bool HasDecodedChunkReady => _decodedPcmChannel.Reader.Count > 0;
+
     public double OutputTimeSeconds =>
-        Math.Max(0, _lastBufferedTimeSeconds - ((double)_buffer.BufferedBytes / (_outputSampleRate * BytesPerSampleFrame)));
+        Math.Max(0, _lastBufferedTimeSeconds - (double)_buffer.BufferedBytes / (_outputSampleRate * BytesPerSampleFrame));
 
     private double _currentTimeSeconds;
     private double _lastBufferedTimeSeconds;
