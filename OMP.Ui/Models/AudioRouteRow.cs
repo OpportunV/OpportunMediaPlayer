@@ -4,7 +4,8 @@ using OMP.Ui.Extensions;
 
 namespace OMP.Ui.Models;
 
-internal sealed class AudioRouteRow(AudioRoute route, double volume, bool muted) : INotifyPropertyChanged
+internal sealed class AudioRouteRow(AudioRoute route, double volume, bool muted, double? delayMs)
+    : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -32,4 +33,19 @@ internal sealed class AudioRouteRow(AudioRoute route, double volume, bool muted)
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Volume)));
         }
     } = volume;
+
+    public double? DelayMs
+    {
+        get;
+        set
+        {
+            if (field.Equals(value))
+            {
+                return;
+            }
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DelayMs)));
+        }
+    } = delayMs;
 }

@@ -32,6 +32,11 @@
   <data name="Options_SubtitleZonesTab" xml:space="preserve"><value>Subtitle Zones</value></data>
   <data name="Options_ThemeLabel" xml:space="preserve"><value>Theme:</value></data>
   <data name="Options_MuteOutputTooltip" xml:space="preserve"><value>Mute this output</value></data>
+  <data name="Options_DelayMsTooltip" xml:space="preserve"><value>Manual audio delay for this output, in milliseconds (negative plays earlier)</value></data>
+  <data name="Options_StreamHeader" xml:space="preserve"><value>Stream</value></data>
+  <data name="Options_OutputHeader" xml:space="preserve"><value>Output</value></data>
+  <data name="Options_VolumeHeader" xml:space="preserve"><value>Volume</value></data>
+  <data name="Options_DelayMsHeader" xml:space="preserve"><value>Delay (ms)</value></data>
   <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed.</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. The first two zones are default and can't be removed.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>

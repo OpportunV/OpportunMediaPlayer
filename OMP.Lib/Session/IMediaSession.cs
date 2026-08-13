@@ -25,6 +25,8 @@ public interface IMediaSession : IDisposable
 
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes { get; }
 
+    public IReadOnlyDictionary<int, double> OutputDelays { get; }
+
     public TimeSpan CurrentTime { get; }
 
     public TimeSpan Duration { get; }
@@ -66,4 +68,6 @@ public interface IMediaSession : IDisposable
     public void SetOutputVolume(int outputId, double volume);
 
     public void SetOutputMuted(int outputId, bool muted);
+
+    public void SetOutputDelay(int outputId, double delaySeconds);
 }

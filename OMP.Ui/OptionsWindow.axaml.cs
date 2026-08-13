@@ -53,7 +53,11 @@ public sealed partial class OptionsWindow : Window
                 ? state
                 : new OutputVolumeState(1.0, false);
 
-            _audioRouteRows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted));
+            var delayMs = session.OutputDelays.TryGetValue(route.Output.Id, out var delaySeconds)
+                ? delaySeconds * 1000
+                : (double?)null;
+
+            _audioRouteRows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted, delayMs));
         }
 
         foreach (var zone in _settings.Current.SubtitleZones)
@@ -160,7 +164,11 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        _audioRouteRows.Add(new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false));
+        var savedDelayMs = _settings.Current.OutputVolumes
+            .FirstOrDefault(o => o.FriendlyName == output.FriendlyName)?.DelayMs;
+
+        _audioRouteRows.Add(
+            new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false, savedDelayMs));
         UpdateOutputSelector();
         RefreshRows();
         ApplyAndPersistRoutes();
@@ -187,7 +195,7 @@ public sealed partial class OptionsWindow : Window
         }
 
         _mediaSessionRegistry.Current?.SetOutputVolume(row.Route.Output.Id, e.NewValue / 100);
-        UpsertOutputVolumeSetting(row.Route.Output, e.NewValue, row.Muted);
+        UpsertOutputVolumeSetting(row.Route.Output, e.NewValue, row.Muted, row.DelayMs);
     }
 
     private void OnRouteVolumeReleased(object? sender, PointerCaptureLostEventArgs e)
@@ -204,7 +212,21 @@ public sealed partial class OptionsWindow : Window
 
         var muted = toggle.IsChecked == true;
         _mediaSessionRegistry.Current?.SetOutputMuted(row.Route.Output.Id, muted);
-        UpsertOutputVolumeSetting(row.Route.Output, row.Volume, muted);
+        UpsertOutputVolumeSetting(row.Route.Output, row.Volume, muted, row.DelayMs);
+
+        _settings.Save();
+    }
+
+    private void OnRouteDelayChanged(object? sender, NumericUpDownValueChangedEventArgs e)
+    {
+        if (((Control)sender!).DataContext is not AudioRouteRow row)
+        {
+            return;
+        }
+
+        var delayMs = (double)(e.NewValue ?? 0);
+        _mediaSessionRegistry.Current?.SetOutputDelay(row.Route.Output.Id, delayMs / 1000.0);
+        UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, delayMs);
 
         _settings.Save();
     }
@@ -369,7 +391,7 @@ public sealed partial class OptionsWindow : Window
 
         foreach (var row in _audioRouteRows)
         {
-            UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted);
+            UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, row.DelayMs);
         }
 
         _settings.Save();
@@ -381,7 +403,7 @@ public sealed partial class OptionsWindow : Window
         _settings.Save();
     }
 
-    private void UpsertOutputVolumeSetting(AudioOutput output, double volumePercent, bool muted)
+    private void UpsertOutputVolumeSetting(AudioOutput output, double volumePercent, bool muted, double? delayMs)
     {
         var existing = _settings.Current.OutputVolumes
             .FirstOrDefault(o => o.FriendlyName == output.FriendlyName);
@@ -394,6 +416,7 @@ public sealed partial class OptionsWindow : Window
 
         existing.Volume = volumePercent / 100;
         existing.Muted = muted;
+        existing.DelayMs = delayMs ?? 0;
     }
 
     private void UpdateOutputSelector()

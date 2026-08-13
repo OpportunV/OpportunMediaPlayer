@@ -273,6 +273,7 @@ public sealed partial class MainWindow : Window
 
             session.SetOutputVolume(output.Id, saved.Volume);
             session.SetOutputMuted(output.Id, saved.Muted);
+            session.SetOutputDelay(output.Id, saved.DelayMs / 1000.0);
         }
     }
 

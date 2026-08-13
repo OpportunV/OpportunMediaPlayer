@@ -42,6 +42,16 @@ internal static class Strings
 
     public static string Options_MuteOutputTooltip => Get("Options_MuteOutputTooltip");
 
+    public static string Options_DelayMsTooltip => Get("Options_DelayMsTooltip");
+
+    public static string Options_StreamHeader => Get("Options_StreamHeader");
+
+    public static string Options_OutputHeader => Get("Options_OutputHeader");
+
+    public static string Options_VolumeHeader => Get("Options_VolumeHeader");
+
+    public static string Options_DelayMsHeader => Get("Options_DelayMsHeader");
+
     public static string Options_SubtitlesHelpText => Get("Options_SubtitlesHelpText");
 
     public static string Options_ZonesHelpText => Get("Options_ZonesHelpText");

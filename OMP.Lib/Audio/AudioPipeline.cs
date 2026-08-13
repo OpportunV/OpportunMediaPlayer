@@ -5,6 +5,8 @@ using NAudio.Wave;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Extensions;
 using OMP.Lib.Interop;
+using OMP.Lib.Session;
+using OMP.Lib.Threading;
 
 namespace OMP.Lib.Audio;
 
@@ -25,6 +27,7 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     private double _currentTimeSeconds;
     private double _bufferedThroughSeconds;
+    private double _userDelaySeconds;
     private double _speed = 1.0;
     private readonly AudioSpeedProcessor _speedProcessor = new();
     private readonly ILogger _logger;
@@ -40,13 +43,17 @@ internal sealed unsafe class AudioPipeline : IDisposable
             SingleWriter = true
         });
 
+    private readonly Channel<PacketRef> _packetChannel;
+    private readonly PipelineWorker _decodeWorker;
+    private readonly CancellationTokenSource _pipelineCts;
+    private readonly Func<int> _getSeekGeneration;
+
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
     private readonly BufferedWaveProvider _buffer;
     private readonly GainWaveProvider _gainProvider;
     private readonly Lock _decodeSync = new();
 
-    private readonly CancellationToken _cancellationToken;
     private readonly byte[] _managedBuffer = new byte[MaxResampledSamplesPerConvert * BytesPerSampleFrame];
     private readonly IAudioOutput _output;
     private readonly int _outputSampleRate;
@@ -61,11 +68,19 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const double BufferHighWaterMarkRatio = 0.9;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, AudioOutput audioOutput,
-        CancellationToken cancellationToken, int bufferDurationSeconds, ILoggerFactory loggerFactory)
+        CancellationToken cancellationToken, int bufferDurationSeconds, int packetChannelCapacity,
+        Func<int> getSeekGeneration, ILoggerFactory loggerFactory)
     {
-        _cancellationToken = cancellationToken;
+        _pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _getSeekGeneration = getSeekGeneration;
         _logger = loggerFactory.CreateLogger<AudioPipeline>();
         StreamIndex = streamIndex;
+
+        _packetChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(packetChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest
+            });
 
         var stream = formatContext->streams[streamIndex];
         var codec = ffmpeg.avcodec_find_decoder(stream->codecpar->codec_id);
@@ -143,10 +158,24 @@ internal sealed unsafe class AudioPipeline : IDisposable
             audioOutput.FriendlyName,
             audioOutput.Id,
             _outputSampleRate);
+
+        _decodeWorker = new PipelineWorker(PipelineWorkerRole.Audio, _pipelineCts.Token);
+        _decodeWorker.Pause();
+        _decodeWorker.Start(DecodeLoop);
     }
 
     public void Dispose()
     {
+        _pipelineCts.Cancel();
+        _decodeWorker.Join();
+        _decodeWorker.Dispose();
+
+        while (_packetChannel.Reader.TryRead(out var packetRef))
+        {
+            var packet = packetRef.Packet;
+            ffmpeg.av_packet_free(&packet);
+        }
+
         if (_sendPacketFailures > 0)
         {
             _logger.LogWarning(
@@ -179,100 +208,26 @@ internal sealed unsafe class AudioPipeline : IDisposable
         {
             ffmpeg.swr_free(swr);
         }
+
+        _pipelineCts.Dispose();
     }
 
-    public void Enqueue(AVPacket* packet)
-    {
-        int sendResult;
-        lock (_decodeSync)
-        {
-            sendResult = ffmpeg.avcodec_send_packet(_codecContext, packet);
-        }
-
-        if (sendResult < 0 && !FFmpegError.IsRetryOrEof(sendResult))
-        {
-            if (Interlocked.Increment(ref _sendPacketFailures) == 1)
-            {
-                _logger.LogWarning(
-                    "Audio stream {StreamIndex}: decode submission failed: {Error}. " +
-                    "Further occurrences are counted and reported on close.",
-                    StreamIndex,
-                    FFmpegError.Describe(sendResult));
-            }
-        }
-
-        fixed (byte* outPtr = _managedBuffer)
-        {
-            var outPtrs = stackalloc byte*[1];
-            outPtrs[0] = outPtr;
-
-            while (!_cancellationToken.IsCancellationRequested)
-            {
-                int dstSamples;
-                lock (_decodeSync)
-                {
-                    if (ffmpeg.avcodec_receive_frame(_codecContext, _frame) != 0)
-                    {
-                        break;
-                    }
-
-                    if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
-                    {
-                        _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
-                    }
-
-                    dstSamples = ffmpeg.swr_convert(
-                        _swr,
-                        outPtrs,
-                        MaxResampledSamplesPerConvert,
-                        _frame->extended_data,
-                        _frame->nb_samples);
-                }
-
-                if (dstSamples < 0)
-                {
-                    if (Interlocked.Increment(ref _resampleFailures) == 1)
-                    {
-                        _logger.LogWarning(
-                            "Audio stream {StreamIndex}: resample failed: {Error}. " +
-                            "Further occurrences are counted and reported on close.",
-                            StreamIndex,
-                            FFmpegError.Describe(dstSamples));
-                    }
-
-                    continue;
-                }
-
-                if (dstSamples == 0)
-                {
-                    continue;
-                }
-
-                var outBytes = dstSamples * BytesPerSampleFrame;
-                var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, _outputSampleRate);
-
-                var chunkBytes = new byte[speedAdjustedBytes];
-                Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
-                var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
-                if (!_decodedPcmChannel.Writer.TryWriteBlocking(chunk, _cancellationToken))
-                {
-                    break;
-                }
-            }
-        }
-    }
+    public bool TryEnqueuePacket(PacketRef packetRef) => _packetChannel.Writer.TryWrite(packetRef);
 
     public void PumpToOutput(double targetMediaTimeSeconds)
     {
+        var delayedTargetSeconds = AudioDelayProcessor.ComputeDelayedTargetSeconds(
+            targetMediaTimeSeconds, _userDelaySeconds, _output.OutputLatencySeconds, _speed);
+
         while (_decodedPcmChannel.Reader.TryPeek(out var chunk))
         {
-            if (chunk.TimeSeconds < targetMediaTimeSeconds - PumpWindowSeconds)
+            if (chunk.TimeSeconds < delayedTargetSeconds - PumpWindowSeconds)
             {
                 _decodedPcmChannel.Reader.TryRead(out _);
                 continue;
             }
 
-            if (chunk.TimeSeconds > targetMediaTimeSeconds + PumpWindowSeconds)
+            if (chunk.TimeSeconds > delayedTargetSeconds + PumpWindowSeconds)
             {
                 break;
             }
@@ -323,14 +278,18 @@ internal sealed unsafe class AudioPipeline : IDisposable
         }
     }
 
+    public void ResumeDecoding() => _decodeWorker.Resume();
+
     public void Play()
     {
+        _decodeWorker.Resume();
         _output.Play();
     }
 
     public void Pause()
     {
         _output.Pause();
+        _decodeWorker.Pause();
     }
 
     public void Flush()
@@ -340,6 +299,12 @@ internal sealed unsafe class AudioPipeline : IDisposable
             ffmpeg.avcodec_flush_buffers(_codecContext);
             ffmpeg.swr_close(_swr);
             ffmpeg.swr_init(_swr);
+        }
+
+        while (_packetChannel.Reader.TryRead(out var packetRef))
+        {
+            var packet = packetRef.Packet;
+            ffmpeg.av_packet_free(&packet);
         }
 
         _buffer.ClearBuffer();
@@ -362,5 +327,118 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public void SetAmplitude(float amplitude)
     {
         _gainProvider.Amplitude = amplitude;
+    }
+
+    public void SetDelay(double delaySeconds)
+    {
+        _userDelaySeconds = delaySeconds;
+    }
+
+    private void Decode(AVPacket* packet)
+    {
+        int sendResult;
+        lock (_decodeSync)
+        {
+            sendResult = ffmpeg.avcodec_send_packet(_codecContext, packet);
+        }
+
+        if (sendResult < 0 && !FFmpegError.IsRetryOrEof(sendResult))
+        {
+            if (Interlocked.Increment(ref _sendPacketFailures) == 1)
+            {
+                _logger.LogWarning(
+                    "Audio stream {StreamIndex}: decode submission failed: {Error}. " +
+                    "Further occurrences are counted and reported on close.",
+                    StreamIndex,
+                    FFmpegError.Describe(sendResult));
+            }
+        }
+
+        fixed (byte* outPtr = _managedBuffer)
+        {
+            var outPtrs = stackalloc byte*[1];
+            outPtrs[0] = outPtr;
+
+            var cts = _pipelineCts.Token;
+            while (!cts.IsCancellationRequested)
+            {
+                int dstSamples;
+                lock (_decodeSync)
+                {
+                    if (ffmpeg.avcodec_receive_frame(_codecContext, _frame) != 0)
+                    {
+                        break;
+                    }
+
+                    if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
+                    {
+                        _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
+                    }
+
+                    dstSamples = ffmpeg.swr_convert(
+                        _swr,
+                        outPtrs,
+                        MaxResampledSamplesPerConvert,
+                        _frame->extended_data,
+                        _frame->nb_samples);
+                }
+
+                if (dstSamples < 0)
+                {
+                    if (Interlocked.Increment(ref _resampleFailures) == 1)
+                    {
+                        _logger.LogWarning(
+                            "Audio stream {StreamIndex}: resample failed: {Error}. " +
+                            "Further occurrences are counted and reported on close.",
+                            StreamIndex,
+                            FFmpegError.Describe(dstSamples));
+                    }
+
+                    continue;
+                }
+
+                if (dstSamples == 0)
+                {
+                    continue;
+                }
+
+                var outBytes = dstSamples * BytesPerSampleFrame;
+                var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, _outputSampleRate);
+
+                var chunkBytes = new byte[speedAdjustedBytes];
+                Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
+                var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
+                if (!_decodedPcmChannel.Writer.TryWriteBlocking(chunk, cts))
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private void DecodeLoop(PipelineWorker worker)
+    {
+        while (!_pipelineCts.IsCancellationRequested)
+        {
+            if (!worker.TryWaitIfPaused())
+            {
+                break;
+            }
+
+            if (!_packetChannel.Reader.TryReadBlocking(out var packetRef, _pipelineCts.Token))
+            {
+                break;
+            }
+
+            var packet = packetRef.Packet;
+            if (packetRef.Generation == _getSeekGeneration())
+            {
+                Decode(packet);
+            }
+
+            ffmpeg.av_packet_free(&packet);
+        }
+
+        _logger.LogDebug("{Role} worker stopping for audio stream {StreamIndex}.", worker.Role, StreamIndex);
     }
 }

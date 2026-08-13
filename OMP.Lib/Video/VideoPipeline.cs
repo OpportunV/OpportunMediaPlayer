@@ -12,6 +12,7 @@ internal sealed unsafe class VideoPipeline : IDisposable
 {
     public int StreamIndex { get; }
     public double DecodeFps { get; private set; }
+    public bool HasDecodedFrameReady => _frameChannel.Reader.Count > 0;
 
     private readonly ILogger _logger;
     private int _sendPacketFailures;
