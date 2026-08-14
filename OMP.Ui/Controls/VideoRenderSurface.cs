@@ -2,7 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
-using OMP.Lib.Video;
 
 namespace OMP.Ui.Controls;
 
@@ -12,15 +11,13 @@ internal sealed class VideoRenderSurface(Image imageControl) : IDisposable
 
     private WriteableBitmap? _bitmap;
 
-    public void Render(VideoFrame frame)
+    public void Render(int width, int height, byte[] pixelData, int length)
     {
-        if (_bitmap == null ||
-            _bitmap.PixelSize.Width != frame.Width ||
-            _bitmap.PixelSize.Height != frame.Height)
+        if (_bitmap == null || _bitmap.PixelSize.Width != width || _bitmap.PixelSize.Height != height)
         {
             _bitmap?.Dispose();
             _bitmap = new WriteableBitmap(
-                new PixelSize(frame.Width, frame.Height),
+                new PixelSize(width, height),
                 new Vector(96, 96),
                 Avalonia.Platform.PixelFormat.Bgra8888,
                 Avalonia.Platform.AlphaFormat.Premul);
@@ -32,11 +29,14 @@ internal sealed class VideoRenderSurface(Image imageControl) : IDisposable
 
         unsafe
         {
-            Buffer.MemoryCopy((void*)frame.DataPtr, (void*)fb.Address, frame.DataLength, frame.DataLength);
+            fixed (byte* src = pixelData)
+            {
+                Buffer.MemoryCopy(src, (void*)fb.Address, length, length);
+            }
         }
 
         imageControl.InvalidateVisual();
-        FrameSize = new PixelSize(frame.Width, frame.Height);
+        FrameSize = new PixelSize(width, height);
     }
 
     public Rect GetVideoContentRect(Size containerSize)

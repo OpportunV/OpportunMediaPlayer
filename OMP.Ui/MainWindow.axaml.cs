@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -328,14 +329,32 @@ public sealed partial class MainWindow : Window
     {
         var generation = _sessionGeneration;
 
+        var buffer = ArrayPool<byte>.Shared.Rent(frame.DataLength);
+        unsafe
+        {
+            fixed (byte* dst = buffer)
+            {
+                Buffer.MemoryCopy((void*)frame.DataPtr, dst, buffer.Length, frame.DataLength);
+            }
+        }
+
+        var width = frame.Width;
+        var height = frame.Height;
+        var length = frame.DataLength;
+
         Dispatcher.UIThread.Post(() =>
         {
-            if (generation != _sessionGeneration)
+            try
             {
-                return;
+                if (generation == _sessionGeneration)
+                {
+                    _videoRenderSurface.Render(width, height, buffer, length);
+                }
             }
-
-            _videoRenderSurface.Render(frame);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         });
     }
 

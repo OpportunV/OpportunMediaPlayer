@@ -12,7 +12,8 @@ internal sealed unsafe class VideoPipeline : IDisposable
 {
     public int StreamIndex { get; }
     public double DecodeFps { get; private set; }
-    public bool HasDecodedFrameReady => _frameChannel.Reader.Count > 0;
+
+    public int DiagFrameQueueCount => _frameChannel.Reader.Count;
 
     private readonly ILogger _logger;
     private int _sendPacketFailures;
@@ -38,6 +39,8 @@ internal sealed unsafe class VideoPipeline : IDisposable
     private int _decodedFrames;
     private readonly Stopwatch _decodeFpsStopwatch = Stopwatch.StartNew();
     private const int BufferedFrameCount = 8;
+
+    private const int FrameBufferPoolSize = BufferedFrameCount * 2;
 
     public VideoPipeline(AVFormatContext* formatContext, int streamIndex, CancellationToken cancellationToken,
         ILoggerFactory loggerFactory)
@@ -104,8 +107,8 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
         var stride = width * 4;
         var frameBufferSize = stride * height;
-        _frameBuffers = new nint[BufferedFrameCount];
-        for (var i = 0; i < BufferedFrameCount; i++)
+        _frameBuffers = new nint[FrameBufferPoolSize];
+        for (var i = 0; i < FrameBufferPoolSize; i++)
         {
             _frameBuffers[i] = Marshal.AllocHGlobal(frameBufferSize);
         }

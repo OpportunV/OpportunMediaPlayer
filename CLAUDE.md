@@ -99,6 +99,14 @@ hot; otherwise leave it. If per-packet diagnostics are ever genuinely needed, re
 `[LoggerMessage]` source-generated partial methods (also measured at 0 B/call) rather than
 hand-written guards — but note the class has to become `partial`.
 
+FFmpeg has its own native logging (`av_log_set_level`/`av_log_set_callback`), separate from
+everything above and normally printed straight to stderr, not through `ILogger`/Serilog.
+`FFmpegEnvironment.EnsureInitialized` (mirrors `PortAudioEnvironment`'s init-once pattern) sets
+it to `AV_LOG_FATAL` once, from `MediaSession`'s constructor — mainly to stop certain files (FLV
+audio codecs FFmpeg doesn't implement, malformed `PARAM_CHANGE` side data) from spamming stderr
+on every packet. It only touches native FFmpeg output; the app's own Serilog diagnostics are
+unaffected.
+
 ## Audio output and volume
 
 `AudioOutput.Id` is PortAudio's own global device index (`OutputScanner`, in
@@ -168,6 +176,66 @@ one, so the displayed speed reflects the engine's own clamp. `MediaSessionRegist
 Persisted volume is keyed by `FriendlyName`, never by `AudioOutput.Id` — the Id shifts as soon as a
 device is plugged in or removed.
 
+## Video rendering
+
+`MainWindow.Render` copies a decoded frame's pixel data out via `ArrayPool<byte>.Shared`,
+synchronously on the render-loop thread, before ever posting to the UI thread. `VideoFrame.DataPtr`
+points into `VideoPipeline`'s fixed, round-robin-reused pool of native buffers (`_frameBuffers`) —
+unsafe to read once `Render` returns, since decode can cycle back around to the same slot within
+milliseconds during post-seek catch-up (decode running at hundreds of fps is normal there). The
+dispatch to the UI thread stays a plain, non-blocking `Dispatcher.UIThread.Post` — never `Invoke`.
+Blocking the render-loop thread on the UI thread was tried first and made things worse: every
+packet channel downstream is `Wait`-mode, demux is a single thread shared with audio, and a
+momentarily busy UI thread cascades all the way back through `VideoPipeline`'s frame channel →
+`MediaSession`'s video packet channel → the demux thread itself, stalling audio too — confirmed
+directly in a real session log showing 16 seconds of frozen video and an empty audio buffer while
+the clock kept ticking.
+
+`VideoPipeline.FrameBufferPoolSize` is deliberately double `BufferedFrameCount` (the frame
+channel's own capacity), not equal to it: `Enqueue` picks a buffer and `sws_scale`s into it
+*before* checking channel capacity, so a same-sized pool and channel let the very next decoded
+frame's `sws_scale` call overwrite a still-queued, unrendered frame's data the moment the channel
+fills — real corruption, not just a stale frame.
+
+## Seeking
+
+`SeekLookbackSeconds` backs the requested target up by a small margin before calling
+`av_seek_frame(AVSEEK_FLAG_BACKWARD)`, but that flag only guarantees landing *at or before* the
+point it's given — for content with sparse keyframes, the actual landing point can be seconds (or,
+for a large enough keyframe gap, effectively the start of the file) earlier than the lookback
+margin alone accounts for. Never assume "landed" means "landed near the target" — downstream code
+has to handle a potentially large landing-to-target gap explicitly, not approximate it away.
+
+`ThrottleDemuxAhead` (`MediaSession`) used to mis-pace exactly that gap: `Seek()` rebases the clock
+straight to the *requested* target (`_clock.Rebase(targetSeconds)`), and the throttle compared
+every demuxed packet's PTS against that already-jumped clock, capping demux to
+`MaxDemuxLookaheadSeconds` ahead of it. Every packet between the true landing point and the target
+legitimately looked "ahead" of the clock, so the throttle kept re-engaging — turning catch-up
+decode (normally near-instant, much faster than real time) into a stall exactly as long as the
+landing-to-target gap. Fixed via `_lastSeekTargetSeconds` (the real, ungapped target, set on every
+successful seek): a packet whose own PTS is still before it skips throttling entirely, since that
+content is bound to be discarded downstream anyway (`AudioPipeline`'s skip-before-target,
+`VideoRenderLoop`'s lag-drop) — pacing it to the clock had no benefit and real cost.
+
+`PtsBaselineDetector.DetectOffset` corrects a genuine quirk in standalone mp3/wav/aac containers,
+where the first packet's raw decoded PTS after *any* backward seek comes back near 0 regardless of
+where the seek actually landed — validated only for audio-only sessions. A video file's streams
+can *also* legitimately report a near-0 raw PTS after a seek, for the same sparse-keyframe reason
+above — but there it's a true position, not a reporting bug, and the detector's threshold check
+(`firstRawSeconds < 1 && anchorSeconds > 1`) can't tell the two cases apart from the numbers alone.
+Applying the mp3/wav/aac correction to a video seek is actively harmful, and worse than the
+throttle bug above: the wrong offset is computed once and cached for the whole seek generation, so
+it never self-corrects. Confirmed directly on a real seek: the "corrected" offset shifted
+`AudioPipeline`'s notion of current position permanently ~5s ahead of the audio actually being
+decoded (pre-target content played audibly, while the displayed position read the target), and
+made the video stream's demux-throttle comparison believe every packet had already reached the
+target from the first one — so video's `frameQ` stayed empty indefinitely, not just during a brief
+catch-up window, because decode could never gain on a clock the offset made it look like it had
+already caught up to. `MediaSession.Seek()` now only computes a real anchor (enabling the
+correction) when `_videoPipeline is null`; a video session always passes an anchor of `0`, which
+disables the correction outright and trusts raw PTS as ground truth for where a seek landed —
+consistent with `ThrottleDemuxAhead`'s own fix above.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`
@@ -194,6 +262,14 @@ decode work around every call site dominates. The `bool`/`out` shape (rather tha
 `OperationCanceledException` and returning `default!`) is deliberate: a silently-returned
 default value is indistinguishable from a legitimately-default item, which is exactly the kind
 of bug this shape avoids — see `PipelineWorker.TryWaitIfPaused()` for the same pattern.
+
+A `CancellationTokenSource`'s `.Token` getter throws `ObjectDisposedException` once the source
+itself has been disposed — `IsCancellationRequested` doesn't. A loop that reads `.Token` fresh
+inside a closure dispatched later in the same iteration (e.g. `MediaSession.DemuxLoop`'s
+video-packet dispatch) can race `Dispose()` disposing the source out from under it, crashing with
+an unhandled exception on a background thread. Capture `.Token` once into a local at the top of
+the loop instead — a token obtained before disposal stays perfectly usable afterward, since it's a
+lightweight reference to the source's state, not tied to the source object still being alive.
 
 ## Type visibility and sealing
 
@@ -260,8 +336,10 @@ check for that first.
 ## Testing
 
 `OMP.Lib.Tests` covers logic that's genuinely unit-testable without FFmpeg or a real audio
-device: `PlaybackClock`, `AudioSpeedProcessor`, `PipelineWorker`. `MediaSession` /
-`MediaSessionRegistry` need a real file and real FFmpeg native libs to construct, so they're not
-unit tested — verify those manually. Avalonia-side classes (`FullscreenController`,
+device: `PlaybackClock`, `AudioSpeedProcessor`, `AudioGainProcessor`, `AudioDelayProcessor`,
+`PtsBaselineDetector`, `PipelineWorker`, `ChannelExt`, `EndOfStreamTracker`, subtitle cue-store
+and text-parsing logic. `MediaSession` / `MediaSessionRegistry` need a real file and real FFmpeg
+native libs to construct, so they're not unit tested — verify those manually. Avalonia-side
+classes (`FullscreenController`,
 `VideoRenderSurface`, `WindowFactory`) are written with plain constructor dependencies so
 Avalonia-headless tests can be added later, but that test host isn't wired up yet.

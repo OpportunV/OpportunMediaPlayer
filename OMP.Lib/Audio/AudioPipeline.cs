@@ -16,7 +16,25 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
 
-    public bool HasDecodedChunkReady => _decodedPcmChannel.Reader.Count > 0;
+    public int DiagPacketQueueCount => _packetChannel.Reader.Count;
+
+    public int DiagDecodedQueueCount => _decodedPcmChannel.Reader.Count;
+
+    public int DiagTotalChunksDecoded => _diagTotalChunksDecoded;
+
+    public double? DiagSkipBeforeSeconds => _skipBeforeSeconds;
+
+    public double DiagCurrentTimeSeconds => _currentTimeSeconds;
+
+    public int DiagBufferedBytes => _buffer.BufferedBytes;
+
+    public int DiagBufferLength => _buffer.BufferLength;
+
+    public double? DiagFrontChunkSeconds => _decodedPcmChannel.Reader.TryPeek(out var chunk) ? chunk.TimeSeconds : null;
+
+    public double DiagPtsBaselineOffsetSeconds => _ptsBaselineOffsetSeconds;
+
+    public int DiagPacketDropCount => _diagPacketDropCount;
 
     public double OutputTimeSeconds =>
         Math.Max(
@@ -27,6 +45,12 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     private double _currentTimeSeconds;
     private double _bufferedThroughSeconds;
+    private double? _skipBeforeSeconds;
+    private double _ptsBaselineOffsetSeconds;
+    private double _pendingPtsBaselineAnchorSeconds;
+    private bool _awaitingPtsBaselineCheck;
+    private int _diagTotalChunksDecoded;
+    private int _diagPacketDropCount;
     private double _userDelaySeconds;
     private double _speed = 1.0;
     private readonly AudioSpeedProcessor _speedProcessor = new();
@@ -39,14 +63,16 @@ internal sealed unsafe class AudioPipeline : IDisposable
         new BoundedChannelOptions(128)
         {
             FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
             SingleWriter = true
         });
 
     private readonly Channel<PacketRef> _packetChannel;
+    private readonly int _packetChannelCapacity;
     private readonly PipelineWorker _decodeWorker;
+    private readonly PipelineWorker _pumpWorker;
     private readonly CancellationTokenSource _pipelineCts;
     private readonly Func<int> _getSeekGeneration;
+    private readonly Func<double> _getClockSeconds;
 
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
@@ -66,16 +92,19 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const int MaxResampledSamplesPerConvert = 4096;
     private const double PumpWindowSeconds = 0.05;
     private const double BufferHighWaterMarkRatio = 0.9;
+    private const int PumpIntervalMs = 5;
 
     public AudioPipeline(AVFormatContext* formatContext, int streamIndex, AudioOutput audioOutput,
         CancellationToken cancellationToken, int bufferDurationSeconds, int packetChannelCapacity,
-        Func<int> getSeekGeneration, ILoggerFactory loggerFactory)
+        Func<int> getSeekGeneration, Func<double> getClockSeconds, ILoggerFactory loggerFactory)
     {
         _pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _getSeekGeneration = getSeekGeneration;
+        _getClockSeconds = getClockSeconds;
         _logger = loggerFactory.CreateLogger<AudioPipeline>();
         StreamIndex = streamIndex;
 
+        _packetChannelCapacity = packetChannelCapacity;
         _packetChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(packetChannelCapacity)
             {
@@ -159,9 +188,13 @@ internal sealed unsafe class AudioPipeline : IDisposable
             audioOutput.Id,
             _outputSampleRate);
 
-        _decodeWorker = new PipelineWorker(PipelineWorkerRole.Audio, _pipelineCts.Token);
+        _decodeWorker = new PipelineWorker(PipelineWorkerRole.AudioDecode, _pipelineCts.Token);
         _decodeWorker.Pause();
         _decodeWorker.Start(DecodeLoop);
+
+        _pumpWorker = new PipelineWorker(PipelineWorkerRole.AudioPump, _pipelineCts.Token);
+        _pumpWorker.Pause();
+        _pumpWorker.Start(PumpLoop);
     }
 
     public void Dispose()
@@ -169,6 +202,8 @@ internal sealed unsafe class AudioPipeline : IDisposable
         _pipelineCts.Cancel();
         _decodeWorker.Join();
         _decodeWorker.Dispose();
+        _pumpWorker.Join();
+        _pumpWorker.Dispose();
 
         while (_packetChannel.Reader.TryRead(out var packetRef))
         {
@@ -212,7 +247,15 @@ internal sealed unsafe class AudioPipeline : IDisposable
         _pipelineCts.Dispose();
     }
 
-    public bool TryEnqueuePacket(PacketRef packetRef) => _packetChannel.Writer.TryWrite(packetRef);
+    public bool TryEnqueuePacket(PacketRef packetRef)
+    {
+        if (_packetChannel.Reader.Count >= _packetChannelCapacity)
+        {
+            Interlocked.Increment(ref _diagPacketDropCount);
+        }
+
+        return _packetChannel.Writer.TryWrite(packetRef);
+    }
 
     public void PumpToOutput(double targetMediaTimeSeconds)
     {
@@ -278,17 +321,17 @@ internal sealed unsafe class AudioPipeline : IDisposable
         }
     }
 
-    public void ResumeDecoding() => _decodeWorker.Resume();
-
     public void Play()
     {
         _decodeWorker.Resume();
+        _pumpWorker.Resume();
         _output.Play();
     }
 
     public void Pause()
     {
         _output.Pause();
+        _pumpWorker.Pause();
         _decodeWorker.Pause();
     }
 
@@ -313,10 +356,14 @@ internal sealed unsafe class AudioPipeline : IDisposable
         }
     }
 
-    public void ResetClock(double timeSeconds)
+    public void ResetClock(double timeSeconds, double seekAnchorSeconds)
     {
         _currentTimeSeconds = Math.Max(0, timeSeconds);
         _bufferedThroughSeconds = _currentTimeSeconds;
+        _skipBeforeSeconds = _currentTimeSeconds;
+        _ptsBaselineOffsetSeconds = 0;
+        _pendingPtsBaselineAnchorSeconds = Math.Max(0, seekAnchorSeconds);
+        _awaitingPtsBaselineCheck = true;
     }
 
     public void SetSpeed(double speed)
@@ -362,7 +409,6 @@ internal sealed unsafe class AudioPipeline : IDisposable
             var cts = _pipelineCts.Token;
             while (!cts.IsCancellationRequested)
             {
-                int dstSamples;
                 lock (_decodeSync)
                 {
                     if (ffmpeg.avcodec_receive_frame(_codecContext, _frame) != 0)
@@ -372,48 +418,96 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
                     if (_frame->best_effort_timestamp != ffmpeg.AV_NOPTS_VALUE)
                     {
-                        _currentTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
+                        var rawTimeSeconds = _frame->best_effort_timestamp * ffmpeg.av_q2d(_timeBase);
+
+                        if (_awaitingPtsBaselineCheck)
+                        {
+                            _awaitingPtsBaselineCheck = false;
+                            _ptsBaselineOffsetSeconds =
+                                PtsBaselineDetector.DetectOffset(rawTimeSeconds, _pendingPtsBaselineAnchorSeconds);
+                        }
+
+                        _currentTimeSeconds = rawTimeSeconds + _ptsBaselineOffsetSeconds;
                     }
-
-                    dstSamples = ffmpeg.swr_convert(
-                        _swr,
-                        outPtrs,
-                        MaxResampledSamplesPerConvert,
-                        _frame->extended_data,
-                        _frame->nb_samples);
                 }
 
-                if (dstSamples < 0)
+                if (!ResampleAndEnqueueFrame(outPtrs, cts))
                 {
-                    if (Interlocked.Increment(ref _resampleFailures) == 1)
-                    {
-                        _logger.LogWarning(
-                            "Audio stream {StreamIndex}: resample failed: {Error}. " +
-                            "Further occurrences are counted and reported on close.",
-                            StreamIndex,
-                            FFmpegError.Describe(dstSamples));
-                    }
-
-                    continue;
-                }
-
-                if (dstSamples == 0)
-                {
-                    continue;
-                }
-
-                var outBytes = dstSamples * BytesPerSampleFrame;
-                var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, _outputSampleRate);
-
-                var chunkBytes = new byte[speedAdjustedBytes];
-                Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
-                var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
-                if (!_decodedPcmChannel.Writer.TryWriteBlocking(chunk, cts))
-                {
-                    break;
+                    return;
                 }
             }
         }
+    }
+
+    private bool ResampleAndEnqueueFrame(byte** outPtrs, CancellationToken cts)
+    {
+        var inputData = _frame->extended_data;
+        var inputSamples = _frame->nb_samples;
+
+        while (!cts.IsCancellationRequested)
+        {
+            int dstSamples;
+            lock (_decodeSync)
+            {
+                dstSamples = ffmpeg.swr_convert(_swr, outPtrs, MaxResampledSamplesPerConvert, inputData, inputSamples);
+            }
+
+            inputData = null;
+            inputSamples = 0;
+
+            if (dstSamples < 0)
+            {
+                if (Interlocked.Increment(ref _resampleFailures) == 1)
+                {
+                    _logger.LogWarning(
+                        "Audio stream {StreamIndex}: resample failed: {Error}. " +
+                        "Further occurrences are counted and reported on close.",
+                        StreamIndex,
+                        FFmpegError.Describe(dstSamples));
+                }
+
+                return true;
+            }
+
+            if (dstSamples == 0)
+            {
+                return true;
+            }
+
+            if (_skipBeforeSeconds.HasValue)
+            {
+                if (_currentTimeSeconds < _skipBeforeSeconds.Value)
+                {
+                    continue;
+                }
+
+                _skipBeforeSeconds = null;
+            }
+
+            if (!EnqueueChunk(dstSamples, cts))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool EnqueueChunk(int dstSamples, CancellationToken cts)
+    {
+        var outBytes = dstSamples * BytesPerSampleFrame;
+        var speedAdjustedBytes = _speedProcessor.Process(_managedBuffer, outBytes, _speed, _outputSampleRate);
+
+        var chunkBytes = new byte[speedAdjustedBytes];
+        Buffer.BlockCopy(_speedProcessor.AdjustedBuffer, 0, chunkBytes, 0, speedAdjustedBytes);
+        var chunk = new AudioChunk(chunkBytes, speedAdjustedBytes, _currentTimeSeconds);
+        if (!_decodedPcmChannel.Writer.TryWriteBlocking(chunk, cts))
+        {
+            return false;
+        }
+
+        Interlocked.Increment(ref _diagTotalChunksDecoded);
+        return true;
     }
 
     private void DecodeLoop(PipelineWorker worker)
@@ -437,6 +531,22 @@ internal sealed unsafe class AudioPipeline : IDisposable
             }
 
             ffmpeg.av_packet_free(&packet);
+        }
+
+        _logger.LogDebug("{Role} worker stopping for audio stream {StreamIndex}.", worker.Role, StreamIndex);
+    }
+
+    private void PumpLoop(PipelineWorker worker)
+    {
+        while (!_pipelineCts.IsCancellationRequested)
+        {
+            if (!worker.TryWaitIfPaused())
+            {
+                break;
+            }
+
+            PumpToOutput(_getClockSeconds());
+            Thread.Sleep(PumpIntervalMs);
         }
 
         _logger.LogDebug("{Role} worker stopping for audio stream {StreamIndex}.", worker.Role, StreamIndex);
