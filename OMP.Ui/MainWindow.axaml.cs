@@ -182,7 +182,8 @@ public sealed partial class MainWindow : Window
         SpeedButton.Flyout = new Flyout
         {
             Content = _speedFlyoutView,
-            Placement = PlacementMode.Top
+            Placement = PlacementMode.Top,
+            FlyoutPresenterClasses = { "speed-flyout" }
         };
 
         _speedFlyoutView.SpeedCommitted += speed => _commands.SetSpeed(speed);

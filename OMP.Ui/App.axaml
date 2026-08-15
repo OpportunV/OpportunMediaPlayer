@@ -9,10 +9,14 @@
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#CCF5F5F5" />
                     <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="#1A1A1A" />
+                    <SolidColorBrush x:Key="FlyoutBackgroundBrush" Color="#AAF5F5F5" />
+                    <SolidColorBrush x:Key="FlyoutForegroundBrush" Color="#1A1A1A" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#66000000" />
                     <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="FlyoutBackgroundBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="FlyoutForegroundBrush" Color="White" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -29,5 +33,10 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
+        <Style Selector="FlyoutPresenter.speed-flyout">
+            <Setter Property="Background" Value="{DynamicResource FlyoutBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource FlyoutForegroundBrush}" />
+        </Style>
     </Application.Styles>
 </Application>
