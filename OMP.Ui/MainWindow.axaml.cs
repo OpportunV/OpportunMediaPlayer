@@ -466,6 +466,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        Activate();
         await OpenPath(path);
     }
 
