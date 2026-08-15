@@ -27,7 +27,7 @@
 
   <data name="Options_Title" xml:space="preserve"><value>Настройки</value></data>
   <data name="Options_GeneralTab" xml:space="preserve"><value>Общие</value></data>
-  <data name="Options_AudioRoutingTab" xml:space="preserve"><value>Аудиомаршруты</value></data>
+  <data name="Options_AudioRoutingTab" xml:space="preserve"><value>Настройки звука</value></data>
   <data name="Options_SubtitlesTab" xml:space="preserve"><value>Субтитры</value></data>
   <data name="Options_SubtitleZonesTab" xml:space="preserve"><value>Зоны субтитров</value></data>
   <data name="Options_ThemeLabel" xml:space="preserve"><value>Тема:</value></data>

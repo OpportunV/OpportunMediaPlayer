@@ -5,8 +5,7 @@
         xmlns:output="clr-namespace:OMP.Lib.Audio.Output;assembly=OMP.Lib"
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
         x:Class="OMP.Ui.Windows.OptionsWindow"
-        Width="700"
-        SizeToContent="Height"
+        SizeToContent="WidthAndHeight"
         CanResize="False"
         Title="{x:Static loc:Strings.Options_Title}">
 
@@ -77,18 +76,28 @@
             </TabItem.Header>
 
             <Grid RowDefinitions="Auto,Auto,Auto"
-                  Margin="20">
+                  Margin="20"
+                  Grid.IsSharedSizeScope="True">
 
                 <Grid Grid.Row="0"
-                      ColumnDefinitions="*,*,Auto,Auto,Auto,Auto,Auto"
                       Margin="0,0,0,4">
 
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+                    </Grid.ColumnDefinitions>
+
                     <TextBlock Grid.Column="0"
-                               Text="{x:Static loc:Strings.Options_StreamHeader}"
+                               Text="{x:Static loc:Strings.Options_OutputHeader}"
                                FontWeight="Bold" />
 
                     <TextBlock Grid.Column="1"
-                               Text="{x:Static loc:Strings.Options_OutputHeader}"
+                               Text="{x:Static loc:Strings.Options_StreamHeader}"
                                Margin="10,0"
                                FontWeight="Bold" />
 
@@ -110,19 +119,40 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:AudioRouteRow">
 
-                            <Grid ColumnDefinitions="*,*,Auto,Auto,Auto,Auto,Auto"
-                                  Margin="0,4">
+                            <Grid Margin="0,4">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+                                </Grid.ColumnDefinitions>
 
                                 <TextBlock Grid.Column="0"
-                                           Text="{Binding StreamLabel}"
+                                           Text="{Binding OutputLabel}"
+                                           MaxWidth="260"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" />
 
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding OutputLabel}"
-                                           Margin="10,0"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" />
+                                <ComboBox Grid.Column="1"
+                                          Name="RouteStreamSelector"
+                                          ItemsSource="{Binding AvailableStreamOptions}"
+                                          SelectedItem="{Binding SelectedStreamOption, Mode=TwoWay}"
+                                          SelectionChanged="OnRouteStreamChanged"
+                                          MaxWidth="260"
+                                          Margin="10,0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:AudioStreamOption">
+                                            <TextBlock Text="{Binding Label}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
 
                                 <ToggleButton Grid.Column="2"
                                               Name="RouteMuteButton"
@@ -178,22 +208,18 @@
 
                 </ItemsControl>
 
-                <StackPanel Grid.Row="2"
-                            Orientation="Horizontal"
-                            Spacing="10"
-                            Margin="0,15,0,0">
+                <Grid Grid.Row="2"
+                      Margin="0,15,0,0">
 
-                    <ComboBox Name="StreamSelector"
-                              Width="280">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:AudioStreamOption">
-                                <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                    </Grid.ColumnDefinitions>
 
-                    <ComboBox Name="OutputSelector"
-                              Width="260">
+                    <ComboBox Grid.Column="0"
+                              Name="OutputSelector"
+                              HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="output:AudioOutput">
                                 <TextBlock Text="{Binding FriendlyName}" />
@@ -201,10 +227,22 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
 
-                    <Button Name="AddRouteButton"
+                    <ComboBox Grid.Column="1"
+                              Name="StreamSelector"
+                              Margin="10,0"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:AudioStreamOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Grid.Column="2"
+                            Name="AddRouteButton"
                             Content="+"
                             Width="32" />
-                </StackPanel>
+                </Grid>
 
             </Grid>
         </TabItem>

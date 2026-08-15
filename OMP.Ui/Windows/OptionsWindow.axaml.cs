@@ -99,6 +99,7 @@ public sealed partial class OptionsWindow : Window
         AddZoneButton.Click += OnAddZone;
         AddSubtitleRouteButton.Click += OnAddSubtitleRoute;
         UpdateOutputSelector();
+        UpdateRowStreamOptions();
         UpdateSubtitleStreamSelector();
         UpdateSubtitleZoneSelector();
         RefreshRows();
@@ -170,6 +171,7 @@ public sealed partial class OptionsWindow : Window
         _audioRouteRows.Add(
             new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false, savedDelayMs));
         UpdateOutputSelector();
+        UpdateRowStreamOptions();
         RefreshRows();
         ApplyAndPersistRoutes();
     }
@@ -183,7 +185,18 @@ public sealed partial class OptionsWindow : Window
 
         _audioRouteRows.Remove(row);
         UpdateOutputSelector();
+        UpdateRowStreamOptions();
         RefreshRows();
+        ApplyAndPersistRoutes();
+    }
+
+    private void OnRouteStreamChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (((Control)sender!).DataContext is not AudioRouteRow)
+        {
+            return;
+        }
+
         ApplyAndPersistRoutes();
     }
 
@@ -432,6 +445,14 @@ public sealed partial class OptionsWindow : Window
         if (OutputSelector.SelectedItem is AudioOutput selected && !availableOutputs.Contains(selected))
         {
             OutputSelector.SelectedItem = null;
+        }
+    }
+
+    private void UpdateRowStreamOptions()
+    {
+        foreach (var row in _audioRouteRows)
+        {
+            row.AvailableStreamOptions = _streamOptions;
         }
     }
 
