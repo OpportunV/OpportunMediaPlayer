@@ -247,7 +247,6 @@ public sealed partial class MainWindow : Window
 
     private void SetSpeedDisplayText(double speed)
     {
-        SpeedLabel.Text = PlaybackSpeedFormat.Format(speed);
         _speedFlyoutView.SetSpeed(speed);
     }
 

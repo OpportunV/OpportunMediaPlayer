@@ -5,6 +5,10 @@
 
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://OMP/Assets/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#CCF5F5F5" />
@@ -37,6 +41,25 @@
         <Style Selector="FlyoutPresenter.app-flyout">
             <Setter Property="Background" Value="{DynamicResource FlyoutBackgroundBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource FlyoutForegroundBrush}" />
+        </Style>
+
+        <!--Square, centered icon button for the main playback bar (StepBack/PlayPause/Mute/Options/etc.).-->
+        <Style Selector="Button.icon-button, ToggleButton.icon-button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+
+        <!--Square, centered icon button for compact inline row actions (Options tabs, flyout popups).-->
+        <Style Selector="Button.icon-button-sm, ToggleButton.icon-button-sm">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
     </Application.Styles>
 </Application>

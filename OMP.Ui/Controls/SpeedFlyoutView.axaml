@@ -26,9 +26,16 @@
 
             <Button Grid.Column="0"
                     Name="DecreaseButton"
-                    Content="-"
-                    Width="28"
-                    Height="28" />
+                    Classes="icon-button-sm">
+                <Viewbox Width="14" Height="14">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="{StaticResource MinusIconGeometry}"
+                              Stroke="{Binding $parent[Button].Foreground}"
+                              StrokeThickness="2"
+                              StrokeLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
 
             <Slider Grid.Column="1"
                     Name="SpeedSlider"
@@ -38,9 +45,16 @@
 
             <Button Grid.Column="2"
                     Name="IncreaseButton"
-                    Content="+"
-                    Width="28"
-                    Height="28" />
+                    Classes="icon-button-sm">
+                <Viewbox Width="14" Height="14">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="{StaticResource PlusIconGeometry}"
+                              Stroke="{Binding $parent[Button].Foreground}"
+                              StrokeThickness="2"
+                              StrokeLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
         </Grid>
     </StackPanel>
 </UserControl>

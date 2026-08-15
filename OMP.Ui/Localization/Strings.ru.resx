@@ -44,7 +44,7 @@
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Изменить</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Сбросить</value></data>
   <data name="Options_ResetZoneTooltip" xml:space="preserve"><value>Восстановить положение, размер и стиль зоны по умолчанию</value></data>
-  <data name="Options_AddZoneButton" xml:space="preserve"><value>+ Новая зона</value></data>
+  <data name="Options_AddZoneButton" xml:space="preserve"><value>Новая зона</value></data>
   <data name="Options_LanguageLabel" xml:space="preserve"><value>Язык:</value></data>
   <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Перезапустить сейчас</value></data>
 

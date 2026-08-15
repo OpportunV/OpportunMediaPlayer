@@ -156,13 +156,22 @@
 
                                 <ToggleButton Grid.Column="2"
                                               Name="RouteMuteButton"
+                                              Classes="icon-button-sm"
                                               IsChecked="{Binding Muted, Mode=TwoWay}"
                                               IsCheckedChanged="OnRouteMuteChanged"
-                                              Content="🔇"
-                                              Width="32"
-                                              Height="28"
                                               Margin="0,0,6,0"
-                                              ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}" />
+                                              ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                            <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                                  Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </ToggleButton>
 
                                 <Slider Grid.Column="3"
                                         Name="RouteVolumeSlider"
@@ -196,12 +205,19 @@
 
                                 <Button Grid.Column="6"
                                         Name="DeleteRouteButton"
+                                        Classes="icon-button-sm"
                                         Click="OnDeleteRoute"
                                         IsEnabled="{Binding CanDelete}"
-                                        Content="✕"
-                                        Width="28"
-                                        Height="28"
-                                        Margin="6,0,0,0" />
+                                        Margin="6,0,0,0">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -240,8 +256,16 @@
 
                     <Button Grid.Column="2"
                             Name="AddRouteButton"
-                            Content="+"
-                            Width="32" />
+                            Classes="icon-button-sm">
+                        <Viewbox Width="14" Height="14">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="{StaticResource PlusIconGeometry}"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
                 </Grid>
 
             </Grid>
@@ -284,10 +308,17 @@
 
                                 <Button Grid.Column="2"
                                         Name="DeleteSubtitleRouteButton"
-                                        Click="OnDeleteSubtitleRoute"
-                                        Content="✕"
-                                        Width="28"
-                                        Height="28" />
+                                        Classes="icon-button-sm"
+                                        Click="OnDeleteSubtitleRoute">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -325,8 +356,16 @@
                     </ComboBox>
 
                     <Button Name="AddSubtitleRouteButton"
-                            Content="+"
-                            Width="32" />
+                            Classes="icon-button-sm">
+                        <Viewbox Width="14" Height="14">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="{StaticResource PlusIconGeometry}"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
                 </StackPanel>
 
             </Grid>
@@ -376,12 +415,19 @@
 
                                 <Button Grid.Column="2"
                                         Name="DeleteZoneButton"
+                                        Classes="icon-button-sm"
                                         Click="OnDeleteZone"
                                         IsVisible="{Binding IsDeletable}"
-                                        Content="✕"
-                                        Width="28"
-                                        Height="28"
-                                        HorizontalAlignment="Right" />
+                                        HorizontalAlignment="Right">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

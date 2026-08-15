@@ -7,6 +7,16 @@ different audio tracks from one file to different audio output devices simultane
 - `OMP.Ui` — Avalonia UI, DI composition root, hosts `OMP.Lib` via `IMediaSessionRegistry`.
 - `OMP.Lib.Tests` — xUnit. Covers pure/extracted logic only (see Testing below).
 
+`OMP.Ui`'s folder layout is folder-matches-namespace, same convention as `Models`/`Settings`/
+`Input`/`Extensions`/`Localization`: `Windows/` (namespace `OMP.Ui.Windows`) holds every dialog
+window except `MainWindow` itself (`AboutWindow`, `OptionsWindow`, `HotkeysWindow`, etc. —
+`MainWindow` stays at root as the app shell, alongside `App`/`Program`). `Services/` (namespace
+`OMP.Ui.Services`) holds non-control helper/service classes (`MainWindowCommands`,
+`FullscreenController`, `WindowFactory`, `VideoRenderSurface`, `SubtitleOverlayRenderer`).
+`Controls/` is reserved for genuine Avalonia `UserControl`s only (`SpeedFlyoutView`,
+`VolumeFlyoutView`) — it used to also hold the `Services/` classes, which is why "is this a real
+control or a plain helper" is the test to apply before adding something new to either folder.
+
 ## Member ordering
 
 Within a class, group members by descending accessibility (public → internal → protected →
@@ -280,25 +290,101 @@ constructs directly via `services.AddTransient<T>()`/`AddSingleton<T>()` (see go
 `MediaSessionRegistry`, `AudioStream`, `AudioOutput`, `VideoFrame`); everything else there —
 `MediaSession` itself, `AudioPipeline`, `VideoPipeline`, scanners, etc. — is `internal`.
 `OMP.Ui` has no external consumers at all, so the only things `public` there are `App`,
-`MainWindow`, `OptionsWindow` (Avalonia XAML code-behind convention) and the interfaces/context
-type that cross into `MainWindow`'s public constructor signature (`IMainWindowCommands`,
-`IMainWindowHotkeyService`, `IWindowFactory`, `MainWindowCommandContext`) — their concrete
-implementations (`MainWindowCommands`, `MainWindowHotkeyService`, `WindowFactory`) stay
-`internal`, since an internal class implementing a public interface is completely fine, and
-nothing outside the assembly ever names the concrete type. Default to `sealed` unless a class
-is deliberately designed as a base type — nothing in this codebase currently is.
+`MainWindow`, all six `Windows/` dialog windows (`OptionsWindow`, `AboutWindow`,
+`AudioOutputWarningWindow`, `HotkeysWindow`, `OpenFileErrorWindow`, `SubtitleZoneEditorWindow` —
+Avalonia XAML code-behind convention) and the interfaces/context type that cross into
+`MainWindow`'s public constructor signature (`IMainWindowCommands`, `IMainWindowHotkeyService`,
+`IWindowFactory`, `MainWindowCommandContext`) — their concrete implementations
+(`MainWindowCommands`, `MainWindowHotkeyService`, `WindowFactory`) stay `internal`, since an
+internal class implementing a public interface is completely fine, and nothing outside the
+assembly ever names the concrete type. Default to `sealed` unless a class is deliberately
+designed as a base type — nothing in this codebase currently is.
 
 Gotcha: `Microsoft.Extensions.DependencyInjection`'s default `ServiceProvider` only activates a
 type via `services.AddTransient<T>()`/`AddSingleton<T>()` (registering the concrete type
-directly, as `MainWindow` and `OptionsWindow` are) if it has a **public** constructor — it will
-not use an internal one, even same-assembly, unlike general reflection which doesn't care. We
-tried keeping those two constructors internal with an explicit factory registration
+directly, as `MainWindow` and every `Windows/` dialog are) if it has a **public** constructor —
+it will not use an internal one, even same-assembly, unlike general reflection which doesn't
+care. We tried keeping those constructors internal with an explicit factory registration
 (`services.AddTransient(sp => new MainWindow(...))`) to avoid this, but decided the simpler,
 more conventional `AddTransient<MainWindow>()` was worth the small public surface it costs —
-hence those two constructors, and the handful of types feeding their signatures, staying public.
+hence those constructors, and the handful of types feeding their signatures, staying public.
 `Microsoft.Extensions.Options`' binding (`IOptions<T>`/`services.Configure<T>`) does *not* have
 this restriction — internal options types work fine there, it's specifically `ServiceProvider`'s
 constructor-activation path that's public-only.
+
+## UI theming, icons, and button consistency
+
+Custom theme-variant-aware brushes (bar/flyout backgrounds and foregrounds — anything that needs
+to look different in Light vs Dark and isn't just relying on FluentTheme's own defaults) live in
+`App.axaml`'s `Application.Resources`, via `ResourceDictionary.ThemeDictionaries` with `Light`/
+`Dark` keys. That block needs an explicit `<ResourceDictionary>` wrapper around the whole
+`Application.Resources` content — the bare `<Application.Resources><Color .../></Application
+.Resources>` shorthand (used for the `SystemAccentColor*` overrides) does not support
+`ResourceDictionary.ThemeDictionaries` as a sibling; without the wrapper, Avalonia's XAML compiler
+fails with `AVLN2200`/`AXN0002`-style errors depending on exactly how it's misused. Confirmed by
+testing, not guessed — Avalonia's Fluent internals are compiled into the NuGet package, not loose
+XAML source, so nothing here should be assumed to work from WPF muscle memory without checking.
+
+Every icon in the app is a hand-drawn vector `StreamGeometry` (or `GeometryGroup`, for icons that
+mix filled shapes like dots with stroked lines) in `OMP.Ui/Assets/Icons.axaml`, merged into
+`App.axaml` via `ResourceDictionary.MergedDictionaries` and consumed via `{StaticResource
+SomeIconGeometry}` on a `Path` inside a `Viewbox`/`Canvas`. Deliberately not emoji or text glyphs
+(🔇, ✕, +, -) — those were tried first for the compact inline-row buttons and are a dead end:
+they render in their own fixed color regardless of the button's `Foreground`, so they can't track
+the app's theme at all, and their centering/baseline varies by platform emoji font. Icon `Path`s
+bind `Fill`/`Stroke` to `{Binding $parent[Button].Foreground}` (or `$parent[ToggleButton]`) rather
+than to a specific brush resource — that way an icon automatically matches whatever foreground
+color is correct for its context (`OverlayBarForegroundBrush` on the main bar, `FlyoutForegroundBrush`
+inside a themed flyout, FluentTheme's own default elsewhere) without the icon needing to know which
+context it's in, and without guessing FluentTheme's own internal foreground resource key name.
+
+Two style classes in `App.axaml` (`Button.icon-button, ToggleButton.icon-button` at 36×36 for the
+main playback bar; the `-sm` variant at 28×28 for compact inline-row actions in Options/flyouts)
+set `Width`/`Height`/`Padding="0"`/centered content alignment once, instead of repeating those four
+attributes on every icon button by hand — that repetition is exactly how the main bar and the
+compact rows drifted out of sync with each other before (`32×28`, `28×26`, `Width` with no `Height`
+all showed up across different files). Text-labeled buttons (`Cancel`/`Save`/`Close`/`Edit`/
+`Reset`/`GitHub`/`Add Zone`, and `SpeedButton`) are deliberately excluded from both classes — they
+need to size to their text, not be forced square.
+
+`Flyout` has no `Background`/`Foreground` property of its own — to theme a `Flyout`'s popup chrome,
+tag it via `flyout.FlyoutPresenterClasses.Add("app-flyout")` in code and target
+`Style Selector="FlyoutPresenter.app-flyout"` in `Application.Styles`. Both `SpeedFlyoutView`'s and
+`VolumeFlyoutView`'s flyouts share that one class/style rather than each getting their own, since
+there's currently no reason for them to look different.
+
+`Grid.IsSharedSizeScope="True"` + matching `ColumnDefinition.SharedSizeGroup` names is how
+`OptionsWindow`'s Audio tab keeps its header row's columns aligned with each data row's columns
+(two separate `Grid` instances — the header and each `ItemsControl` row template — which Avalonia
+sizes independently by default, so column boundaries drift the moment their `Auto`-column content
+differs, e.g. the header has nothing in the Mute column but a row does). Confirmed by testing:
+`SharedSizeGroup` does not play well with `*`-sized columns split across separate `Grid`s (a `*`
+column's width is resolved from that one `Grid`'s own available space, not shared across grids the
+way `SharedSizeGroup` shares `Auto` columns), so the Output/Stream columns had to switch from
+`*,*` to `Auto,Auto` with an explicit `MaxWidth` cap on their content to get real cross-grid
+alignment.
+
+`ProgressSlider` proves FluentTheme's `Slider` can be re-skinned per-instance, without a full
+custom `ControlTemplate`, by overriding the `DynamicResource` keys its own template already reads
+from — `SliderTrackThemeHeight` (track thickness), `SliderHorizontalThumbWidth`/
+`SliderHorizontalThumbHeight`/`SliderThumbCornerRadius` (thumb size/shape), `SliderHorizontalHeight`
+(the template's own `MinHeight`, i.e. the overall hit-test envelope) — declared directly in a
+`<Slider.Resources>` block on that one `Slider`, leaving every other `Slider` in the app on
+FluentTheme's defaults. These key names came from reading the actual Avalonia 11.3.11 source, not
+guessed — get this wrong and you silently re-skin nothing, or every `Slider` in the app instead of
+one. One thing this trick can't reach: the `RepeatButton` track segments' own ~10px hit-padding is
+hardcoded inside a *nested* `ControlTemplate` that Fluent's outer `Slider` template pulls in via
+`StaticResource` (resolved once, at the theme's own parse time) rather than `DynamicResource` — a
+per-instance resource override never reaches it, so shrinking that padding would need a full
+custom `Slider` template, not a resource override.
+
+`OptionsWindow`'s Audio tab enforces that an *output* can only carry one active route at a time
+(`UpdateOutputSelector` excludes already-used outputs — you can't send two different tracks to one
+physical speaker), but deliberately does **not** apply the same exclusivity to *streams*: the same
+audio track can legitimately be routed to more than one output at once (e.g. the main audio track
+sent to both speakers and a headset simultaneously) — matching the readme's headline feature. Both
+the per-row `AudioRouteRow.AvailableStreamOptions` and the bottom-of-tab `StreamSelector` are left
+unfiltered by design; only `OutputSelector`/`UpdateOutputSelector` filters.
 
 ## Resource lifetime
 

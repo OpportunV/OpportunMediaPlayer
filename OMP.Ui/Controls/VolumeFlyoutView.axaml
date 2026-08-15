@@ -21,11 +21,20 @@
 
                         <ToggleButton Grid.Column="0"
                                       Name="RowMuteButton"
+                                      Classes="icon-button-sm"
                                       IsChecked="{Binding Muted, Mode=TwoWay}"
-                                      IsCheckedChanged="OnRowMuteChanged"
-                                      Content="🔇"
-                                      Width="28"
-                                      Height="26" />
+                                      IsCheckedChanged="OnRowMuteChanged">
+                            <Viewbox Width="14" Height="14">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                          Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                    <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                          Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </ToggleButton>
 
                         <TextBlock Grid.Column="1"
                                    Text="{Binding OutputLabel}"

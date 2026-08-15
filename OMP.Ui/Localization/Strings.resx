@@ -44,7 +44,7 @@
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>
   <data name="Options_ResetZoneTooltip" xml:space="preserve"><value>Restore this zone's default position, size and style</value></data>
-  <data name="Options_AddZoneButton" xml:space="preserve"><value>+ New Zone</value></data>
+  <data name="Options_AddZoneButton" xml:space="preserve"><value>New Zone</value></data>
   <data name="Options_LanguageLabel" xml:space="preserve"><value>Language:</value></data>
   <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Restart Now</value></data>
 
