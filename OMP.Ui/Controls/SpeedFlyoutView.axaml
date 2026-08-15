@@ -42,10 +42,5 @@
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center" />
         </Grid>
-
-        <Button Name="ResetButton"
-                Content="Reset to 1x"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center" />
     </StackPanel>
 </UserControl>

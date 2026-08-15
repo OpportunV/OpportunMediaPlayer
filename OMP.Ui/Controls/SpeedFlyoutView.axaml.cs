@@ -45,7 +45,6 @@ internal sealed partial class SpeedFlyoutView : UserControl
             => SpeedCommitted?.Invoke(Math.Max(PlaybackSpeedLimits.Min, _currentSpeed - FineStepAmount));
         IncreaseButton.Click += (_, _)
             => SpeedCommitted?.Invoke(Math.Min(PlaybackSpeedLimits.Max, _currentSpeed + FineStepAmount));
-        ResetButton.Click += (_, _) => SpeedCommitted?.Invoke(1.0);
 
         SpeedSlider.AddHandler(PointerPressedEvent, (_, _) => _isDragging = true, RoutingStrategies.Tunnel);
         SpeedSlider.ValueChanged += (_, e) =>
