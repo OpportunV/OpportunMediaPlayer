@@ -2,19 +2,27 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="OMP.Ui.Controls.SpeedFlyoutView">
 
-    <StackPanel Width="360"
+    <StackPanel Width="400"
                 Margin="14"
                 Spacing="12">
 
         <TextBlock Text="Playback speed"
-                   FontWeight="Bold" />
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center" />
 
-        <StackPanel Name="PresetsPanel"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center" />
+        <Grid Name="PresetsPanel"
+              ColumnSpacing="6" />
 
-        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
-              ColumnSpacing="8">
+        <TextBlock Name="SpeedValueLabel"
+                   Text="1x"
+                   FontFamily="Consolas"
+                   FontWeight="Bold"
+                   FontSize="16"
+                   HorizontalAlignment="Center" />
+
+        <Grid ColumnDefinitions="Auto,200,Auto"
+              ColumnSpacing="8"
+              HorizontalAlignment="Center">
 
             <Button Grid.Column="0"
                     Name="DecreaseButton"
@@ -33,14 +41,6 @@
                     Content="+"
                     Width="28"
                     Height="28" />
-
-            <TextBlock Grid.Column="3"
-                       Name="SpeedValueLabel"
-                       Text="1x"
-                       Width="42"
-                       FontFamily="Consolas"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
         </Grid>
     </StackPanel>
 </UserControl>

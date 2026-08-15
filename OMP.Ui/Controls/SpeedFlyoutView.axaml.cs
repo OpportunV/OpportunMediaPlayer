@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Lib;
 using OMP.Ui.Extensions;
@@ -31,10 +32,14 @@ internal sealed partial class SpeedFlyoutView : UserControl
                 Content = PlaybackSpeedFormat.Format(preset),
                 Tag = preset,
                 Padding = new Thickness(6, 4),
-                Margin = new Thickness(1, 2)
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center
             };
             button.Click += (_, _) => SpeedCommitted?.Invoke(preset);
             _presetButtons.Add(button);
+
+            PresetsPanel.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            Grid.SetColumn(button, PresetsPanel.ColumnDefinitions.Count - 1);
             PresetsPanel.Children.Add(button);
         }
 
