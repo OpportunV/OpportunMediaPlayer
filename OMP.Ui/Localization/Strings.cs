@@ -24,6 +24,10 @@ internal static class Strings
 
     public static string MainWindow_SubtitlesButtonTooltip => Get("MainWindow_SubtitlesButtonTooltip");
 
+    public static string MainWindow_OutputVolumesButtonTooltip => Get("MainWindow_OutputVolumesButtonTooltip");
+
+    public static string MainWindow_OutputVolumesHeader => Get("MainWindow_OutputVolumesHeader");
+
     public static string MainWindow_OpenFileDialogTitle => Get("MainWindow_OpenFileDialogTitle");
 
     public static string MainWindow_OpenFileTypeFilterName => Get("MainWindow_OpenFileTypeFilterName");

@@ -34,7 +34,7 @@
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
 
-        <Style Selector="FlyoutPresenter.speed-flyout">
+        <Style Selector="FlyoutPresenter.app-flyout">
             <Setter Property="Background" Value="{DynamicResource FlyoutBackgroundBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource FlyoutForegroundBrush}" />
         </Style>

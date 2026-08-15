@@ -83,8 +83,8 @@ public sealed partial class OptionsWindow : Window
 
         var languageOptions = new List<LanguageOption> { new(null, Strings.Common_SystemDefault) };
         languageOptions.AddRange(AvailableLanguages.Cultures
-            .OrderBy(culture => culture.NativeName)
-            .Select(culture => new LanguageOption(culture.Name, culture.NativeName)));
+                .OrderBy(culture => culture.NativeName)
+                .Select(culture => new LanguageOption(culture.Name, culture.NativeName)));
 
         LanguageSelector.ItemsSource = languageOptions;
         LanguageSelector.SelectedItem = languageOptions
@@ -208,7 +208,7 @@ public sealed partial class OptionsWindow : Window
         }
 
         _mediaSessionRegistry.Current?.SetOutputVolume(row.Route.Output.Id, e.NewValue / 100);
-        UpsertOutputVolumeSetting(row.Route.Output, e.NewValue, row.Muted, row.DelayMs);
+        _settings.UpsertOutputVolumeSetting(row.Route.Output, e.NewValue, row.Muted, row.DelayMs);
     }
 
     private void OnRouteVolumeReleased(object? sender, PointerCaptureLostEventArgs e)
@@ -225,7 +225,7 @@ public sealed partial class OptionsWindow : Window
 
         var muted = toggle.IsChecked == true;
         _mediaSessionRegistry.Current?.SetOutputMuted(row.Route.Output.Id, muted);
-        UpsertOutputVolumeSetting(row.Route.Output, row.Volume, muted, row.DelayMs);
+        _settings.UpsertOutputVolumeSetting(row.Route.Output, row.Volume, muted, row.DelayMs);
 
         _settings.Save();
     }
@@ -239,7 +239,7 @@ public sealed partial class OptionsWindow : Window
 
         var delayMs = (double)(e.NewValue ?? 0);
         _mediaSessionRegistry.Current?.SetOutputDelay(row.Route.Output.Id, delayMs / 1000.0);
-        UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, delayMs);
+        _settings.UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, delayMs);
 
         _settings.Save();
     }
@@ -372,7 +372,8 @@ public sealed partial class OptionsWindow : Window
 
         SubtitleStreamSelector.ItemsSource = availableStreams;
 
-        if (SubtitleStreamSelector.SelectedItem is SubtitleStreamOption selected && !availableStreams.Contains(selected))
+        if (SubtitleStreamSelector.SelectedItem is SubtitleStreamOption selected &&
+            !availableStreams.Contains(selected))
         {
             SubtitleStreamSelector.SelectedItem = null;
         }
@@ -404,7 +405,7 @@ public sealed partial class OptionsWindow : Window
 
         foreach (var row in _audioRouteRows)
         {
-            UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, row.DelayMs);
+            _settings.UpsertOutputVolumeSetting(row.Route.Output, row.Volume, row.Muted, row.DelayMs);
         }
 
         _settings.Save();
@@ -414,22 +415,6 @@ public sealed partial class OptionsWindow : Window
     {
         _settings.Current.SubtitleZones = _subtitleZones.ToList();
         _settings.Save();
-    }
-
-    private void UpsertOutputVolumeSetting(AudioOutput output, double volumePercent, bool muted, double? delayMs)
-    {
-        var existing = _settings.Current.OutputVolumes
-            .FirstOrDefault(o => o.FriendlyName == output.FriendlyName);
-
-        if (existing is null)
-        {
-            existing = new OutputVolumeSetting { FriendlyName = output.FriendlyName };
-            _settings.Current.OutputVolumes.Add(existing);
-        }
-
-        existing.Volume = volumePercent / 100;
-        existing.Muted = muted;
-        existing.DelayMs = delayMs ?? 0;
     }
 
     private void UpdateOutputSelector()

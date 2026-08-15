@@ -10,6 +10,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using OMP.Lib.Audio;
+using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
@@ -69,6 +70,7 @@ public sealed partial class MainWindow : Window
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
+    private readonly VolumeFlyoutView _volumeFlyoutView = new();
 
     public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
@@ -90,20 +92,22 @@ public sealed partial class MainWindow : Window
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
         _subtitleOverlayRenderer = new SubtitleOverlayRenderer(SubtitleOverlay);
 
-        _commands.Attach(new MainWindowCommandContext
-        {
-            GetIsPlaying = () => IsPlaying,
-            GetIsFullscreen = () => _fullscreenController.IsFullscreen,
-            SetIsPlaying = value => IsPlaying = value,
-            SetIsMuted = value => IsMuted = value,
-            SetSpeedDisplay = OnSpeedChanged,
-            SetVolumeDisplay = OnVolumeChanged,
-            ToggleFullscreen = () => _fullscreenController.Toggle(),
-            ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
-        });
+        _commands.Attach(
+            new MainWindowCommandContext
+            {
+                GetIsPlaying = () => IsPlaying,
+                GetIsFullscreen = () => _fullscreenController.IsFullscreen,
+                SetIsPlaying = value => IsPlaying = value,
+                SetIsMuted = value => IsMuted = value,
+                SetSpeedDisplay = OnSpeedChanged,
+                SetVolumeDisplay = OnVolumeChanged,
+                ToggleFullscreen = () => _fullscreenController.Toggle(),
+                ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
+            });
         SetupButtons();
         SetupVolume();
         SetupSpeed();
+        SetupOutputVolumePopup();
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
@@ -177,12 +181,68 @@ public sealed partial class MainWindow : Window
         {
             Content = _speedFlyoutView,
             Placement = PlacementMode.Top,
-            FlyoutPresenterClasses = { "speed-flyout" }
+            FlyoutPresenterClasses = { "app-flyout" }
         };
 
         _speedFlyoutView.SpeedCommitted += speed => _commands.SetSpeed(speed);
 
         SetSpeedDisplayText(_settings.Current.PlaybackSpeed);
+    }
+
+    private void SetupOutputVolumePopup()
+    {
+        var flyout = new Flyout
+        {
+            Content = _volumeFlyoutView,
+            Placement = PlacementMode.Top,
+            FlyoutPresenterClasses = { "app-flyout" }
+        };
+        flyout.Opened += (_, _) => RefreshOutputVolumeRows();
+        OutputVolumesButton.Flyout = flyout;
+
+        _volumeFlyoutView.OutputVolumeChanged += (output, volume) =>
+            _mediaSessionRegistry.Current?.SetOutputVolume(output.Id, volume / 100);
+
+        _volumeFlyoutView.OutputVolumeCommitted += PersistOutputVolumeSetting;
+
+        _volumeFlyoutView.OutputMuteChanged += (output, muted) =>
+        {
+            _mediaSessionRegistry.Current?.SetOutputMuted(output.Id, muted);
+            PersistOutputVolumeSetting(output);
+        };
+    }
+
+    private void RefreshOutputVolumeRows()
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session == null)
+        {
+            _volumeFlyoutView.SetOutputs([]);
+            return;
+        }
+
+        var rows = session.AudioRoutes.Select(route =>
+        {
+            var state = session.OutputVolumes.TryGetValue(route.Output.Id, out var s)
+                ? s
+                : new OutputVolumeState(1.0, false);
+            return (route.Output, state.Volume * 100, state.Muted);
+        });
+
+        _volumeFlyoutView.SetOutputs(rows);
+    }
+
+    private void PersistOutputVolumeSetting(AudioOutput output)
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session != null && session.OutputVolumes.TryGetValue(output.Id, out var state))
+        {
+            _settings.UpsertOutputVolumeSetting(output, state.Volume * 100, state.Muted);
+        }
+
+        _settings.Save();
     }
 
     private void SetSpeedDisplayText(double speed)
@@ -506,7 +566,8 @@ public sealed partial class MainWindow : Window
     {
         var extension = Path.GetExtension(path);
 
-        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern => pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
+        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern =>
+            pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
     }
 
     private void UpdateSessionData()

@@ -22,6 +22,8 @@
   <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>_О программе...</value></data>
   <data name="MainWindow_SpeedButtonTooltip" xml:space="preserve"><value>Скорость воспроизведения</value></data>
   <data name="MainWindow_SubtitlesButtonTooltip" xml:space="preserve"><value>Субтитры</value></data>
+  <data name="MainWindow_OutputVolumesButtonTooltip" xml:space="preserve"><value>Громкость по выходам</value></data>
+  <data name="MainWindow_OutputVolumesHeader" xml:space="preserve"><value>Громкость по выходам</value></data>
   <data name="MainWindow_OpenFileDialogTitle" xml:space="preserve"><value>Открыть медиафайл</value></data>
   <data name="MainWindow_OpenFileTypeFilterName" xml:space="preserve"><value>Медиафайлы</value></data>
 
