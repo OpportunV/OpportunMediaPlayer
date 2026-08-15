@@ -127,7 +127,19 @@
                             Minimum="0"
                             Maximum="1"
                             VerticalAlignment="Center"
-                            Focusable="False" />
+                            Focusable="False"
+                            ToolTip.Placement="Pointer"
+                            ToolTip.ShowDelay="0">
+                        <Slider.Resources>
+                            <!-- ReSharper disable Xaml.RedundantResource 
+                            Reason: used by avalonia -->
+                            <x:Double x:Key="SliderTrackThemeHeight">14</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbWidth">0</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbHeight">8</x:Double>
+                            <x:Double x:Key="SliderHorizontalHeight">18</x:Double>
+                            <!-- ReSharper restore Xaml.RedundantResource -->
+                        </Slider.Resources>
+                    </Slider>
 
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"

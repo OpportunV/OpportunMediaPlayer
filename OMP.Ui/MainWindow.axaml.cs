@@ -109,18 +109,12 @@ public sealed partial class MainWindow : Window
         SetupHotkeys();
         SetupDragDrop();
         SetupVideoDoubleClick();
+        SetupProgressSlider();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
-
-        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
-        ProgressSlider.PointerCaptureLost += (_, _) =>
-        {
-            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
-            _isSeekingViaSlider = false;
-        };
 
         if (_mediaSessionRegistry.Current is not null)
         {
@@ -466,6 +460,28 @@ public sealed partial class MainWindow : Window
     private void SetupVideoDoubleClick()
     {
         VideoSurface.DoubleTapped += (_, _) => _commands.ToggleFullscreen();
+    }
+
+    private void SetupProgressSlider()
+    {
+        ProgressSlider.PointerMoved += (_, e) =>
+        {
+            if (_mediaSessionRegistry.Current == null || ProgressSlider.Bounds.Width <= 0)
+            {
+                return;
+            }
+
+            var ratio = Math.Clamp(e.GetPosition(ProgressSlider).X / ProgressSlider.Bounds.Width, 0, 1);
+            var hoveredTime = TimeSpan.FromSeconds(ratio * ProgressSlider.Maximum);
+            ToolTip.SetTip(ProgressSlider, FormatTime(hoveredTime));
+        };
+
+        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
+        ProgressSlider.PointerCaptureLost += (_, _) =>
+        {
+            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+            _isSeekingViaSlider = false;
+        };
     }
 
     private static void OnFileDragOver(object? sender, DragEventArgs e)
