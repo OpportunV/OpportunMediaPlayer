@@ -4,13 +4,26 @@
              RequestedThemeVariant="Default">
 
     <Application.Resources>
-        <Color x:Key="SystemAccentColor">#4FAE7C</Color>
-        <Color x:Key="SystemAccentColorLight1">#6FC494</Color>
-        <Color x:Key="SystemAccentColorLight2"> #8FDBAD</Color>
-        <Color x:Key="SystemAccentColorLight3">#AFEFC5</Color>
-        <Color x:Key="SystemAccentColorDark1">#3B8C63</Color>
-        <Color x:Key="SystemAccentColorDark2">#2A6A4A</Color>
-        <Color x:Key="SystemAccentColorDark3">#1B4A32</Color>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#CCF5F5F5" />
+                    <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="#1A1A1A" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="White" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <Color x:Key="SystemAccentColor">#4FAE7C</Color>
+            <Color x:Key="SystemAccentColorLight1">#6FC494</Color>
+            <Color x:Key="SystemAccentColorLight2"> #8FDBAD</Color>
+            <Color x:Key="SystemAccentColorLight3">#AFEFC5</Color>
+            <Color x:Key="SystemAccentColorDark1">#3B8C63</Color>
+            <Color x:Key="SystemAccentColorDark2">#2A6A4A</Color>
+            <Color x:Key="SystemAccentColorDark3">#1B4A32</Color>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
