@@ -86,11 +86,17 @@ internal static class Strings
 
     public static string Hotkeys_ToggleSubtitles => Get("Hotkeys_ToggleSubtitles");
 
+    public static string Hotkeys_ToggleMute => Get("Hotkeys_ToggleMute");
+
     public static string Hotkeys_ExitFullscreen => Get("Hotkeys_ExitFullscreen");
 
     public static string Hotkeys_DecreaseSpeed => Get("Hotkeys_DecreaseSpeed");
 
     public static string Hotkeys_IncreaseSpeed => Get("Hotkeys_IncreaseSpeed");
+
+    public static string Hotkeys_IncreaseVolume => Get("Hotkeys_IncreaseVolume");
+
+    public static string Hotkeys_DecreaseVolume => Get("Hotkeys_DecreaseVolume");
 
     public static string About_Title => Get("About_Title");
 

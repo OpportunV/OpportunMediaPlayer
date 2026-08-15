@@ -56,9 +56,12 @@
   <data name="Hotkeys_StepForward" xml:space="preserve"><value>Step forward</value></data>
   <data name="Hotkeys_ToggleFullscreen" xml:space="preserve"><value>Toggle fullscreen</value></data>
   <data name="Hotkeys_ToggleSubtitles" xml:space="preserve"><value>Toggle subtitles</value></data>
+  <data name="Hotkeys_ToggleMute" xml:space="preserve"><value>Toggle mute</value></data>
   <data name="Hotkeys_ExitFullscreen" xml:space="preserve"><value>Exit fullscreen</value></data>
   <data name="Hotkeys_DecreaseSpeed" xml:space="preserve"><value>Decrease playback speed</value></data>
   <data name="Hotkeys_IncreaseSpeed" xml:space="preserve"><value>Increase playback speed</value></data>
+  <data name="Hotkeys_IncreaseVolume" xml:space="preserve"><value>Increase volume</value></data>
+  <data name="Hotkeys_DecreaseVolume" xml:space="preserve"><value>Decrease volume</value></data>
 
   <data name="About_Title" xml:space="preserve"><value>About</value></data>
   <data name="About_LicenseText" xml:space="preserve"><value>Licensed under PolyForm Noncommercial 1.0.0</value></data>

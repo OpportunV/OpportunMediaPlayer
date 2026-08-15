@@ -97,6 +97,7 @@ public sealed partial class MainWindow : Window
             SetIsPlaying = value => IsPlaying = value,
             SetIsMuted = value => IsMuted = value,
             SetSpeedDisplay = OnSpeedChanged,
+            SetVolumeDisplay = OnVolumeChanged,
             ToggleFullscreen = () => _fullscreenController.Toggle(),
             ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
         });
@@ -107,6 +108,7 @@ public sealed partial class MainWindow : Window
         SetupUiTimer();
         SetupHotkeys();
         SetupDragDrop();
+        SetupVideoDoubleClick();
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
@@ -230,6 +232,14 @@ public sealed partial class MainWindow : Window
         };
 
         VolumeSlider.PointerCaptureLost += (_, _) => _settings.Save();
+    }
+
+    private void OnVolumeChanged(double volume)
+    {
+        VolumeSlider.Value = volume * 100;
+        VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
+        _settings.Current.MasterVolume = volume;
+        _settings.Save();
     }
 
     private void RestoreAudioRoutes(IMediaSession session)
@@ -450,6 +460,11 @@ public sealed partial class MainWindow : Window
     {
         AddHandler(DragDrop.DropEvent, OnFileDrop);
         AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
+    }
+
+    private void SetupVideoDoubleClick()
+    {
+        VideoSurface.DoubleTapped += (_, _) => _commands.ToggleFullscreen();
     }
 
     private static void OnFileDragOver(object? sender, DragEventArgs e)

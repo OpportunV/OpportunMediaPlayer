@@ -20,6 +20,10 @@ public interface IMainWindowCommands
 
     public void SetMasterVolume(double volume);
 
+    public void IncreaseMasterVolume();
+
+    public void DecreaseMasterVolume();
+
     public void ToggleMute();
 
     public void ToggleSubtitles();

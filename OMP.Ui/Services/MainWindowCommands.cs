@@ -8,6 +8,7 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
 {
     private static readonly TimeSpan _seekStep = TimeSpan.FromSeconds(5);
     private MainWindowCommandContext? _context;
+    private const double VolumeStep = 0.05;
 
     public void Attach(MainWindowCommandContext context)
     {
@@ -82,6 +83,16 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         mediaSessionRegistry.Current?.SetMasterVolume(volume);
     }
 
+    public void IncreaseMasterVolume()
+    {
+        AdjustMasterVolume(VolumeStep);
+    }
+
+    public void DecreaseMasterVolume()
+    {
+        AdjustMasterVolume(-VolumeStep);
+    }
+
     public void ToggleMute()
     {
         var session = mediaSessionRegistry.Current;
@@ -123,5 +134,17 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
 
         session.SetSpeed(speed);
         _context?.SetSpeedDisplay(session.Speed);
+    }
+
+    private void AdjustMasterVolume(double delta)
+    {
+        var session = mediaSessionRegistry.Current;
+        if (session == null)
+        {
+            return;
+        }
+
+        session.SetMasterVolume(session.MasterVolume + delta);
+        _context?.SetVolumeDisplay(session.MasterVolume);
     }
 }

@@ -56,9 +56,12 @@
   <data name="Hotkeys_StepForward" xml:space="preserve"><value>Шаг вперёд</value></data>
   <data name="Hotkeys_ToggleFullscreen" xml:space="preserve"><value>Полноэкранный режим</value></data>
   <data name="Hotkeys_ToggleSubtitles" xml:space="preserve"><value>Субтитры</value></data>
+  <data name="Hotkeys_ToggleMute" xml:space="preserve"><value>Выключить звук</value></data>
   <data name="Hotkeys_ExitFullscreen" xml:space="preserve"><value>Выйти из полноэкранного режима</value></data>
   <data name="Hotkeys_DecreaseSpeed" xml:space="preserve"><value>Уменьшить скорость воспроизведения</value></data>
   <data name="Hotkeys_IncreaseSpeed" xml:space="preserve"><value>Увеличить скорость воспроизведения</value></data>
+  <data name="Hotkeys_IncreaseVolume" xml:space="preserve"><value>Увеличить громкость</value></data>
+  <data name="Hotkeys_DecreaseVolume" xml:space="preserve"><value>Уменьшить громкость</value></data>
 
   <data name="About_Title" xml:space="preserve"><value>О программе</value></data>
   <data name="About_LicenseText" xml:space="preserve"><value>Распространяется по лицензии PolyForm Noncommercial 1.0.0</value></data>
