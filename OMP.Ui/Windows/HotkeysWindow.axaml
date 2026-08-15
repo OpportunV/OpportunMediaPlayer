@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:input="clr-namespace:OMP.Ui.Input"
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
-        x:Class="OMP.Ui.HotkeysWindow"
+        x:Class="OMP.Ui.Windows.HotkeysWindow"
         Width="380"
         SizeToContent="Height"
         CanResize="False"

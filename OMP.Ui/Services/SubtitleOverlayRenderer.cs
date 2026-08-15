@@ -9,7 +9,7 @@ using Avalonia.Media;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Settings;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 internal sealed class SubtitleOverlayRenderer(Canvas overlayCanvas)
 {

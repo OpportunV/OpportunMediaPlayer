@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace OMP.Ui;
+namespace OMP.Ui.Windows;
 
 public sealed partial class OpenFileErrorWindow : Window
 {

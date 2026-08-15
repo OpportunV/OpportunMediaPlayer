@@ -6,9 +6,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OMP.Lib;
 using OMP.Lib.Session;
-using OMP.Ui.Controls;
 using OMP.Ui.Input;
+using OMP.Ui.Services;
 using OMP.Ui.Settings;
+using OMP.Ui.Windows;
 using Serilog;
 
 namespace OMP.Ui;

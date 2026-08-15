@@ -2,7 +2,7 @@ using System;
 using OMP.Lib;
 using OMP.Lib.Session;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistry) : IMainWindowCommands
 {

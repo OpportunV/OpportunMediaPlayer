@@ -1,6 +1,6 @@
 using System;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 public sealed class MainWindowCommandContext
 {

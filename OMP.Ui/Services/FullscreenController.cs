@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 internal sealed class FullscreenController : IDisposable
 {

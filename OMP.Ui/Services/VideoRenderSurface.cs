@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 internal sealed class VideoRenderSurface(Image imageControl) : IDisposable
 {

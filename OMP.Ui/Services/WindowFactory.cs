@@ -2,7 +2,7 @@ using System;
 using Avalonia.Controls;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 internal sealed class WindowFactory(IServiceProvider serviceProvider) : IWindowFactory
 {

@@ -11,7 +11,7 @@ using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
 
-namespace OMP.Ui;
+namespace OMP.Ui.Windows;
 
 public sealed partial class SubtitleZoneEditorWindow : Window
 {

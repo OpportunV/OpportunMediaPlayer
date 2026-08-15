@@ -1,8 +1,9 @@
 using System.Diagnostics;
 using Avalonia.Controls;
+using OMP.Ui;
 using OMP.Ui.Localization;
 
-namespace OMP.Ui;
+namespace OMP.Ui.Windows;
 
 public sealed partial class AboutWindow : Window
 {

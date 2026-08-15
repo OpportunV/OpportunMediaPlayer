@@ -13,13 +13,13 @@ using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Subtitle;
-using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
+using OMP.Ui.Services;
 using OMP.Ui.Settings;
 
-namespace OMP.Ui;
+namespace OMP.Ui.Windows;
 
 public sealed partial class OptionsWindow : Window
 {

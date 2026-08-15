@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace OMP.Ui.Controls;
+namespace OMP.Ui.Services;
 
 public interface IWindowFactory
 {
