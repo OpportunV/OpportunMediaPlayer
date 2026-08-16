@@ -57,6 +57,25 @@ public class PlaybackClockTests
     }
 
     [Fact]
+    public void Start_WhenAlreadyRunning_IsNoOp()
+    {
+        var clock = new PlaybackClock();
+        clock.Rebase(5);
+        clock.Start();
+
+        Thread.Sleep(50);
+        var beforeSecondStart = clock.CurrentSeconds;
+
+        clock.Start();
+
+        Assert.True(clock.IsRunning);
+        Assert.True(clock.CurrentSeconds >= beforeSecondStart);
+
+        Thread.Sleep(50);
+        Assert.True(clock.CurrentSeconds > beforeSecondStart);
+    }
+
+    [Fact]
     public void SetSpeed_ChangesSpeedImmediately()
     {
         var clock = new PlaybackClock();

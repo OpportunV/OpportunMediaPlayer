@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="OMP.Lib/OMP.Lib.csproj" />
+  <Project Path="OMP.Lib.IntegrationTests/OMP.Lib.IntegrationTests.csproj" />
   <Project Path="OMP.Lib.Tests/OMP.Lib.Tests.csproj" />
   <Project Path="OMP.Ui/OMP.Ui.csproj" />
 </Solution>

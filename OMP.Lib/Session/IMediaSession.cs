@@ -9,6 +9,8 @@ public interface IMediaSession : IDisposable
 {
     public event Action<VideoFrame>? VideoFrameReady;
 
+    public event Action? PlaybackEnded;
+
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
@@ -23,6 +25,8 @@ public interface IMediaSession : IDisposable
 
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes { get; }
 
+    public IReadOnlyDictionary<int, double> OutputDelays { get; }
+
     public TimeSpan CurrentTime { get; }
 
     public TimeSpan Duration { get; }
@@ -30,6 +34,8 @@ public interface IMediaSession : IDisposable
     public string FileName { get; }
 
     public string FilePath { get; }
+
+    public bool HasVideo { get; }
 
     public bool IsMuted { get; }
 
@@ -64,4 +70,6 @@ public interface IMediaSession : IDisposable
     public void SetOutputVolume(int outputId, double volume);
 
     public void SetOutputMuted(int outputId, bool muted);
+
+    public void SetOutputDelay(int outputId, double delaySeconds);
 }

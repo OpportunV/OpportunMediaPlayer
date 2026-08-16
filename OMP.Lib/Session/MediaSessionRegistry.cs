@@ -2,7 +2,10 @@ using Microsoft.Extensions.Logging;
 
 namespace OMP.Lib.Session;
 
-public sealed class MediaSessionRegistry(PlaybackTuningOptions options, ILoggerFactory loggerFactory)
+public sealed class MediaSessionRegistry(
+    PlaybackTuningOptions options,
+    ILoggerFactory loggerFactory,
+    NativeLibraryOptions nativeLibraryOptions)
     : IMediaSessionRegistry
 {
     public event Action<IMediaSessionRegistry>? SessionChanged;
@@ -19,7 +22,7 @@ public sealed class MediaSessionRegistry(PlaybackTuningOptions options, ILoggerF
 
         try
         {
-            Current = new MediaSession(filePath, options, loggerFactory);
+            Current = new MediaSession(filePath, options, loggerFactory, nativeLibraryOptions);
         }
         catch (Exception ex)
         {

@@ -6,8 +6,9 @@ on:
 jobs:
   build-and-test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -24,3 +25,50 @@ jobs:
 
       - name: Test
         run: dotnet test OMP.Lib.Tests/OMP.Lib.Tests.csproj -c Release
+
+  integration-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install FFmpeg (macOS only)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg@7
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        env:
+          DOTNET_DbgEnableMiniDump: "1"
+          DOTNET_DbgMiniDumpType: "4"
+          DOTNET_DbgMiniDumpName: "${{ github.workspace }}/crash_%p.dmp"
+        run: dotnet test OMP.Lib.IntegrationTests/OMP.Lib.IntegrationTests.csproj -c Release -r ${{ matrix.rid }}
+
+      - name: Upload crash dump
+        if: steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: crash-dump-${{ matrix.rid }}
+          path: ${{ github.workspace }}/crash_*.dmp
+          if-no-files-found: ignore
+
+      - name: Fail job if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1

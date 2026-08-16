@@ -3,8 +3,63 @@
              x:Class="OMP.Ui.App"
              RequestedThemeVariant="Default">
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://OMP/Assets/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#CCF5F5F5" />
+                    <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="#1A1A1A" />
+                    <SolidColorBrush x:Key="FlyoutBackgroundBrush" Color="#AAF5F5F5" />
+                    <SolidColorBrush x:Key="FlyoutForegroundBrush" Color="#1A1A1A" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="OverlayBarBackgroundBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="OverlayBarForegroundBrush" Color="White" />
+                    <SolidColorBrush x:Key="FlyoutBackgroundBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="FlyoutForegroundBrush" Color="White" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <Color x:Key="SystemAccentColor">#4FAE7C</Color>
+            <Color x:Key="SystemAccentColorLight1">#6FC494</Color>
+            <Color x:Key="SystemAccentColorLight2"> #8FDBAD</Color>
+            <Color x:Key="SystemAccentColorLight3">#AFEFC5</Color>
+            <Color x:Key="SystemAccentColorDark1">#3B8C63</Color>
+            <Color x:Key="SystemAccentColorDark2">#2A6A4A</Color>
+            <Color x:Key="SystemAccentColorDark3">#1B4A32</Color>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
+        <Style Selector="FlyoutPresenter.app-flyout">
+            <Setter Property="Background" Value="{DynamicResource FlyoutBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource FlyoutForegroundBrush}" />
+        </Style>
+
+        <!--Square, centered icon button for the main playback bar (StepBack/PlayPause/Mute/Options/etc.).-->
+        <Style Selector="Button.icon-button, ToggleButton.icon-button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+
+        <!--Square, centered icon button for compact inline row actions (Options tabs, flyout popups).-->
+        <Style Selector="Button.icon-button-sm, ToggleButton.icon-button-sm">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
     </Application.Styles>
 </Application>

@@ -71,7 +71,7 @@ public class AudioSpeedProcessorTests
         for (var frame = 0; frame < frameCount; frame++)
         {
             var left = (short)(frame % short.MaxValue);
-            var right = (short)(-(frame % short.MaxValue));
+            var right = (short)-(frame % short.MaxValue);
             var offset = frame * 4;
             BitConverter.GetBytes(left).CopyTo(buffer, offset);
             BitConverter.GetBytes(right).CopyTo(buffer, offset + 2);

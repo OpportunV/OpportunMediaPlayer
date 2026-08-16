@@ -100,8 +100,42 @@ jobs:
             OMP-${{ env.VERSION }}-linux-x64-portable.tar.gz
             OMP-${{ env.VERSION }}-x86_64.AppImage
 
+  macos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Extract version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Publish osx-x64
+        run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r osx-x64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/osx-x64
+
+      - name: Publish osx-arm64
+        run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r osx-arm64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/osx-arm64
+
+      - name: Create portable tarballs
+        run: |
+          chmod +x publish/osx-x64/OMP publish/osx-arm64/OMP
+          tar -czf "OMP-${VERSION}-osx-x64-portable.tar.gz" -C publish/osx-x64 .
+          tar -czf "OMP-${VERSION}-osx-arm64-portable.tar.gz" -C publish/osx-arm64 .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-artifacts
+          path: |
+            OMP-${{ env.VERSION }}-osx-x64-portable.tar.gz
+            OMP-${{ env.VERSION }}-osx-arm64-portable.tar.gz
+
   release:
-    needs: [windows, linux]
+    needs: [windows, linux, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write

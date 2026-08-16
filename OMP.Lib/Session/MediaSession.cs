@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 {
     public event Action<VideoFrame>? VideoFrameReady;
 
+    public event Action? PlaybackEnded;
+
     public IReadOnlyList<AudioOutput> AudioOutputs { get; }
 
     public string? AudioOutputUnavailableReason { get; }
@@ -23,6 +26,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     public IReadOnlyList<AudioRoute> AudioRoutes => _audioRoutes.AsReadOnly();
 
     public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _outputVolumes.AsReadOnly();
+
+    public IReadOnlyDictionary<int, double> OutputDelays => _outputDelays.AsReadOnly();
 
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
@@ -55,6 +60,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public double Speed => _clock.Speed;
 
+    public bool HasVideo => _videoPipeline is not null;
+
     public double VideoFps { get; private set; }
 
     public double VideoDecodeFps { get; private set; }
@@ -66,7 +73,6 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly Stopwatch _loopErrorStopwatch = Stopwatch.StartNew();
     private int _suppressedLoopErrors;
 
-    private readonly Channel<PacketRef> _audioChannel;
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<AudioRoute> _audioRoutes = [];
 
@@ -75,15 +81,17 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly List<SubtitleRoute> _subtitleRoutes = [];
 
     private readonly Dictionary<int, OutputVolumeState> _outputVolumes = [];
+    private readonly Dictionary<int, double> _outputDelays = [];
     private readonly int _audioBufferDurationSeconds;
+    private readonly int _audioPacketChannelCapacity;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly PlaybackClock _clock = new();
 
     private readonly PipelineWorker _demuxWorker;
-    private readonly PipelineWorker _audioWorker;
-    private readonly PipelineWorker _videoWorker;
-    private readonly PipelineWorker _videoRenderWorker;
+    private readonly PipelineWorker? _videoWorker;
+    private readonly PipelineWorker? _videoRenderWorker;
     private readonly PipelineWorker _subtitleWorker;
+    private readonly PipelineWorker _sessionWorker;
     private readonly Lock _formatSync = new();
     private readonly Lock _seekSync = new();
 
@@ -96,30 +104,34 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly double _fpsSampleWindowMs;
     private int _videoFramesRendered;
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
+    private readonly Stopwatch _syncLogStopwatch = Stopwatch.StartNew();
     private bool _isPlaying;
-    private bool _awaitingFirstFrame = true;
     private double? _pendingSeekTargetSeconds;
+    private double _lastSeekTargetSeconds;
     private int _seekGeneration;
+    private double _pendingDemuxPtsAnchorSeconds;
+    private int _diagVideoGenerationMismatchCount;
+    private readonly Dictionary<int, double> _demuxPtsBaselineOffsets = [];
+    private readonly EndOfStreamTracker _endOfStreamTracker = new();
 
-    private const int NoVideoIdleSleepMs = 2;
-    private const int FrameNotReadySleepMs = 1;
-    private const int RenderErrorBackoffSleepMs = 5;
-    private const double MaxFrameLagSeconds = 0.2;
+    private const double MaxFrameLagSeconds = 0.05;
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
-    private const double SeekFrameSkipEpsilonSeconds = 0.01;
     private const double SeekLookbackSeconds = 1;
     private const double LoopErrorLogIntervalMs = 5000;
+    private const double SyncLogIntervalMs = 1000;
+    private const double MaxDemuxLookaheadSeconds = 3;
+    private const double ZeroSeekEpsilonSeconds = 0.05;
 
-    public MediaSession(string filePath, PlaybackTuningOptions options, ILoggerFactory loggerFactory)
+    public MediaSession(
+        string filePath,
+        PlaybackTuningOptions options,
+        ILoggerFactory loggerFactory,
+        NativeLibraryOptions nativeLibraryOptions)
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MediaSession>();
 
-        _audioChannel = Channel.CreateBounded<PacketRef>(
-            new BoundedChannelOptions(options.AudioChannelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.DropOldest
-            });
+        FFmpegEnvironment.EnsureInitialized(_logger, nativeLibraryOptions.FFmpegLibraryDirectory);
 
         _videoChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.VideoChannelCapacity)
@@ -134,6 +146,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             });
 
         _audioBufferDurationSeconds = options.BufferDurationSeconds;
+        _audioPacketChannelCapacity = options.AudioChannelCapacity;
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
         int openResult;
@@ -158,7 +171,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             throw new ApplicationException("Could not find stream info.");
         }
 
-        FileName = Path.GetFileNameWithoutExtension(filePath);
+        FileName = Path.GetFileName(filePath);
         FilePath = filePath;
 
         for (var i = 0; i < _formatContext->nb_streams; i++)
@@ -178,27 +191,33 @@ internal sealed unsafe class MediaSession : IMediaSession
         SubtitleStreams = new SubtitleScanner(loggerFactory).GetSubtitleStreams(_formatContext);
 
         _demuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, _cancellationTokenSource.Token);
-        _audioWorker = new PipelineWorker(PipelineWorkerRole.Audio, _cancellationTokenSource.Token);
-        _videoWorker = new PipelineWorker(PipelineWorkerRole.Video, _cancellationTokenSource.Token);
-        _videoRenderWorker = new PipelineWorker(PipelineWorkerRole.VideoRender, _cancellationTokenSource.Token);
         _subtitleWorker = new PipelineWorker(PipelineWorkerRole.Subtitle, _cancellationTokenSource.Token);
+        _sessionWorker = new PipelineWorker(PipelineWorkerRole.Session, _cancellationTokenSource.Token);
 
         _demuxWorker.Pause();
-        _audioWorker.Pause();
-        _videoWorker.Pause();
-        _videoRenderWorker.Pause();
         _subtitleWorker.Pause();
+        _sessionWorker.Pause();
 
         _demuxWorker.Start(DemuxLoop);
-        _audioWorker.Start(AudioLoop);
-        _videoWorker.Start(VideoLoop);
-        _videoRenderWorker.Start(VideoRenderLoop);
         _subtitleWorker.Start(SubtitleLoop);
+        _sessionWorker.Start(SessionLoop);
+
+        if (_videoPipeline is not null)
+        {
+            _videoWorker = new PipelineWorker(PipelineWorkerRole.Video, _cancellationTokenSource.Token);
+            _videoRenderWorker = new PipelineWorker(PipelineWorkerRole.VideoRender, _cancellationTokenSource.Token);
+
+            _videoWorker.Pause();
+            _videoRenderWorker.Pause();
+
+            _videoWorker.Start(VideoLoop);
+            _videoRenderWorker.Start(VideoRenderLoop);
+        }
 
         _logger.LogInformation(
-            "Opened {FileName}: duration {Duration:c}, {AudioStreamCount} audio stream(s), " +
+            "Opened {FilePath}: duration {Duration:c}, {AudioStreamCount} audio stream(s), " +
             "{SubtitleStreamCount} subtitle stream(s), {OutputCount} output(s), video={HasVideo}.",
-            FileName,
+            FilePath,
             Duration,
             AudioStreams.Count,
             SubtitleStreams.Count,
@@ -239,6 +258,9 @@ internal sealed unsafe class MediaSession : IMediaSession
                         route.Output,
                         _cancellationTokenSource.Token,
                         _audioBufferDurationSeconds,
+                        _audioPacketChannelCapacity,
+                        () => Volatile.Read(ref _seekGeneration),
+                        () => _clock.CurrentSeconds,
                         _loggerFactory);
                 }
                 catch (Exception ex)
@@ -267,6 +289,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
         ApplyVolumeToPipelines();
+        ApplyDelayToPipelines();
 
         if (wasPlaying)
         {
@@ -368,28 +391,23 @@ internal sealed unsafe class MediaSession : IMediaSession
         ApplyVolumeToPipelines();
     }
 
+    public void SetOutputDelay(int outputId, double delaySeconds)
+    {
+        _outputDelays[outputId] = Math.Clamp(delaySeconds, AudioDelayLimits.Min, AudioDelayLimits.Max);
+        ApplyDelayToPipelines();
+    }
+
     public void Play()
     {
         _isPlaying = true;
 
-        if (!_clock.IsRunning)
-        {
-            _awaitingFirstFrame = true;
-
-            if (_videoPipeline is null)
-            {
-                _clock.Start();
-                _awaitingFirstFrame = false;
-            }
-        }
-
         _demuxWorker.Resume();
-        _audioWorker.Resume();
-        _videoWorker.Resume();
-        _videoRenderWorker.Resume();
+        _videoWorker?.Resume();
         _subtitleWorker.Resume();
-
+        _sessionWorker.Resume();
         _audioPipelines.ForEach(p => p.Play());
+        _clock.Start();
+        _videoRenderWorker?.Resume();
     }
 
     public void Pause()
@@ -398,10 +416,10 @@ internal sealed unsafe class MediaSession : IMediaSession
         _clock.Stop();
 
         _demuxWorker.Pause();
-        _audioWorker.Pause();
-        _videoWorker.Pause();
-        _videoRenderWorker.Pause();
+        _videoWorker?.Pause();
+        _videoRenderWorker?.Pause();
         _subtitleWorker.Pause();
+        _sessionWorker.Pause();
 
         _audioPipelines.ForEach(p => p.Pause());
     }
@@ -426,18 +444,15 @@ internal sealed unsafe class MediaSession : IMediaSession
             var targetSeconds = Math.Clamp(target.TotalSeconds, 0, Duration.TotalSeconds);
             var wasPlaying = _isPlaying;
             Pause();
-            DrainPacketChannel(_audioChannel);
             DrainPacketChannel(_videoChannel);
             DrainPacketChannel(_subtitleChannel);
-            var seekTargetSeconds = _videoPipeline is null
-                ? targetSeconds
-                : Math.Max(0, targetSeconds - SeekLookbackSeconds);
+            var seekTargetSeconds = Math.Max(0, targetSeconds - SeekLookbackSeconds);
 
             bool seeked;
             int seekResult;
             lock (_formatSync)
             {
-                seeked = TrySeekToVideoTarget(seekTargetSeconds, out seekResult);
+                seeked = TrySeekToTarget(seekTargetSeconds, out seekResult);
             }
 
             if (!seeked)
@@ -450,13 +465,18 @@ internal sealed unsafe class MediaSession : IMediaSession
             else
             {
                 _clock.Rebase(targetSeconds);
-                _awaitingFirstFrame = true;
                 _pendingSeekTargetSeconds = targetSeconds;
+                _lastSeekTargetSeconds = targetSeconds;
+                
+                var ptsBaselineAnchorSeconds = _videoPipeline is null ? seekTargetSeconds : 0;
+                _pendingDemuxPtsAnchorSeconds = ptsBaselineAnchorSeconds;
+                _demuxPtsBaselineOffsets.Clear();
+                _endOfStreamTracker.MarkStreamReadable();
 
                 _audioPipelines.ForEach(pipeline =>
                 {
                     pipeline.Flush();
-                    pipeline.ResetClock(targetSeconds);
+                    pipeline.ResetClock(targetSeconds, ptsBaselineAnchorSeconds);
                 });
                 _videoPipeline?.Flush();
                 _subtitlePipelines.ForEach(p => p.Flush());
@@ -486,18 +506,19 @@ internal sealed unsafe class MediaSession : IMediaSession
         _cancellationTokenSource.Dispose();
 
         _demuxWorker.Join();
-        _audioWorker.Join();
-        _videoWorker.Join();
-        _videoRenderWorker.Join();
+        _videoWorker?.Join();
+        _videoRenderWorker?.Join();
         _subtitleWorker.Join();
+        _sessionWorker.Join();
 
         _demuxWorker.Dispose();
-        _audioWorker.Dispose();
-        _videoWorker.Dispose();
-        _videoRenderWorker.Dispose();
+        _videoWorker?.Dispose();
+        _videoRenderWorker?.Dispose();
         _subtitleWorker.Dispose();
+        _sessionWorker.Dispose();
 
         VideoFrameReady = null;
+        PlaybackEnded = null;
         ClearAudioPipelines();
         ClearSubtitlePipelines();
         _videoPipeline?.Dispose();
@@ -511,6 +532,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     private void DemuxLoop(PipelineWorker worker)
     {
         var packet = ffmpeg.av_packet_alloc();
+
+        var cancellationToken = _cancellationTokenSource.Token;
 
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
@@ -527,43 +550,54 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             if (readResult < 0)
             {
-                break;
+                _logger.LogWarning(
+                    "Demux read failed at generation {Generation}: {Error} ({Code}).",
+                    Volatile.Read(ref _seekGeneration),
+                    FFmpegError.Describe(readResult),
+                    readResult);
+                _endOfStreamTracker.MarkEndOfStream();
+                worker.Pause();
+                continue;
             }
 
+            _endOfStreamTracker.MarkStreamReadable();
+
             var streamIndex = packet->stream_index;
+
             var generation = Volatile.Read(ref _seekGeneration);
 
-            if (_audioPipelines.Any(pipeline => pipeline.StreamIndex == streamIndex))
+            if (packet->pts != ffmpeg.AV_NOPTS_VALUE)
             {
-                var cloned = ffmpeg.av_packet_alloc();
-                ffmpeg.av_packet_ref(cloned, packet);
-                var packetRef = new PacketRef(cloned, generation);
-                if (!_audioChannel.Writer.TryWrite(packetRef))
+                var packetSeconds = packet->pts * ffmpeg.av_q2d(_formatContext->streams[streamIndex]->time_base);
+
+                if (!_demuxPtsBaselineOffsets.TryGetValue(streamIndex, out var baselineOffset))
                 {
-                    ffmpeg.av_packet_free(&cloned);
+                    baselineOffset = PtsBaselineDetector.DetectOffset(packetSeconds, _pendingDemuxPtsAnchorSeconds);
+                    _demuxPtsBaselineOffsets[streamIndex] = baselineOffset;
+                }
+
+                ThrottleDemuxAhead(packetSeconds + baselineOffset, generation, worker);
+            }
+
+            foreach (var pipeline in _audioPipelines)
+            {
+                if (pipeline.StreamIndex == streamIndex)
+                {
+                    DispatchClonedPacket(packet, generation, pipeline.TryEnqueuePacket);
                 }
             }
 
             if (streamIndex == _videoPipeline?.StreamIndex)
             {
-                var cloned = ffmpeg.av_packet_alloc();
-                ffmpeg.av_packet_ref(cloned, packet);
-                var packetRef = new PacketRef(cloned, generation);
-                if (!_videoChannel.Writer.TryWriteBlocking(packetRef, _cancellationTokenSource.Token))
-                {
-                    ffmpeg.av_packet_free(&cloned);
-                }
+                DispatchClonedPacket(
+                    packet,
+                    generation,
+                    packetRef => _videoChannel.Writer.TryWriteBlocking(packetRef, cancellationToken));
             }
 
             if (_subtitlePipelines.Any(pipeline => pipeline.StreamIndex == streamIndex))
             {
-                var cloned = ffmpeg.av_packet_alloc();
-                ffmpeg.av_packet_ref(cloned, packet);
-                var packetRef = new PacketRef(cloned, generation);
-                if (!_subtitleChannel.Writer.TryWrite(packetRef))
-                {
-                    ffmpeg.av_packet_free(&cloned);
-                }
+                DispatchClonedPacket(packet, generation, _subtitleChannel.Writer.TryWrite);
             }
 
             ffmpeg.av_packet_unref(packet);
@@ -573,37 +607,35 @@ internal sealed unsafe class MediaSession : IMediaSession
         _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
-    private void AudioLoop(PipelineWorker worker)
+    private void ThrottleDemuxAhead(double packetSeconds, int generation, PipelineWorker worker)
     {
-        while (!_cancellationTokenSource.IsCancellationRequested)
+        if (packetSeconds < _lastSeekTargetSeconds)
+        {
+            return;
+        }
+
+        while (packetSeconds - _clock.CurrentSeconds > MaxDemuxLookaheadSeconds &&
+               generation == Volatile.Read(ref _seekGeneration) &&
+               !_cancellationTokenSource.IsCancellationRequested)
         {
             if (!worker.TryWaitIfPaused())
             {
                 break;
             }
 
-            if (!_audioChannel.Reader.TryReadBlocking(out var packetRef, _cancellationTokenSource.Token))
-            {
-                break;
-            }
-
-            var packet = packetRef.Packet;
-
-            if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
-            {
-                foreach (var pipeline in _audioPipelines)
-                {
-                    if (pipeline.StreamIndex == packet->stream_index)
-                    {
-                        pipeline.Enqueue(packet);
-                    }
-                }
-            }
-
-            ffmpeg.av_packet_free(&packet);
+            Thread.Sleep(5);
         }
+    }
 
-        _logger.LogDebug("{Role} worker stopping.", worker.Role);
+    private static void DispatchClonedPacket(AVPacket* packet, int generation, Func<PacketRef, bool> tryWrite)
+    {
+        var cloned = ffmpeg.av_packet_alloc();
+        ffmpeg.av_packet_ref(cloned, packet);
+        var packetRef = new PacketRef(cloned, generation);
+        if (!tryWrite(packetRef))
+        {
+            ffmpeg.av_packet_free(&cloned);
+        }
     }
 
     private void VideoLoop(PipelineWorker worker)
@@ -625,6 +657,10 @@ internal sealed unsafe class MediaSession : IMediaSession
             if (packetRef.Generation == Volatile.Read(ref _seekGeneration))
             {
                 _videoPipeline?.Enqueue(packet);
+            }
+            else
+            {
+                Interlocked.Increment(ref _diagVideoGenerationMismatchCount);
             }
 
             ffmpeg.av_packet_free(&packet);
@@ -668,6 +704,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     private void VideoRenderLoop(PipelineWorker worker)
     {
+        var videoPipeline = _videoPipeline!;
+
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
             if (!worker.TryWaitIfPaused())
@@ -677,92 +715,36 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             try
             {
-                if (_videoPipeline is null)
-                {
-                    PumpAudioOnly();
-                    Thread.Sleep(NoVideoIdleSleepMs);
-                    continue;
-                }
-
-                if (_awaitingFirstFrame && _pendingSeekTargetSeconds.HasValue)
-                {
-                    _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
-                }
-
                 var playbackTime = _clock.CurrentSeconds;
-                if (_audioPipelines.Count > 0 && !_awaitingFirstFrame)
-                {
-                    _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
-                }
 
-                if (!_videoPipeline.TryPeek(out var frame))
+                if (!videoPipeline.TryPeek(out var frame))
                 {
-                    Thread.Sleep(FrameNotReadySleepMs);
+                    Thread.Yield();
                     continue;
-                }
-
-                if (_awaitingFirstFrame)
-                {
-                    bool skipFrame;
-                    lock (_seekSync)
-                    {
-                        if (_pendingSeekTargetSeconds.HasValue)
-                        {
-                            var pendingSeekTargetSeconds = _pendingSeekTargetSeconds.Value;
-
-                            if (frame.TimeSeconds + SeekFrameSkipEpsilonSeconds < pendingSeekTargetSeconds)
-                            {
-                                skipFrame = true;
-                            }
-                            else
-                            {
-                                _clock.Rebase(pendingSeekTargetSeconds);
-                                _pendingSeekTargetSeconds = null;
-                                _clock.Start();
-                                _awaitingFirstFrame = false;
-                                skipFrame = false;
-                            }
-                        }
-                        else
-                        {
-                            _clock.Rebase(frame.TimeSeconds);
-                            _clock.Start();
-                            _awaitingFirstFrame = false;
-                            skipFrame = false;
-                        }
-                    }
-
-                    if (skipFrame)
-                    {
-                        _videoPipeline.Pop();
-                        continue;
-                    }
-
-                    playbackTime = _clock.CurrentSeconds;
                 }
 
                 var leadSeconds = frame.TimeSeconds - playbackTime;
 
                 if (leadSeconds < -MaxFrameLagSeconds)
                 {
-                    _videoPipeline.Pop();
+                    videoPipeline.Pop();
                     continue;
                 }
 
                 if (leadSeconds > EarlyFrameWaitThresholdSeconds)
                 {
-                    Thread.Sleep(FrameNotReadySleepMs);
+                    Thread.Yield();
                     continue;
                 }
 
                 VideoFrameReady?.Invoke(frame);
-                _videoPipeline.Pop();
+                videoPipeline.Pop();
                 _videoFramesRendered++;
 
                 if (_fpsStopwatch.ElapsedMilliseconds >= _fpsSampleWindowMs)
                 {
                     VideoFps = _videoFramesRendered * _fpsSampleWindowMs / _fpsStopwatch.ElapsedMilliseconds;
-                    VideoDecodeFps = _videoPipeline.DecodeFps;
+                    VideoDecodeFps = videoPipeline.DecodeFps;
                     _videoFramesRendered = 0;
                     _fpsStopwatch.Restart();
                 }
@@ -770,33 +752,77 @@ internal sealed unsafe class MediaSession : IMediaSession
             catch (Exception ex)
             {
                 LogLoopError(ex);
-                Thread.Sleep(RenderErrorBackoffSleepMs);
+                Thread.Yield();
             }
         }
 
         _logger.LogDebug("{Role} worker stopping.", worker.Role);
     }
 
-    private void PumpAudioOnly()
+    private void SessionLoop(PipelineWorker worker)
     {
-        if (_audioPipelines.Count == 0)
+        while (!_cancellationTokenSource.IsCancellationRequested)
         {
-            return;
+            if (!worker.TryWaitIfPaused())
+            {
+                break;
+            }
+
+            try
+            {
+                ConsumePendingSeekTarget();
+                LogSyncDiagnosticsIfDue(_clock.CurrentSeconds);
+
+                if (_endOfStreamTracker.HasReachedEnd(HasPendingPlayableContent()))
+                {
+                    HandlePlaybackEnded();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogLoopError(ex);
+            }
+
+            Thread.Yield();
         }
 
+        _logger.LogDebug("{Role} worker stopping.", worker.Role);
+    }
+
+    private void ConsumePendingSeekTarget()
+    {
         lock (_seekSync)
         {
             if (_pendingSeekTargetSeconds.HasValue)
             {
-                _audioPipelines.ForEach(p => p.DiscardBefore(_pendingSeekTargetSeconds.Value));
-                _pendingSeekTargetSeconds = null;
-            }
+                var targetSeconds = _pendingSeekTargetSeconds.Value;
+                _audioPipelines.ForEach(p => p.DiscardBefore(targetSeconds));
 
-            _awaitingFirstFrame = false;
+                if (_audioPipelines.Count == 0 || _audioPipelines.All(p => p.HasBufferedAudio))
+                {
+                    _pendingSeekTargetSeconds = null;
+                }
+            }
+        }
+    }
+
+    private bool HasPendingPlayableContent()
+    {
+        if (_videoPipeline is not null && _videoPipeline.TryPeek(out _))
+        {
+            return true;
         }
 
-        var playbackTime = _clock.CurrentSeconds;
-        _audioPipelines.ForEach(p => p.PumpToOutput(playbackTime));
+        return _audioPipelines.Any(p => p.HasBufferedAudio);
+    }
+
+    private void HandlePlaybackEnded()
+    {
+        Pause();
+        _clock.Rebase(Duration.TotalSeconds);
+
+        _logger.LogInformation("Reached end of stream for {FileName}.", FileName);
+        PlaybackEnded?.Invoke();
     }
 
     private void LogLoopError(Exception ex)
@@ -825,6 +851,48 @@ internal sealed unsafe class MediaSession : IMediaSession
         _loopErrorStopwatch.Restart();
     }
 
+    private void LogSyncDiagnosticsIfDue(double clockSeconds)
+    {
+        var hasAnythingToReport = _audioPipelines.Count > 0 || _videoPipeline is not null;
+        if (!hasAnythingToReport || _syncLogStopwatch.ElapsedMilliseconds < SyncLogIntervalMs)
+        {
+            return;
+        }
+
+        _syncLogStopwatch.Restart();
+
+        var parts = new string[_audioPipelines.Count];
+        for (var i = 0; i < _audioPipelines.Count; i++)
+        {
+            var outputSeconds = _audioPipelines[i].OutputTimeSeconds;
+            var outputId = i < _audioRoutes.Count ? _audioRoutes[i].Output.Id : -1;
+            var expectedSeconds = clockSeconds - GetOutputDelaySeconds(outputId) * Speed;
+            var driftMs = (outputSeconds - expectedSeconds) * 1000;
+            var friendlyName = i < _audioRoutes.Count ? _audioRoutes[i].Output.FriendlyName : "?";
+            var p = _audioPipelines[i];
+            parts[i] = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{friendlyName}={outputSeconds:F3}s(drift={driftMs:F0}ms,pktQ={p.DiagPacketQueueCount}," +
+                $"pktDrop={p.DiagPacketDropCount},pcmQ={p.DiagDecodedQueueCount},total={p.DiagTotalChunksDecoded}," +
+                $"skipBefore={p.DiagSkipBeforeSeconds:F3},cur={p.DiagCurrentTimeSeconds:F3}," +
+                $"ptsBaseline={p.DiagPtsBaselineOffsetSeconds:F3}," +
+                $"buf={p.DiagBufferedBytes}/{p.DiagBufferLength},front={p.DiagFrontChunkSeconds:F3})");
+        }
+
+        var videoPart = _videoPipeline is null
+            ? "none"
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"fps={VideoFps:F1},decodeFps={VideoDecodeFps:F1},frameQ={_videoPipeline.DiagFrameQueueCount}," +
+                $"pktQ={_videoChannel.Reader.Count},genMismatch={_diagVideoGenerationMismatchCount}");
+
+        _logger.LogDebug(
+            "Sync: clock={ClockSeconds:F3}s, video=[{Video}], outputs=[{Outputs}].",
+            clockSeconds,
+            videoPart,
+            string.Join(", ", parts));
+    }
+
     private void ApplyVolumeToPipelines()
     {
         for (var i = 0; i < _audioPipelines.Count && i < _audioRoutes.Count; i++)
@@ -832,6 +900,16 @@ internal sealed unsafe class MediaSession : IMediaSession
             _audioPipelines[i].SetAmplitude(GetEffectiveAmplitude(_audioRoutes[i].Output.Id));
         }
     }
+
+    private void ApplyDelayToPipelines()
+    {
+        for (var i = 0; i < _audioPipelines.Count && i < _audioRoutes.Count; i++)
+        {
+            _audioPipelines[i].SetDelay(GetOutputDelaySeconds(_audioRoutes[i].Output.Id));
+        }
+    }
+
+    private double GetOutputDelaySeconds(int outputId) => _outputDelays.GetValueOrDefault(outputId, 0);
 
     private float GetEffectiveAmplitude(int outputId)
     {
@@ -875,32 +953,25 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
-    private bool TrySeekToVideoTarget(double targetSeconds, out int result)
+    private bool TrySeekToTarget(double targetSeconds, out int result)
     {
-        if (_videoPipeline is null)
-        {
-            var targetPts = (long)Math.Round(targetSeconds * ffmpeg.AV_TIME_BASE);
-            result = ffmpeg.av_seek_frame(
-                _formatContext,
-                -1,
-                targetPts,
-                ffmpeg.AVSEEK_FLAG_BACKWARD);
+        var seekStreamIndex = _videoPipeline?.StreamIndex ?? _audioPipelines[0].StreamIndex;
 
+        if (_videoPipeline is null && targetSeconds < ZeroSeekEpsilonSeconds)
+        {
+            result = ffmpeg.av_seek_frame(_formatContext, -1, 0, ffmpeg.AVSEEK_FLAG_BYTE);
             if (result >= 0)
             {
                 ffmpeg.avformat_flush(_formatContext);
                 return true;
             }
-
-            return false;
         }
 
-        var stream = _formatContext->streams[_videoPipeline.StreamIndex];
-        var streamTimeBase = stream->time_base;
-        var targetPtsInStreamTimeBase = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(streamTimeBase));
+        var stream = _formatContext->streams[seekStreamIndex];
+        var targetPtsInStreamTimeBase = (long)Math.Round(targetSeconds / ffmpeg.av_q2d(stream->time_base));
         result = ffmpeg.av_seek_frame(
             _formatContext,
-            _videoPipeline.StreamIndex,
+            seekStreamIndex,
             targetPtsInStreamTimeBase,
             ffmpeg.AVSEEK_FLAG_BACKWARD);
 

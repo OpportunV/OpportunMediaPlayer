@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:input="clr-namespace:OMP.Ui.Input"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        x:Class="OMP.Ui.Windows.HotkeysWindow"
+        Width="380"
+        SizeToContent="Height"
+        CanResize="False"
+        Title="{x:Static loc:Strings.Hotkeys_Title}">
+
+    <ItemsControl Name="HotkeysList"
+                  Margin="20">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="input:HotkeyEntry">
+                <Grid ColumnDefinitions="150,*"
+                      Margin="0,4">
+
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Keys}"
+                               FontFamily="Consolas"
+                               VerticalAlignment="Center" />
+
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Description}"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                </Grid>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</Window>

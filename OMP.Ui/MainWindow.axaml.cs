@@ -1,20 +1,26 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using OMP.Lib.Audio;
+using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
 using OMP.Ui.Input;
 using OMP.Ui.Localization;
+using OMP.Ui.Services;
 using OMP.Ui.Settings;
+using OMP.Ui.Windows;
 
 namespace OMP.Ui;
 
@@ -54,16 +60,19 @@ public sealed partial class MainWindow : Window
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
     private int _lastKnownSubtitleRouteCount;
+    private int _sessionGeneration;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
+    private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
+    private readonly VolumeFlyoutView _volumeFlyoutView = new();
 
     public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
@@ -71,6 +80,7 @@ public sealed partial class MainWindow : Window
         IMainWindowHotkeyService hotkeyService,
         IWindowFactory windowFactory,
         IUserSettingsService settings,
+        SingleInstanceCoordinator singleInstanceCoordinator,
         StartupOptions startupOptions)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
@@ -78,41 +88,44 @@ public sealed partial class MainWindow : Window
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
         _settings = settings;
+        _singleInstanceCoordinator = singleInstanceCoordinator;
         InitializeComponent();
         Title = AppInfo.DisplayName;
+        RestoreWindowGeometry();
 
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
         _subtitleOverlayRenderer = new SubtitleOverlayRenderer(SubtitleOverlay);
 
-        _commands.Attach(new MainWindowCommandContext
-        {
-            GetIsPlaying = () => IsPlaying,
-            GetIsFullscreen = () => _fullscreenController.IsFullscreen,
-            SetIsPlaying = value => IsPlaying = value,
-            SetIsMuted = value => IsMuted = value,
-            SetSpeedDisplay = OnSpeedChanged,
-            ToggleFullscreen = () => _fullscreenController.Toggle(),
-            ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
-        });
+        _commands.Attach(
+            new MainWindowCommandContext
+            {
+                GetIsPlaying = () => IsPlaying,
+                GetIsFullscreen = () => _fullscreenController.IsFullscreen,
+                SetIsPlaying = value => IsPlaying = value,
+                SetIsMuted = value => IsMuted = value,
+                SetSpeedDisplay = OnSpeedChanged,
+                SetVolumeDisplay = OnVolumeChanged,
+                ToggleFullscreen = () => _fullscreenController.Toggle(),
+                ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
+            });
         SetupButtons();
         SetupVolume();
         SetupSpeed();
+        SetupOutputVolumePopup();
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
+        SetupDragDrop();
+        SetupVideoDoubleClick();
+        SetupProgressSlider();
+        SetupWindowGeometryPersistence();
+        _singleInstanceCoordinator.StartWatchingForOpenRequests(HandleExternalOpenRequest);
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
         _mediaSessionRegistry.SessionChanged += OnSessionChanged;
-
-        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
-        ProgressSlider.PointerCaptureLost += (_, _) =>
-        {
-            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
-            _isSeekingViaSlider = false;
-        };
 
         if (_mediaSessionRegistry.Current is not null)
         {
@@ -125,22 +138,39 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    internal void HandleExternalOpenRequest(string? path)
+    {
+        Activate();
+
+        if (!string.IsNullOrEmpty(path))
+        {
+            _ = OpenPath(path);
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        _mediaSessionRegistry.Close();
         _settings.Save();
         _fullscreenController.Dispose();
         _videoRenderSurface.Dispose();
+        _singleInstanceCoordinator.Dispose();
 
         base.OnClosed(e);
     }
 
     private void OnSessionChanged(IMediaSessionRegistry registry)
     {
+        _sessionGeneration++;
+
         registry.Current?.VideoFrameReady -= Render;
         registry.Current?.VideoFrameReady += Render;
+        registry.Current?.PlaybackEnded -= OnPlaybackEnded;
+        registry.Current?.PlaybackEnded += OnPlaybackEnded;
         _videoRenderSurface.Reset();
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
+        NoVideoIndicator.IsVisible = registry.Current is { HasVideo: false };
 
         _areSubtitlesEnabled = false;
         _lastKnownSubtitleRouteCount = 0;
@@ -170,7 +200,8 @@ public sealed partial class MainWindow : Window
         SpeedButton.Flyout = new Flyout
         {
             Content = _speedFlyoutView,
-            Placement = PlacementMode.Top
+            Placement = PlacementMode.Top,
+            FlyoutPresenterClasses = { "app-flyout" }
         };
 
         _speedFlyoutView.SpeedCommitted += speed => _commands.SetSpeed(speed);
@@ -178,9 +209,64 @@ public sealed partial class MainWindow : Window
         SetSpeedDisplayText(_settings.Current.PlaybackSpeed);
     }
 
+    private void SetupOutputVolumePopup()
+    {
+        var flyout = new Flyout
+        {
+            Content = _volumeFlyoutView,
+            Placement = PlacementMode.Top,
+            FlyoutPresenterClasses = { "app-flyout" }
+        };
+        flyout.Opened += (_, _) => RefreshOutputVolumeRows();
+        OutputVolumesButton.Flyout = flyout;
+
+        _volumeFlyoutView.OutputVolumeChanged += (output, volume) =>
+            _mediaSessionRegistry.Current?.SetOutputVolume(output.Id, volume / 100);
+
+        _volumeFlyoutView.OutputVolumeCommitted += PersistOutputVolumeSetting;
+
+        _volumeFlyoutView.OutputMuteChanged += (output, muted) =>
+        {
+            _mediaSessionRegistry.Current?.SetOutputMuted(output.Id, muted);
+            PersistOutputVolumeSetting(output);
+        };
+    }
+
+    private void RefreshOutputVolumeRows()
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session == null)
+        {
+            _volumeFlyoutView.SetOutputs([]);
+            return;
+        }
+
+        var rows = session.AudioRoutes.Select(route =>
+        {
+            var state = session.OutputVolumes.TryGetValue(route.Output.Id, out var s)
+                ? s
+                : new OutputVolumeState(1.0, false);
+            return (route.Output, state.Volume * 100, state.Muted);
+        });
+
+        _volumeFlyoutView.SetOutputs(rows);
+    }
+
+    private void PersistOutputVolumeSetting(AudioOutput output)
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session != null && session.OutputVolumes.TryGetValue(output.Id, out var state))
+        {
+            _settings.UpsertOutputVolumeSetting(output, state.Volume * 100, state.Muted);
+        }
+
+        _settings.Save();
+    }
+
     private void SetSpeedDisplayText(double speed)
     {
-        SpeedLabel.Text = PlaybackSpeedFormat.Format(speed);
         _speedFlyoutView.SetSpeed(speed);
     }
 
@@ -220,6 +306,14 @@ public sealed partial class MainWindow : Window
         };
 
         VolumeSlider.PointerCaptureLost += (_, _) => _settings.Save();
+    }
+
+    private void OnVolumeChanged(double volume)
+    {
+        VolumeSlider.Value = volume * 100;
+        VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
+        _settings.Current.MasterVolume = volume;
+        _settings.Save();
     }
 
     private void RestoreAudioRoutes(IMediaSession session)
@@ -266,6 +360,7 @@ public sealed partial class MainWindow : Window
 
             session.SetOutputVolume(output.Id, saved.Volume);
             session.SetOutputMuted(output.Id, saved.Muted);
+            session.SetOutputDelay(output.Id, saved.DelayMs / 1000.0);
         }
     }
 
@@ -318,7 +413,40 @@ public sealed partial class MainWindow : Window
 
     private void Render(VideoFrame frame)
     {
-        Dispatcher.UIThread.Post(() => _videoRenderSurface.Render(frame));
+        var generation = _sessionGeneration;
+
+        var buffer = ArrayPool<byte>.Shared.Rent(frame.DataLength);
+        unsafe
+        {
+            fixed (byte* dst = buffer)
+            {
+                Buffer.MemoryCopy((void*)frame.DataPtr, dst, buffer.Length, frame.DataLength);
+            }
+        }
+
+        var width = frame.Width;
+        var height = frame.Height;
+        var length = frame.DataLength;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (generation == _sessionGeneration)
+                {
+                    _videoRenderSurface.Render(width, height, buffer, length);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        });
+    }
+
+    private void OnPlaybackEnded()
+    {
+        Dispatcher.UIThread.Post(() => IsPlaying = false);
     }
 
     private static string FormatTime(TimeSpan time)
@@ -393,13 +521,153 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            var heading = ex is DllNotFoundException && OperatingSystem.IsMacOS()
+                ? Strings.OpenFileError_FFmpegMacHeading
+                : Strings.OpenFileError_Heading;
+
             var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-            errorWindow.Load(ex.Message);
+            errorWindow.Load(heading, ex.Message);
             await errorWindow.ShowDialog(this);
             return;
         }
 
         UpdateSessionData();
+    }
+
+    private void SetupDragDrop()
+    {
+        AddHandler(DragDrop.DropEvent, OnFileDrop);
+        AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
+    }
+
+    private void SetupVideoDoubleClick()
+    {
+        VideoSurface.DoubleTapped += (_, _) => _commands.ToggleFullscreen();
+    }
+
+    private void SetupProgressSlider()
+    {
+        ProgressSlider.PointerMoved += (_, e) =>
+        {
+            if (_mediaSessionRegistry.Current == null || ProgressSlider.Bounds.Width <= 0)
+            {
+                return;
+            }
+
+            var ratio = Math.Clamp(e.GetPosition(ProgressSlider).X / ProgressSlider.Bounds.Width, 0, 1);
+            var hoveredTime = TimeSpan.FromSeconds(ratio * ProgressSlider.Maximum);
+            ToolTip.SetTip(ProgressSlider, FormatTime(hoveredTime));
+        };
+
+        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
+        ProgressSlider.PointerCaptureLost += (_, _) =>
+        {
+            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+            _isSeekingViaSlider = false;
+        };
+    }
+
+    private void RestoreWindowGeometry()
+    {
+        var window = _settings.Current.Window;
+
+        if (window is { Width: { } width, Height: { } height })
+        {
+            Width = width;
+            Height = height;
+        }
+
+        if (window is { Left: { } left, Top: { } top })
+        {
+            var position = new PixelPoint((int)left, (int)top);
+
+            if (IsPositionOnAnyScreen(position))
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Position = position;
+            }
+        }
+
+        if (window.IsMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private bool IsPositionOnAnyScreen(PixelPoint position)
+    {
+        try
+        {
+            return Screens.All.Count == 0 || Screens.All.Any(screen => screen.Bounds.Contains(position));
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    private void SetupWindowGeometryPersistence()
+    {
+        PositionChanged += (_, _) =>
+        {
+            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
+            {
+                return;
+            }
+
+            _settings.Current.Window.Left = Position.X;
+            _settings.Current.Window.Top = Position.Y;
+        };
+
+        Resized += (_, _) =>
+        {
+            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
+            {
+                return;
+            }
+
+            _settings.Current.Window.Width = Width;
+            _settings.Current.Window.Height = Height;
+        };
+
+        PropertyChanged += (_, e) =>
+        {
+            if (_fullscreenController.IsFullscreen || e.Property != WindowStateProperty)
+            {
+                return;
+            }
+
+            if (WindowState is WindowState.Normal or WindowState.Maximized)
+            {
+                _settings.Current.Window.IsMaximized = WindowState == WindowState.Maximized;
+            }
+        };
+    }
+
+    private static void OnFileDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private async void OnFileDrop(object? sender, DragEventArgs e)
+    {
+        var path = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
+
+        if (path == null || !IsSupportedMediaFile(path))
+        {
+            return;
+        }
+
+        Activate();
+        await OpenPath(path);
+    }
+
+    private static bool IsSupportedMediaFile(string path)
+    {
+        var extension = Path.GetExtension(path);
+
+        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern =>
+            pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
     }
 
     private void UpdateSessionData()

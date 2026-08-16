@@ -24,9 +24,15 @@ internal static class Strings
 
     public static string MainWindow_SubtitlesButtonTooltip => Get("MainWindow_SubtitlesButtonTooltip");
 
+    public static string MainWindow_OutputVolumesButtonTooltip => Get("MainWindow_OutputVolumesButtonTooltip");
+
+    public static string MainWindow_OutputVolumesHeader => Get("MainWindow_OutputVolumesHeader");
+
     public static string MainWindow_OpenFileDialogTitle => Get("MainWindow_OpenFileDialogTitle");
 
     public static string MainWindow_OpenFileTypeFilterName => Get("MainWindow_OpenFileTypeFilterName");
+
+    public static string MainWindow_NoVideoLabel => Get("MainWindow_NoVideoLabel");
 
     public static string Options_Title => Get("Options_Title");
 
@@ -41,6 +47,16 @@ internal static class Strings
     public static string Options_ThemeLabel => Get("Options_ThemeLabel");
 
     public static string Options_MuteOutputTooltip => Get("Options_MuteOutputTooltip");
+
+    public static string Options_DelayMsTooltip => Get("Options_DelayMsTooltip");
+
+    public static string Options_StreamHeader => Get("Options_StreamHeader");
+
+    public static string Options_OutputHeader => Get("Options_OutputHeader");
+
+    public static string Options_VolumeHeader => Get("Options_VolumeHeader");
+
+    public static string Options_DelayMsHeader => Get("Options_DelayMsHeader");
 
     public static string Options_SubtitlesHelpText => Get("Options_SubtitlesHelpText");
 
@@ -76,11 +92,17 @@ internal static class Strings
 
     public static string Hotkeys_ToggleSubtitles => Get("Hotkeys_ToggleSubtitles");
 
+    public static string Hotkeys_ToggleMute => Get("Hotkeys_ToggleMute");
+
     public static string Hotkeys_ExitFullscreen => Get("Hotkeys_ExitFullscreen");
 
     public static string Hotkeys_DecreaseSpeed => Get("Hotkeys_DecreaseSpeed");
 
     public static string Hotkeys_IncreaseSpeed => Get("Hotkeys_IncreaseSpeed");
+
+    public static string Hotkeys_IncreaseVolume => Get("Hotkeys_IncreaseVolume");
+
+    public static string Hotkeys_DecreaseVolume => Get("Hotkeys_DecreaseVolume");
 
     public static string About_Title => Get("About_Title");
 
@@ -105,6 +127,8 @@ internal static class Strings
     public static string OpenFileError_Title => Get("OpenFileError_Title");
 
     public static string OpenFileError_Heading => Get("OpenFileError_Heading");
+
+    public static string OpenFileError_FFmpegMacHeading => Get("OpenFileError_FFmpegMacHeading");
 
     public static string OpenFileError_TechnicalDetailLabel => Get("OpenFileError_TechnicalDetailLabel");
 

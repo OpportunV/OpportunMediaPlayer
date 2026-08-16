@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
+using OMP.Lib.Interop;
 using PortAudioSharp;
 using PortAudioStream = PortAudioSharp.Stream;
 
@@ -10,7 +11,10 @@ internal sealed class PortAudioOutput : IAudioOutput
 {
     public int PreferredSampleRate { get; }
 
+    public double OutputLatencySeconds { get; private set; }
+
     private readonly int _deviceIndex;
+    private readonly ILogger _logger;
 
     private IWaveProvider? _source;
     private PortAudioStream? _stream;
@@ -20,9 +24,9 @@ internal sealed class PortAudioOutput : IAudioOutput
     public PortAudioOutput(int deviceIndex, ILoggerFactory loggerFactory)
     {
         _deviceIndex = deviceIndex;
-        var logger = loggerFactory.CreateLogger<PortAudioOutput>();
+        _logger = loggerFactory.CreateLogger<PortAudioOutput>();
 
-        PortAudioEnvironment.EnsureInitialized(logger);
+        PortAudioEnvironment.EnsureInitialized(_logger);
 
         PreferredSampleRate = (int)Math.Round(PortAudio.GetDeviceInfo(deviceIndex).defaultSampleRate);
     }
@@ -37,22 +41,43 @@ internal sealed class PortAudioOutput : IAudioOutput
         _source = source;
         _bytesPerFrame = source.WaveFormat.BlockAlign;
 
+        var suggestedLatency = PortAudio.GetDeviceInfo(_deviceIndex).defaultLowOutputLatency;
         var parameters = new StreamParameters
         {
             device = _deviceIndex,
             channelCount = source.WaveFormat.Channels,
             sampleFormat = SampleFormat.Int16,
-            suggestedLatency = PortAudio.GetDeviceInfo(_deviceIndex).defaultLowOutputLatency,
+            suggestedLatency = suggestedLatency,
         };
 
-        _stream = new PortAudioStream(
+        var lowLatencyFrameCount = (uint)Math.Max(1, Math.Round(suggestedLatency * source.WaveFormat.SampleRate));
+
+        PortAudioStream Open(uint framesPerBuffer) => new(
             inParams: null,
             outParams: parameters,
             sampleRate: source.WaveFormat.SampleRate,
-            framesPerBuffer: PortAudio.FramesPerBufferUnspecified,
+            framesPerBuffer: framesPerBuffer,
             streamFlags: StreamFlags.ClipOff,
             callback: OnCallback,
             userData: null);
+
+        try
+        {
+            _stream = Open(lowLatencyFrameCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to open PortAudio stream with an explicit {FrameCount}-frame buffer; " +
+                "falling back to an unspecified buffer size.",
+                lowLatencyFrameCount);
+
+            _stream = Open(PortAudio.FramesPerBufferUnspecified);
+        }
+
+        PortAudioStreamInfo.TryGetNegotiatedOutputLatencySeconds(_stream, _logger, out var outputLatencySeconds);
+        OutputLatencySeconds = outputLatencySeconds;
     }
 
     public void Play()
