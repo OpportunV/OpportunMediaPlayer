@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using OMP.Lib.Session;
 
 namespace OMP.Lib.IntegrationTests;

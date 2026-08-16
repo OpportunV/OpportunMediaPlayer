@@ -1,7 +1,5 @@
-using System;
 using Microsoft.Extensions.Logging.Abstractions;
 using OMP.Lib.Session;
-using Xunit;
 
 namespace OMP.Lib.IntegrationTests;
 

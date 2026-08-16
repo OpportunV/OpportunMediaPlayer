@@ -1,14 +1,13 @@
-using System;
-using System.Threading;
 using OMP.Lib.Audio;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
-using Xunit;
 
 namespace OMP.Lib.IntegrationTests;
 
 public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClassFixture<MediaSessionFixture>
 {
+    private const int SettleMs = 50;
+
     private IMediaSession Session => fixture.Registry.Current!;
 
     [Fact]
@@ -23,10 +22,12 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
     public void Play_AdvancesCurrentTime()
     {
         Session.Seek(TimeSpan.Zero);
+        Thread.Sleep(SettleMs);
 
         Session.Play();
         Thread.Sleep(500);
         Session.Pause();
+        Thread.Sleep(SettleMs);
 
         Assert.InRange(Session.CurrentTime.TotalSeconds, 0.3, 2.0);
     }
@@ -37,6 +38,7 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
         var target = TimeSpan.FromSeconds(5);
 
         Session.Seek(target);
+        Thread.Sleep(SettleMs);
 
         Assert.InRange(Session.CurrentTime.TotalSeconds, target.TotalSeconds - 0.5, target.TotalSeconds + 0.5);
     }
@@ -45,12 +47,15 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
     public void SetSpeed_ClampsToConfiguredLimits()
     {
         Session.SetSpeed(PlaybackSpeedLimits.Max + 10);
+        Thread.Sleep(SettleMs);
         Assert.Equal(PlaybackSpeedLimits.Max, Session.Speed);
 
         Session.SetSpeed(PlaybackSpeedLimits.Min - 10);
+        Thread.Sleep(SettleMs);
         Assert.Equal(PlaybackSpeedLimits.Min, Session.Speed);
 
         Session.SetSpeed(1);
+        Thread.Sleep(SettleMs);
         Assert.Equal(1, Session.Speed);
     }
 
@@ -58,12 +63,18 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
     public void SetSpeed_AdvancesCurrentTimeFaster()
     {
         Session.Seek(TimeSpan.Zero);
+        Thread.Sleep(SettleMs);
+
         Session.SetSpeed(2);
+        Thread.Sleep(SettleMs);
 
         Session.Play();
         Thread.Sleep(500);
         Session.Pause();
+        Thread.Sleep(SettleMs);
+
         Session.SetSpeed(1);
+        Thread.Sleep(SettleMs);
 
         Assert.True(Session.CurrentTime.TotalSeconds > 0.6);
     }
@@ -98,6 +109,7 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
             new AudioRoute(stream, firstOutput),
             new AudioRoute(stream, secondOutput)
         ]);
+        Thread.Sleep(SettleMs);
 
         Assert.Equal(2, Session.AudioRoutes.Count);
         Assert.Contains(Session.AudioRoutes, r => r.Output.Id == firstOutput.Id);
@@ -114,6 +126,7 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
     public void VideoFrames_StayWithinToleranceOfClock()
     {
         Session.Seek(TimeSpan.Zero);
+        Thread.Sleep(SettleMs);
 
         var frameCount = 0;
         var maxDriftSeconds = 0.0;
