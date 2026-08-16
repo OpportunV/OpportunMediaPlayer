@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:OMP.Ui.Models"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
+             x:Class="OMP.Ui.Controls.VolumeFlyoutView">
+
+    <StackPanel Width="320"
+                Margin="14"
+                Spacing="12">
+
+        <TextBlock Text="{x:Static loc:Strings.MainWindow_OutputVolumesHeader}"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center" />
+
+        <ItemsControl Name="OutputsPanel">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:OutputVolumeRow">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                          ColumnSpacing="8"
+                          Margin="0,4">
+
+                        <ToggleButton Grid.Column="0"
+                                      Name="RowMuteButton"
+                                      Classes="icon-button-sm"
+                                      IsChecked="{Binding Muted, Mode=TwoWay}"
+                                      IsCheckedChanged="OnRowMuteChanged">
+                            <Viewbox Width="14" Height="14">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                          Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                    <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                          Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </ToggleButton>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding OutputLabel}"
+                                   MaxWidth="120"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <Slider Grid.Column="2"
+                                Name="RowVolumeSlider"
+                                Value="{Binding Volume, Mode=TwoWay}"
+                                ValueChanged="OnRowVolumeChanged"
+                                PointerCaptureLost="OnRowVolumeReleased"
+                                Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                Maximum="{x:Static models:VolumeSliderRange.Max}"
+                                VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="3"
+                                   Text="{Binding Volume, StringFormat={}{0:0}%}"
+                                   Width="42"
+                                   FontFamily="Consolas"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

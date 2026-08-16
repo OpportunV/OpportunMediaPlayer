@@ -3,8 +3,10 @@ namespace OMP.Lib.Threading;
 internal enum PipelineWorkerRole
 {
     Demux,
-    Audio,
+    AudioDecode,
+    AudioPump,
     Video,
     VideoRender,
-    Subtitle
+    Subtitle,
+    Session
 }

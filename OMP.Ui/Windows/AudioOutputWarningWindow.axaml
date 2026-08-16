@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        x:Class="OMP.Ui.Windows.AudioOutputWarningWindow"
+        Width="420"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="{x:Static loc:Strings.AudioWarning_Title}">
+
+    <StackPanel Margin="24"
+                Spacing="10">
+
+        <TextBlock Text="{x:Static loc:Strings.AudioWarning_Heading}"
+                   FontSize="15"
+                   FontWeight="Bold"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Name="GuidanceText"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Text="{x:Static loc:Strings.AudioWarning_TechnicalDetailLabel}"
+                   Opacity="0.7"
+                   Margin="0,10,0,0" />
+
+        <TextBlock Name="ReasonText"
+                   TextWrapping="Wrap"
+                   Opacity="0.7"
+                   FontFamily="Consolas" />
+
+        <Button Name="CloseButton"
+                Content="{x:Static loc:Strings.Common_Close}"
+                HorizontalAlignment="Right"
+                Margin="0,10,0,0" />
+
+    </StackPanel>
+</Window>

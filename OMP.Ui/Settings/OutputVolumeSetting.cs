@@ -7,4 +7,6 @@ public sealed class OutputVolumeSetting
     public double Volume { get; set; } = 1.0;
 
     public bool Muted { get; set; }
+
+    public double DelayMs { get; set; }
 }

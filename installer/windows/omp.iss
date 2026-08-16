@@ -32,6 +32,7 @@ CloseApplicationsFilter={#MyAppExeName}
 DisableProgramGroupPage=yes
 SetupIconFile=..\..\OMP.Ui\Assets\app-icon.ico
 WizardStyle=modern
+ShowLanguageDialog=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -42,12 +43,12 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 ; launch checkbox) needs its own translation here, referenced via {cm:...}.
 [CustomMessages]
 english.TaskDesktopIcon=Create a desktop shortcut
-english.TaskFileAssoc=Associate common video and audio files with OMP
+english.TaskFileAssoc=Make OMP the default app for common video and audio files
 english.GroupShortcuts=Additional shortcuts:
 english.GroupFileAssoc=File associations:
 english.LaunchProgram=Launch OMP
 russian.TaskDesktopIcon=Создать ярлык на рабочем столе
-russian.TaskFileAssoc=Связать обычные видео- и аудиофайлы с OMP
+russian.TaskFileAssoc=Сделать OMP приложением по умолчанию для видео и аудио
 russian.GroupShortcuts=Дополнительные ярлыки:
 russian.GroupFileAssoc=Сопоставление файлов:
 russian.LaunchProgram=Запустить OMP
@@ -64,9 +65,23 @@ Name: "{group}\OMP"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\OMP"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCR; Subkey: "OMP.MediaFile"; ValueType: string; ValueName: ""; ValueData: "OMP Media File"; Flags: uninsdeletekey; Tasks: fileassoc
-Root: HKCR; Subkey: "OMP.MediaFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
-Root: HKCR; Subkey: "OMP.MediaFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: fileassoc
+Root: HKCR; Subkey: "OMP.MediaFile"; ValueType: string; ValueName: ""; ValueData: "OMP Media File"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "OMP.MediaFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKCR; Subkey: "OMP.MediaFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKCR; Subkey: ".mp4\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".mkv\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".avi\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".webm\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".mov\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".flv\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".wmv\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".mp3\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".flac\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".wav\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".ogg\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".m4a\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCR; Subkey: ".aac\OpenWithProgids"; ValueType: string; ValueName: "OMP.MediaFile"; ValueData: ""; Flags: uninsdeletevalue
+
 Root: HKCR; Subkey: ".mp4"; ValueType: string; ValueName: ""; ValueData: "OMP.MediaFile"; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCR; Subkey: ".mkv"; ValueType: string; ValueName: ""; ValueData: "OMP.MediaFile"; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCR; Subkey: ".avi"; ValueType: string; ValueName: ""; ValueData: "OMP.MediaFile"; Flags: uninsdeletevalue; Tasks: fileassoc

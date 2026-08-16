@@ -22,5 +22,7 @@ public sealed class UserSettings
 
     public List<SubtitleZone> SubtitleZones { get; set; } = SubtitleZone.CreateBuiltIns();
 
+    public WindowSettings Window { get; set; } = new();
+
     public const int CurrentVersion = 1;
 }

@@ -20,6 +20,8 @@ internal static class HotkeyReference
     {
         Key.Left => "Left Arrow",
         Key.Right => "Right Arrow",
+        Key.Up => "Up Arrow",
+        Key.Down => "Down Arrow",
         Key.Escape => "Esc",
         Key.OemComma => ",",
         Key.OemPeriod => ".",

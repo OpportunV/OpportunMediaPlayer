@@ -1,0 +1,449 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:OMP.Ui.Models"
+        xmlns:settings="clr-namespace:OMP.Ui.Settings"
+        xmlns:output="clr-namespace:OMP.Lib.Audio.Output;assembly=OMP.Lib"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        x:Class="OMP.Ui.Windows.OptionsWindow"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        Title="{x:Static loc:Strings.Options_Title}">
+
+    <TabControl>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="{x:Static loc:Strings.Options_GeneralTab}"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,Auto"
+                  Margin="20">
+
+                <StackPanel Grid.Row="0"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Top">
+
+                    <TextBlock Text="{x:Static loc:Strings.Options_ThemeLabel}"
+                               VerticalAlignment="Center" />
+
+                    <ComboBox Name="ThemeSelector"
+                              Width="200"
+                              SelectionChanged="OnThemeChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ThemeModeOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Top"
+                            Margin="0,15,0,0">
+
+                    <TextBlock Text="{x:Static loc:Strings.Options_LanguageLabel}"
+                               VerticalAlignment="Center" />
+
+                    <ComboBox Name="LanguageSelector"
+                              Width="200"
+                              SelectionChanged="OnLanguageChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:LanguageOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Name="RestartNowButton"
+                            Content="{x:Static loc:Strings.Options_LanguageRestartButton}"
+                            Click="OnRestartNowClick"
+                            VerticalAlignment="Center"
+                            IsVisible="False" />
+
+                </StackPanel>
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="{x:Static loc:Strings.Options_AudioRoutingTab}"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,Auto,Auto"
+                  Margin="20"
+                  Grid.IsSharedSizeScope="True">
+
+                <Grid Grid.Row="0"
+                      Margin="0,0,0,4">
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{x:Static loc:Strings.Options_OutputHeader}"
+                               FontWeight="Bold" />
+
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Static loc:Strings.Options_StreamHeader}"
+                               Margin="10,0"
+                               FontWeight="Bold" />
+
+                    <TextBlock Grid.Column="3"
+                               Grid.ColumnSpan="2"
+                               Text="{x:Static loc:Strings.Options_VolumeHeader}"
+                               HorizontalAlignment="Center"
+                               FontWeight="Bold" />
+
+                    <TextBlock Grid.Column="5"
+                               Text="{x:Static loc:Strings.Options_DelayMsHeader}"
+                               HorizontalAlignment="Center"
+                               FontWeight="Bold" />
+                </Grid>
+
+                <ItemsControl Grid.Row="1"
+                              Name="RoutesList">
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:AudioRouteRow">
+
+                            <Grid Margin="0,4">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding OutputLabel}"
+                                           MaxWidth="260"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <ComboBox Grid.Column="1"
+                                          Name="RouteStreamSelector"
+                                          ItemsSource="{Binding AvailableStreamOptions}"
+                                          SelectedItem="{Binding SelectedStreamOption, Mode=TwoWay}"
+                                          SelectionChanged="OnRouteStreamChanged"
+                                          MaxWidth="260"
+                                          Margin="10,0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:AudioStreamOption">
+                                            <TextBlock Text="{Binding Label}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
+                                <ToggleButton Grid.Column="2"
+                                              Name="RouteMuteButton"
+                                              Classes="icon-button-sm"
+                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                              IsCheckedChanged="OnRouteMuteChanged"
+                                              Margin="0,0,6,0"
+                                              ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                            <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                                  Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </ToggleButton>
+
+                                <Slider Grid.Column="3"
+                                        Name="RouteVolumeSlider"
+                                        Value="{Binding Volume, Mode=TwoWay}"
+                                        ValueChanged="OnRouteVolumeChanged"
+                                        PointerCaptureLost="OnRouteVolumeReleased"
+                                        Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                        Maximum="{x:Static models:VolumeSliderRange.Max}"
+                                        Width="130"
+                                        VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="4"
+                                           Text="{Binding Volume, StringFormat={}{0:0}%}"
+                                           Width="42"
+                                           Margin="6,0,0,0"
+                                           FontFamily="Consolas"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+
+                                <NumericUpDown Grid.Column="5"
+                                               Name="RouteDelayUpDown"
+                                               Value="{Binding DelayMs, Mode=TwoWay}"
+                                               ValueChanged="OnRouteDelayChanged"
+                                               FormatString="0"
+                                               Increment="10"
+                                               Minimum="{x:Static models:AudioDelayInputRange.MinMs}"
+                                               Maximum="{x:Static models:AudioDelayInputRange.MaxMs}"
+                                               Width="150"
+                                               MinWidth="150"
+                                               Margin="10,0,0,0"
+                                               VerticalAlignment="Center"
+                                               ToolTip.Tip="{x:Static loc:Strings.Options_DelayMsTooltip}" />
+
+                                <Button Grid.Column="6"
+                                        Name="DeleteRouteButton"
+                                        Classes="icon-button-sm"
+                                        Click="OnDeleteRoute"
+                                        IsEnabled="{Binding CanDelete}"
+                                        Margin="6,0,0,0">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <Grid Grid.Row="2"
+                      Margin="0,15,0,0">
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox Grid.Column="0"
+                              Name="OutputSelector"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="output:AudioOutput">
+                                <TextBlock Text="{Binding FriendlyName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Grid.Column="1"
+                              Name="StreamSelector"
+                              Margin="10,0"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:AudioStreamOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Grid.Column="2"
+                            Name="AddRouteButton"
+                            Classes="icon-button-sm">
+                        <Viewbox Width="14" Height="14">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="{StaticResource PlusIconGeometry}"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </Grid>
+
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="{x:Static loc:Strings.Options_SubtitlesTab}"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,Auto,Auto"
+                  Margin="20">
+
+                <TextBlock Grid.Row="0"
+                           Text="{x:Static loc:Strings.Options_SubtitlesHelpText}"
+                           TextWrapping="Wrap"
+                           Opacity="0.7"
+                           Margin="0,0,0,10" />
+
+                <ItemsControl Grid.Row="1"
+                              Name="SubtitleRoutesList">
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SubtitleRouteRow">
+
+                            <Grid ColumnDefinitions="*,*,Auto"
+                                  Margin="0,4">
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding StreamLabel}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding ZoneLabel}"
+                                           Margin="10,0"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <Button Grid.Column="2"
+                                        Name="DeleteSubtitleRouteButton"
+                                        Classes="icon-button-sm"
+                                        Click="OnDeleteSubtitleRoute">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <StackPanel Grid.Row="2"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            Margin="0,15,0,0">
+
+                    <ComboBox Name="SubtitleStreamSelector"
+                              Width="260">
+                        <ComboBox.Styles>
+                            <Style Selector="ComboBoxItem"
+                                   x:DataType="models:SubtitleStreamOption">
+                                <Setter Property="IsEnabled"
+                                        Value="{Binding IsSupported}" />
+                            </Style>
+                        </ComboBox.Styles>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:SubtitleStreamOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Name="SubtitleZoneSelector"
+                              Width="200">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="settings:SubtitleZone">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Name="AddSubtitleRouteButton"
+                            Classes="icon-button-sm">
+                        <Viewbox Width="14" Height="14">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="{StaticResource PlusIconGeometry}"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeLineCap="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
+
+            </Grid>
+        </TabItem>
+
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="{x:Static loc:Strings.Options_SubtitleZonesTab}"
+                           FontSize="13" />
+            </TabItem.Header>
+
+            <Grid RowDefinitions="Auto,Auto,Auto"
+                  Margin="20">
+
+                <TextBlock Grid.Row="0"
+                           Text="{x:Static loc:Strings.Options_ZonesHelpText}"
+                           TextWrapping="Wrap"
+                           Opacity="0.7"
+                           Margin="0,0,0,10" />
+
+                <ItemsControl Grid.Row="1"
+                              Name="ZonesList">
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="settings:SubtitleZone">
+
+                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                  Margin="0,4">
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Name}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <Button Grid.Column="1"
+                                        Name="EditZoneButton"
+                                        Click="OnEditZone"
+                                        Content="{x:Static loc:Strings.Options_EditZoneButton}"
+                                        Margin="0,0,6,0" />
+
+                                <Button Grid.Column="2"
+                                        Name="ResetZoneButton"
+                                        Click="OnResetZone"
+                                        IsVisible="{Binding IsBuiltIn}"
+                                        Content="{x:Static loc:Strings.Options_ResetZoneButton}"
+                                        ToolTip.Tip="{x:Static loc:Strings.Options_ResetZoneTooltip}" />
+
+                                <Button Grid.Column="2"
+                                        Name="DeleteZoneButton"
+                                        Classes="icon-button-sm"
+                                        Click="OnDeleteZone"
+                                        IsVisible="{Binding IsDeletable}"
+                                        HorizontalAlignment="Right">
+                                    <Viewbox Width="14" Height="14">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource DeleteIconGeometry}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <Button Grid.Row="2"
+                        Name="AddZoneButton"
+                        Content="{x:Static loc:Strings.Options_AddZoneButton}"
+                        HorizontalAlignment="Left"
+                        Margin="0,15,0,0" />
+
+            </Grid>
+        </TabItem>
+
+    </TabControl>
+</Window>

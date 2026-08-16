@@ -3,11 +3,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="clr-namespace:OMP.Ui"
     xmlns:loc="clr-namespace:OMP.Ui.Localization"
+    xmlns:models="clr-namespace:OMP.Ui.Models"
     x:Class="OMP.Ui.MainWindow"
-    Icon="avares://OMP/Assets/app-icon.png"
+    Icon="avares://OMP/Assets/app-icon.ico"
     Width="1200"
     Height="800"
-    x:DataType="ui:MainWindow">
+    x:DataType="ui:MainWindow"
+    DragDrop.AllowDrop="True">
 
     <Grid RowDefinitions="Auto,*">
 
@@ -33,27 +35,42 @@
                 <Image Name="VideoView"
                        Stretch="Uniform" />
 
+                <StackPanel Name="NoVideoIndicator"
+                            IsVisible="False"
+                            IsHitTestVisible="False"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Opacity="0.35">
+
+                    <Viewbox Width="64"
+                             Height="64"
+                             HorizontalAlignment="Center">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                  Fill="White" />
+                            <Path Data="{StaticResource SpeakerWavesGeometry}"
+                                  Stroke="White"
+                                  StrokeThickness="2"
+                                  StrokeLineCap="Round" />
+                        </Canvas>
+                    </Viewbox>
+
+                    <TextBlock Text="{x:Static loc:Strings.MainWindow_NoVideoLabel}"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               FontSize="14" />
+                </StackPanel>
+
                 <Canvas Name="SubtitleOverlay"
                         IsHitTestVisible="False" />
             </Grid>
 
             <Border Name="OverlayControls"
-                    Background="#66000000"
+                    Background="{DynamicResource OverlayBarBackgroundBrush}"
                     VerticalAlignment="Bottom"
                     Padding="10,18,10,10"
                     Opacity="1">
-
-                <Border.Resources>
-                    <SolidColorBrush x:Key="ButtonBackground" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#4DFFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackground" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#550078D4" />
-                    <SolidColorBrush x:Key="SliderTrackFill" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#44FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#55FFFFFF" />
-                </Border.Resources>
 
                 <Border.Transitions>
                     <Transitions>
@@ -71,30 +88,24 @@
                                 VerticalAlignment="Center">
 
                         <Button Name="StepBackButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
-                                    <Path Data="M7,12 L17,5 V19 Z"
-                                          Fill="White" />
-                                    <Path Data="M3,5 H5 V19 H3 Z"
-                                          Fill="White" />
+                                    <Path Data="{StaticResource StepBackIconGeometry}"
+                                          Fill="{DynamicResource OverlayBarForegroundBrush}" />
                                 </Canvas>
                             </Viewbox>
                         </Button>
 
                         <Button Name="PlayPauseButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Grid Width="18" Height="18">
                                 <Viewbox Name="PlayIcon"
                                          Width="18"
                                          Height="18">
                                     <Canvas Width="24" Height="24">
-                                        <Path Data="M6,4 L19,12 L6,20 Z"
-                                              Fill="White" />
+                                        <Path Data="{StaticResource PlayIconGeometry}"
+                                              Fill="{DynamicResource OverlayBarForegroundBrush}" />
                                     </Canvas>
                                 </Viewbox>
 
@@ -103,32 +114,26 @@
                                          Height="18"
                                          IsVisible="False">
                                     <Canvas Width="24" Height="24">
-                                        <Path Data="M6,4 H10 V20 H6 Z"
-                                              Fill="White" />
-                                        <Path Data="M14,4 H18 V20 H14 Z"
-                                              Fill="White" />
+                                        <Path Data="{StaticResource PauseIconGeometry}"
+                                              Fill="{DynamicResource OverlayBarForegroundBrush}" />
                                     </Canvas>
                                 </Viewbox>
                             </Grid>
                         </Button>
 
                         <Button Name="StepForwardButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
-                                    <Path Data="M17,12 L7,5 V19 Z"
-                                          Fill="White" />
-                                    <Path Data="M19,5 H21 V19 H19 Z"
-                                          Fill="White" />
+                                    <Path Data="{StaticResource StepForwardIconGeometry}"
+                                          Fill="{DynamicResource OverlayBarForegroundBrush}" />
                                 </Canvas>
                             </Viewbox>
                         </Button>
 
                         <TextBlock Name="CurrentTimeLabel"
                                    Text="00:00"
-                                   Foreground="White"
+                                   Foreground="{DynamicResource OverlayBarForegroundBrush}"
                                    VerticalAlignment="Center"
                                    FontFamily="Consolas" />
                     </StackPanel>
@@ -138,7 +143,19 @@
                             Minimum="0"
                             Maximum="1"
                             VerticalAlignment="Center"
-                            Focusable="False" />
+                            Focusable="False"
+                            ToolTip.Placement="Pointer"
+                            ToolTip.ShowDelay="0">
+                        <Slider.Resources>
+                            <!-- ReSharper disable Xaml.RedundantResource 
+                            Reason: used by avalonia -->
+                            <x:Double x:Key="SliderTrackThemeHeight">14</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbWidth">0</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbHeight">8</x:Double>
+                            <x:Double x:Key="SliderHorizontalHeight">18</x:Double>
+                            <!-- ReSharper restore Xaml.RedundantResource -->
+                        </Slider.Resources>
+                    </Slider>
 
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"
@@ -147,27 +164,21 @@
 
                         <TextBlock Name="DurationLabel"
                                    Text="00:00"
-                                   Foreground="White"
+                                   Foreground="{DynamicResource OverlayBarForegroundBrush}"
                                    VerticalAlignment="Center"
                                    FontFamily="Consolas" />
 
                         <Button Name="MuteButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Grid Width="18" Height="18">
                                 <Viewbox Name="SpeakerIcon"
                                          Width="18"
                                          Height="18">
                                     <Canvas Width="24" Height="24">
-                                        <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
-                                              Fill="White" />
-                                        <Path Data="M15,9 C16.5,10.5 16.5,13.5 15,15"
-                                              Stroke="White"
-                                              StrokeThickness="2"
-                                              StrokeLineCap="Round" />
-                                        <Path Data="M18,6 C21,9 21,15 18,18"
-                                              Stroke="White"
+                                        <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                              Fill="{DynamicResource OverlayBarForegroundBrush}" />
+                                        <Path Data="{StaticResource SpeakerWavesGeometry}"
+                                              Stroke="{DynamicResource OverlayBarForegroundBrush}"
                                               StrokeThickness="2"
                                               StrokeLineCap="Round" />
                                     </Canvas>
@@ -178,14 +189,10 @@
                                          Height="18"
                                          IsVisible="False">
                                     <Canvas Width="24" Height="24">
-                                        <Path Data="M3,9 H7 L12,4 V20 L7,15 H3 Z"
-                                              Fill="White" />
-                                        <Path Data="M16,9 L22,15"
-                                              Stroke="White"
-                                              StrokeThickness="2"
-                                              StrokeLineCap="Round" />
-                                        <Path Data="M22,9 L16,15"
-                                              Stroke="White"
+                                        <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                              Fill="{DynamicResource OverlayBarForegroundBrush}" />
+                                        <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                              Stroke="{DynamicResource OverlayBarForegroundBrush}"
                                               StrokeThickness="2"
                                               StrokeLineCap="Round" />
                                     </Canvas>
@@ -199,47 +206,62 @@
 
                             <Slider Name="VolumeSlider"
                                     Width="120"
-                                    Minimum="0"
-                                    Maximum="200"
+                                    Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                    Maximum="{x:Static models:VolumeSliderRange.Max}"
                                     Value="100"
                                     Focusable="False" />
 
                             <TextBlock Name="VolumeLabel"
                                        Text="100%"
                                        Width="38"
-                                       Foreground="White"
+                                       Foreground="{DynamicResource OverlayBarForegroundBrush}"
                                        FontFamily="Consolas"
                                        VerticalAlignment="Center" />
                         </StackPanel>
 
+                        <Button Name="OutputVolumesButton"
+                                Classes="icon-button"
+                                ToolTip.Tip="{x:Static loc:Strings.MainWindow_OutputVolumesButtonTooltip}">
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource MixerLinesGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                    <Path Data="{StaticResource MixerDotsGeometry}"
+                                          Fill="{DynamicResource OverlayBarForegroundBrush}" />
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+
                         <Button Name="SpeedButton"
-                                MinWidth="48"
-                                Height="36"
-                                Padding="8,0"
-                                Focusable="False"
+                                Classes="icon-button"
                                 ToolTip.Tip="{x:Static loc:Strings.MainWindow_SpeedButtonTooltip}">
-                            <TextBlock Name="SpeedLabel"
-                                       Text="1x"
-                                       Foreground="White"
-                                       FontFamily="Consolas"
-                                       FontSize="13"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource SpeedGaugeArcGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                    <Path Data="{StaticResource SpeedGaugeNeedleGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
+                                          StrokeThickness="2"
+                                          StrokeLineCap="Round" />
+                                </Canvas>
+                            </Viewbox>
                         </Button>
 
                         <ToggleButton Name="SubtitlesButton"
-                                      Width="36"
-                                      Height="36"
-                                      Focusable="False"
+                                      Classes="icon-button"
                                       ToolTip.Tip="{x:Static loc:Strings.MainWindow_SubtitlesButtonTooltip}">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
-                                    <Path Data="M3,5 H21 V17 H3 Z"
-                                          Stroke="White"
+                                    <Path Data="{StaticResource SubtitlesRectGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
                                           StrokeThickness="2"
                                           Fill="Transparent" />
-                                    <Path Data="M6,10 H11 M6,13 H9 M13,10 H18 M13,13 H16"
-                                          Stroke="White"
+                                    <Path Data="{StaticResource SubtitlesLinesGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
                                           StrokeThickness="1.5"
                                           StrokeLineCap="Round" />
                                 </Canvas>
@@ -247,39 +269,23 @@
                         </ToggleButton>
 
                         <Button Name="OptionsButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
-                                    <Path Data="M12,8.5 A3.5,3.5 0 1 1 12,15.5 A3.5,3.5 0 1 1 12,8.5"
-                                          Fill="White" />
-                                    <Path Data="M10.9,2 H13.1 L13.6,4.3 C14.2,4.5 14.8,4.8 15.3,5.1 L17.4,4 L20,6.6 L18.9,8.7 C19.2,9.2 19.5,9.8 19.7,10.4 L22,10.9 V13.1 L19.7,13.6 C19.5,14.2 19.2,14.8 18.9,15.3 L20,17.4 L17.4,20 L15.3,18.9 C14.8,19.2 14.2,19.5 13.6,19.7 L13.1,22 H10.9 L10.4,19.7 C9.8,19.5 9.2,19.2 8.7,18.9 L6.6,20 L4,17.4 L5.1,15.3 C4.8,14.8 4.5,14.2 4.3,13.6 L2,13.1 V10.9 L4.3,10.4 C4.5,9.8 4.8,9.2 5.1,8.7 L4,6.6 L6.6,4 L8.7,5.1 C9.2,4.8 9.8,4.5 10.4,4.3 Z"
-                                          Fill="White" />
+                                    <Path Data="{StaticResource GearBodyGeometry}"
+                                          Fill="{DynamicResource OverlayBarForegroundBrush}" />
+                                    <Path Data="{StaticResource GearTeethGeometry}"
+                                          Fill="{DynamicResource OverlayBarForegroundBrush}" />
                                 </Canvas>
                             </Viewbox>
                         </Button>
 
                         <Button Name="FullscreenButton"
-                                Width="36"
-                                Height="36"
-                                Focusable="False">
+                                Classes="icon-button">
                             <Viewbox Width="18" Height="18">
                                 <Canvas Width="24" Height="24">
-                                    <Path Data="M4,10 V4 H10"
-                                          Stroke="White"
-                                          StrokeThickness="2"
-                                          StrokeLineCap="Square" />
-                                    <Path Data="M14,4 H20 V10"
-                                          Stroke="White"
-                                          StrokeThickness="2"
-                                          StrokeLineCap="Square" />
-                                    <Path Data="M20,14 V20 H14"
-                                          Stroke="White"
-                                          StrokeThickness="2"
-                                          StrokeLineCap="Square" />
-                                    <Path Data="M10,20 H4 V14"
-                                          Stroke="White"
+                                    <Path Data="{StaticResource FullscreenCornersGeometry}"
+                                          Stroke="{DynamicResource OverlayBarForegroundBrush}"
                                           StrokeThickness="2"
                                           StrokeLineCap="Square" />
                                 </Canvas>

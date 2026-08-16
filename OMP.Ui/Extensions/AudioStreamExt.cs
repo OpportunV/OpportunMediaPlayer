@@ -6,6 +6,6 @@ public static class AudioStreamExt
 {
     extension(AudioStream stream)
     {
-        public string Describe() => $"{stream.Title} [{stream.Language}] ({stream.Codec})";
+        public string Describe() => $"[{stream.Language}] {stream.Title} ({stream.Codec})";
     }
 }

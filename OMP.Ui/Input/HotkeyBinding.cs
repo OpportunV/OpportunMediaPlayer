@@ -1,6 +1,6 @@
 using System;
 using Avalonia.Input;
-using OMP.Ui.Controls;
+using OMP.Ui.Services;
 
 namespace OMP.Ui.Input;
 
