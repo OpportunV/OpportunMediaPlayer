@@ -101,8 +101,8 @@ brew install ffmpeg@7</value>
   <data name="SubtitleZoneEditor_FontLabel" xml:space="preserve"><value>Font:</value></data>
   <data name="SubtitleZoneEditor_SizeLabel" xml:space="preserve"><value>Size:</value></data>
   <data name="SubtitleZoneEditor_TextColorLabel" xml:space="preserve"><value>Text color:</value></data>
-  <data name="SubtitleZoneEditor_BgColorLabel" xml:space="preserve"><value>Bg color:</value></data>
-  <data name="SubtitleZoneEditor_BgOpacityLabel" xml:space="preserve"><value>Bg opacity:</value></data>
+  <data name="SubtitleZoneEditor_BgColorLabel" xml:space="preserve"><value>Background color:</value></data>
+  <data name="SubtitleZoneEditor_BgOpacityLabel" xml:space="preserve"><value>Background opacity:</value></data>
   <data name="SubtitleZoneEditor_AlignHLabel" xml:space="preserve"><value>Horizontal alignment:</value></data>
   <data name="SubtitleZoneEditor_AlignVLabel" xml:space="preserve"><value>Vertical alignment:</value></data>
   <data name="SubtitleZoneEditor_CancelButton" xml:space="preserve"><value>Cancel</value></data>
