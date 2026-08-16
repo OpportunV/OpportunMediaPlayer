@@ -60,6 +60,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public double Speed => _clock.Speed;
 
+    public bool HasVideo => _videoPipeline is not null;
+
     public double VideoFps { get; private set; }
 
     public double VideoDecodeFps { get; private set; }

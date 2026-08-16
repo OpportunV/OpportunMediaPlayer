@@ -32,6 +32,8 @@ internal static class Strings
 
     public static string MainWindow_OpenFileTypeFilterName => Get("MainWindow_OpenFileTypeFilterName");
 
+    public static string MainWindow_NoVideoLabel => Get("MainWindow_NoVideoLabel");
+
     public static string Options_Title => Get("Options_Title");
 
     public static string Options_GeneralTab => Get("Options_GeneralTab");

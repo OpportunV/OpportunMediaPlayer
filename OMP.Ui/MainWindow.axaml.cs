@@ -151,6 +151,7 @@ public sealed partial class MainWindow : Window
         _videoRenderSurface.Reset();
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
+        NoVideoIndicator.IsVisible = registry.Current is { HasVideo: false };
 
         _areSubtitlesEnabled = false;
         _lastKnownSubtitleRouteCount = 0;

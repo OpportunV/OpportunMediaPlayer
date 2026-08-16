@@ -35,6 +35,8 @@ public interface IMediaSession : IDisposable
 
     public string FilePath { get; }
 
+    public bool HasVideo { get; }
+
     public bool IsMuted { get; }
 
     public double MasterVolume { get; }
