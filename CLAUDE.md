@@ -262,8 +262,9 @@ smell. Only worry about locking when critical sections do real work, block, or n
 genuinely synchronous, thread-blocking `TryWriteBlocking`/`TryReadBlocking` (bool-returning, out
 param for read) — `System.Threading.Channels` is async-only and has no native blocking API, and
 this codebase's loops are OS threads, not async/await, so something has to bridge that. It's
-sync-over-async (`.AsTask().Wait(token)`), which isn't free (forces a `Task` even on channel
-operations that would otherwise complete synchronously) — `System.Collections.Concurrent
+sync-over-async (`WriteAsync(item, token).AsTask().GetAwaiter().GetResult()`), which isn't free
+(forces a `Task` even on channel operations that would otherwise complete synchronously) —
+`System.Collections.Concurrent
 .BlockingCollection<T>` would avoid that allocation with a genuinely blocking implementation, but
 doesn't support `BoundedChannelFullMode.DropOldest` (used by `MediaSession`'s audio packet
 channel) without reimplementing that eviction by hand, so it's not a drop-in swap. Worth
@@ -272,6 +273,27 @@ decode work around every call site dominates. The `bool`/`out` shape (rather tha
 `OperationCanceledException` and returning `default!`) is deliberate: a silently-returned
 default value is indistinguishable from a legitimately-default item, which is exactly the kind
 of bug this shape avoids — see `PipelineWorker.TryWaitIfPaused()` for the same pattern.
+
+**Use `GetAwaiter().GetResult()`, never `Task.Wait(CancellationToken)`, to bridge a cancellable
+async operation.** `TryWriteBlocking`/`TryReadBlocking` originally did
+`channelWriter.WriteAsync(item, token).AsTask().Wait(token)` — passing the *same* token to both
+the async operation and the blocking `.Wait()` looks like it cancels the write, but `Wait(token)`
+only makes the *wait* interruptible; it doesn't stop the underlying `WriteAsync` task, which keeps
+running independently. Under real contention (`MediaSession.Dispose()` calling `Cancel()` while
+the demux thread has a blocked `TryWriteBlocking` pending on a full video channel) this let
+`Wait(token)` throw and return `false` — telling `DispatchClonedPacket` the packet was never
+enqueued, so it called `av_packet_free` on it — while the abandoned `WriteAsync` task went on to
+complete successfully moments later and actually placed that same packet in the channel, handing
+the same freed pointer to whoever read it next. Confirmed via a real crash dump (`clrstack -all`
+on a Linux CI crash showed the disposing thread blocked in `PipelineWorker.Join()` while the
+demux thread was still natively inside `DispatchClonedPacket`'s `av_packet_free` call) — a genuine
+double-free, not a timing-tolerance issue. `GetAwaiter().GetResult()` has no separate token
+parameter: it only returns once the awaited operation itself reaches a terminal state, so there is
+no "wait gave up early while the operation is still in flight" case left to race. It also
+re-throws the operation's own exception directly (`OperationCanceledException`, not
+`Task.Wait()`'s `AggregateException` wrapper), which is why the `catch` clause didn't need to
+change. This is the general lesson, not just this one call site: never pass a `CancellationToken`
+to both the operation you're starting *and* the mechanism you use to wait for it.
 
 A `CancellationTokenSource`'s `.Token` getter throws `ObjectDisposedException` once the source
 itself has been disposed — `IsCancellationRequested` doesn't. A loop that reads `.Token` fresh

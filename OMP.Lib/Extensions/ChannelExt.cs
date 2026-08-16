@@ -10,7 +10,7 @@ internal static class ChannelExt
         {
             try
             {
-                channelWriter.WriteAsync(item, token).AsTask().Wait(token);
+                channelWriter.WriteAsync(item, token).AsTask().GetAwaiter().GetResult();
                 return true;
             }
             catch (OperationCanceledException)
@@ -26,9 +26,7 @@ internal static class ChannelExt
         {
             try
             {
-                var task = channelReader.ReadAsync(token).AsTask();
-                task.Wait(token);
-                value = task.Result;
+                value = channelReader.ReadAsync(token).AsTask().GetAwaiter().GetResult();
                 return true;
             }
             catch (OperationCanceledException)
