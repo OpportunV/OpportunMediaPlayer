@@ -128,6 +128,8 @@ internal static class Strings
 
     public static string OpenFileError_Heading => Get("OpenFileError_Heading");
 
+    public static string OpenFileError_FFmpegMacHeading => Get("OpenFileError_FFmpegMacHeading");
+
     public static string OpenFileError_TechnicalDetailLabel => Get("OpenFileError_TechnicalDetailLabel");
 
     public static string SubtitleZoneEditor_NewTitle => Get("SubtitleZoneEditor_NewTitle");

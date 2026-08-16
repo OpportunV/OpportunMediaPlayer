@@ -39,6 +39,7 @@ internal static class Program
                         context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
                         ?? new PlaybackTuningOptions());
                     services.AddSingleton(new StartupOptions(args.Length > 0 ? args[0] : null));
+                    services.AddSingleton(FFmpegLibraryLocator.CreateOptions());
                     services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();

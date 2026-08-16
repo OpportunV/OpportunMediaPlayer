@@ -419,6 +419,36 @@ profile that passes `-p:PublishSingleFile=true` overrides this, so it isn't fool
 Linux/macOS publish throws `NotSupportedException` out of `DynamicallyLoadedBindings.Initialize`,
 check for that first.
 
+**macOS gets no bundled FFmpeg at all — it resolves against a system install instead.** Unlike
+Windows/Linux, no trusted source publishes redistributable per-library FFmpeg `.dylib`s for
+macOS: BtbN/FFmpeg-Builds (the source for the Windows/Linux libs) has never covered macOS, and
+the usual macOS FFmpeg download sites (evermeet.cx, Martin Riedl's build server) only ship a
+single static `ffmpeg`/`ffprobe` executable, not the separate libs `FFmpeg.AutoGen` P/Invokes
+against — and evermeet.cx is Intel-only besides. So `OMP.Lib/Libs/osx-x64`/`osx-arm64` don't
+exist, and `OMP.Ui.csproj` has no macOS `Content` block. Instead, `OMP.Ui/Services
+/FFmpegLibraryLocator.CreateOptions` (macOS-only probing internally, called once from `Program.cs`
+as `services.AddSingleton(FFmpegLibraryLocator.CreateOptions())`) checks Homebrew's keg-only
+`ffmpeg@7` formula install paths (`/opt/homebrew/opt/ffmpeg@7/lib` on Apple Silicon,
+`/usr/local/opt/ffmpeg@7/lib` on Intel) for `libavcodec.61.dylib` and returns a populated
+`OMP.Lib.NativeLibraryOptions` — a plain POCO living in `OMP.Lib` (mirrors `PlaybackTuningOptions`:
+the type itself is host-agnostic data, only its *value* is host-specific). Registering the whole
+options instance, rather than a bare `string?`, keeps `Program.cs`'s `ConfigureServices` a flat list
+of one-line registrations with no branching of its own, and lets `MediaSessionRegistry`/
+`MediaSession` keep taking it as an ordinary constructor-injected dependency instead of needing a
+factory-delegate registration. `MediaSession` reads `.FFmpegLibraryDirectory` and passes it to
+`FFmpegEnvironment.EnsureInitialized`, which sets `ffmpeg.RootPath` before any other FFmpeg call —
+consistent with "`OMP.Lib` stays host-agnostic" above (the search logic lives in `OMP.Ui`; `OMP.Lib`
+only receives the resolved directory). It has to be `ffmpeg@7` specifically, not the default
+`ffmpeg` formula: Homebrew's plain `ffmpeg` had moved to major version 9 by the time this was
+written, which doesn't match `FFmpeg.AutoGen 7.1.1`'s expected sonames (`avcodec-61` etc.) — an
+ABI mismatch that a newer major version won't reliably paper over. If no matching directory is
+found, `ffmpeg.RootPath` is left unset and the first native FFmpeg call throws
+`DllNotFoundException` when a file is opened; `MainWindow.OpenPath`'s existing catch-all already
+surfaces that through `OpenFileErrorWindow`, and on macOS specifically swaps in
+`OpenFileError_FFmpegMacHeading` (pointing at `brew install ffmpeg@7`) instead of the generic
+corrupted-file heading. None of this has been runtime-verified on real macOS hardware — no Mac
+was available when it was written, same caveat as the rest of the macOS work in this project.
+
 ## Testing
 
 `OMP.Lib.Tests` covers logic that's genuinely unit-testable without FFmpeg or a real audio

@@ -502,8 +502,12 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            var heading = ex is DllNotFoundException && OperatingSystem.IsMacOS()
+                ? Strings.OpenFileError_FFmpegMacHeading
+                : Strings.OpenFileError_Heading;
+
             var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-            errorWindow.Load(ex.Message);
+            errorWindow.Load(heading, ex.Message);
             await errorWindow.ShowDialog(this);
             return;
         }

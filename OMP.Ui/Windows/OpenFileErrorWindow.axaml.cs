@@ -11,8 +11,9 @@ public sealed partial class OpenFileErrorWindow : Window
         CloseButton.Click += (_, _) => Close();
     }
 
-    public void Load(string reason)
+    public void Load(string heading, string reason)
     {
+        HeadingText.Text = heading;
         ReasonText.Text = reason;
     }
 }

@@ -80,12 +80,16 @@
     <value>Обычно это означает, что отсутствует системная аудиобиблиотека. Попробуйте установить общую библиотеку JACK и перезапустить приложение:
 
 sudo apt install libjack-jackd2-0</value>
-    <comment>Keep the "sudo apt install ..." line literal - it is a real shell command, not prose.</comment>
   </data>
   <data name="AudioWarning_DefaultGuidance" xml:space="preserve"><value>Воспроизведение продолжится без звука.</value></data>
 
   <data name="OpenFileError_Title" xml:space="preserve"><value>Не удалось открыть файл</value></data>
   <data name="OpenFileError_Heading" xml:space="preserve"><value>Не удалось открыть этот файл. Возможно, он повреждён, не полностью загружен или имеет неподдерживаемый формат.</value></data>
+  <data name="OpenFileError_FFmpegMacHeading" xml:space="preserve">
+    <value>FFmpeg не найден. Установите его через Homebrew и перезапустите приложение:
+
+brew install ffmpeg@7</value>
+  </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Технические детали:</value></data>
 
   <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>Новая зона субтитров</value></data>

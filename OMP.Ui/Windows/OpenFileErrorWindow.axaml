@@ -11,7 +11,8 @@
     <StackPanel Margin="24"
                 Spacing="10">
 
-        <TextBlock Text="{x:Static loc:Strings.OpenFileError_Heading}"
+        <TextBlock Name="HeadingText"
+                   Text="{x:Static loc:Strings.OpenFileError_Heading}"
                    FontSize="15"
                    FontWeight="Bold"
                    TextWrapping="Wrap" />

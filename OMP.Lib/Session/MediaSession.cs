@@ -122,12 +122,16 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double MaxDemuxLookaheadSeconds = 3;
     private const double ZeroSeekEpsilonSeconds = 0.05;
 
-    public MediaSession(string filePath, PlaybackTuningOptions options, ILoggerFactory loggerFactory)
+    public MediaSession(
+        string filePath,
+        PlaybackTuningOptions options,
+        ILoggerFactory loggerFactory,
+        NativeLibraryOptions nativeLibraryOptions)
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MediaSession>();
 
-        FFmpegEnvironment.EnsureInitialized(_logger);
+        FFmpegEnvironment.EnsureInitialized(_logger, nativeLibraryOptions.FFmpegLibraryDirectory);
 
         _videoChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.VideoChannelCapacity)

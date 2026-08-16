@@ -80,12 +80,16 @@
     <value>This usually means a system audio library is missing. Try installing JACK's shared library, then restart the app:
 
 sudo apt install libjack-jackd2-0</value>
-    <comment>Keep the "sudo apt install ..." line literal - it is a real shell command, not prose.</comment>
   </data>
   <data name="AudioWarning_DefaultGuidance" xml:space="preserve"><value>Playback will continue without audio output.</value></data>
 
   <data name="OpenFileError_Title" xml:space="preserve"><value>Couldn't Open File</value></data>
   <data name="OpenFileError_Heading" xml:space="preserve"><value>This file couldn't be opened. It may be corrupted, incomplete, or in an unsupported format.</value></data>
+  <data name="OpenFileError_FFmpegMacHeading" xml:space="preserve">
+    <value>FFmpeg wasn't found. Install it via Homebrew, then restart the app:
+
+brew install ffmpeg@7</value>
+  </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Technical detail:</value></data>
 
   <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>New Subtitle Zone</value></data>
