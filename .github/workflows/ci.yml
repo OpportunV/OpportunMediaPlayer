@@ -6,6 +6,7 @@ on:
 jobs:
   build-and-test:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -27,6 +28,7 @@ jobs:
 
   integration-tests:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -51,4 +53,22 @@ jobs:
         run: brew install ffmpeg@7
 
       - name: Test
+        id: test
+        continue-on-error: true
+        env:
+          DOTNET_DbgEnableMiniDump: "1"
+          DOTNET_DbgMiniDumpType: "4"
+          DOTNET_DbgMiniDumpName: "${{ github.workspace }}/crash_%p.dmp"
         run: dotnet test OMP.Lib.IntegrationTests/OMP.Lib.IntegrationTests.csproj -c Release -r ${{ matrix.rid }}
+
+      - name: Upload crash dump
+        if: steps.test.outcome == 'failure' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: crash-dump-${{ matrix.rid }}
+          path: ${{ github.workspace }}/crash_*.dmp
+          if-no-files-found: ignore
+
+      - name: Fail job if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
