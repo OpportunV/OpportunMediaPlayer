@@ -143,11 +143,18 @@ dotnet build OMP.Ui/OMP.Ui.csproj
 dotnet run --project OMP.Ui/OMP.Ui.csproj
 ```
 
-Tests (pure logic only — playback needs a real file and native FFmpeg libraries, so it's covered
-by manual verification instead):
+Unit tests (pure logic only, instant, no native dependencies):
 
 ```bash
 dotnet test OMP.Lib.Tests/OMP.Lib.Tests.csproj
+```
+
+Integration tests (opens real files from `test-fixtures/` through the real engine — needs a
+runtime identifier so the matching native FFmpeg libraries get bundled; swap `win-x64` for
+`linux-x64` or `osx-arm64`/`osx-x64` as appropriate):
+
+```bash
+dotnet test OMP.Lib.IntegrationTests/OMP.Lib.IntegrationTests.csproj -r win-x64
 ```
 
 ## Issues and feedback

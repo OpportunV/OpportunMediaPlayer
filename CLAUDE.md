@@ -454,8 +454,37 @@ was available when it was written, same caveat as the rest of the macOS work in 
 `OMP.Lib.Tests` covers logic that's genuinely unit-testable without FFmpeg or a real audio
 device: `PlaybackClock`, `AudioSpeedProcessor`, `AudioGainProcessor`, `AudioDelayProcessor`,
 `PtsBaselineDetector`, `PipelineWorker`, `ChannelExt`, `EndOfStreamTracker`, subtitle cue-store
-and text-parsing logic. `MediaSession` / `MediaSessionRegistry` need a real file and real FFmpeg
-native libs to construct, so they're not unit tested — verify those manually. Avalonia-side
-classes (`FullscreenController`,
-`VideoRenderSurface`, `WindowFactory`) are written with plain constructor dependencies so
-Avalonia-headless tests can be added later, but that test host isn't wired up yet.
+and text-parsing logic. It stays instant and dependency-free on purpose — anything needing a real
+file or real FFmpeg native libs belongs in `OMP.Lib.IntegrationTests` instead, not here.
+
+`OMP.Lib.IntegrationTests` opens real files from `test-fixtures/` (one of every supported
+format, `71df4c1`, licensed per `test-fixtures/CREDITS.md`) through the real engine —
+`MediaSessionRegistry`/`MediaSession` end to end, same construction path `OMP.Ui` uses (see
+`NativeLibraryOptionsFactory`, a small local duplicate of `OMP.Ui/Services/FFmpegLibraryLocator`'s
+macOS Homebrew probe — deliberately not shared, since this project should only depend on
+`OMP.Lib`, not `OMP.Ui`). It bundles native libs the same RID-conditional way `OMP.Ui.csproj`
+does (no macOS block — same reasoning: resolves against CI's `brew install ffmpeg@7` instead),
+so it has to be run with `-r <rid>` (`dotnet test OMP.Lib.IntegrationTests
+/OMP.Lib.IntegrationTests.csproj -r win-x64`, etc.), unlike `OMP.Lib.Tests`.
+
+**No CI runner has a real audio output device**, confirmed by research rather than assumption:
+Windows GitHub-hosted runners have none at all (the only known fix, a virtual driver called
+Scream, needs certificate installation + `devcon` — too slow/fragile to be worth it here); macOS
+runners are documented to *usually* get a "Null Audio Device" at boot but it's flaky (open
+`actions/runner-images` issue); Linux has none by default either. Deliberately not provisioning
+virtual devices anywhere to keep CI simple — so every audio-output-dependent assertion in
+`PlaybackLifecycleTests` is written to adapt to however many real `AudioOutput`s exist at runtime
+(`[SkippableFact]` + `Skip.If`, via the `Xunit.SkippableFact` package xUnit 2.x needs for
+runtime-conditional skips): 0 outputs skips with a reason, ≥1 tests single-output volume, ≥2 tests
+the actual multi-output routing feature. Open/seek/speed/video-frame-timing assertions need no
+audio device at all and always run, since video pacing is wall-clock-driven, not slaved to a live
+audio device (see the A/V-sync notes above) — this was the main reason the audio-hardware gap
+turned out not to block most of the coverage that matters.
+
+The `ci.yml` `integration-tests` job's `brew install ffmpeg@7` step on `macos-latest` is also the
+only real, automated verification the macOS `FFmpegLibraryLocator`/`ffmpeg@7` path gets — genuine
+signal on real (if ephemeral) macOS hardware, which is otherwise unavailable for this project.
+
+Avalonia-side classes (`FullscreenController`, `VideoRenderSurface`, `WindowFactory`) are written
+with plain constructor dependencies so Avalonia-headless tests can be added later, but that test
+host isn't wired up yet.
