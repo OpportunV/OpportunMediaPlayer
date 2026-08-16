@@ -14,7 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          lfs: true
+          lfs: false
+
+      - name: Pull Windows native libs
+        if: runner.os == 'Windows'
+        run: git lfs pull --include="OMP.Lib/Libs/win/**"
+
+      - name: Pull Linux native libs
+        if: runner.os == 'Linux'
+        run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -42,7 +50,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          lfs: true
+          lfs: false
+
+      - name: Pull Windows native libs
+        if: matrix.rid == 'win-x64'
+        run: git lfs pull --include="OMP.Lib/Libs/win/**"
+
+      - name: Pull Linux native libs
+        if: matrix.rid == 'linux-x64'
+        run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"
 
       - uses: actions/setup-dotnet@v6
         with:
