@@ -142,7 +142,13 @@ public sealed class PlaybackLifecycleTests(MediaSessionFixture fixture) : IClass
         try
         {
             Session.Play();
-            Thread.Sleep(800);
+
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (frameCount == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(50);
+            }
+
             Session.Pause();
         }
         finally

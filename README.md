@@ -123,7 +123,8 @@ on OMP for a given file:
 Pre-built binaries are published on the [Releases page](https://github.com/OpportunV/OpportunMediaPlayer/releases):
 
 - **Windows** — `OMP-Setup-<version>.exe` (installer) or `OMP-<version>-win-x64-portable.zip`
-  (no install required)
+  (no install required). Both are unsigned, so SmartScreen will show a "Windows protected your
+  PC" warning the first time you run either one — click **More info → Run anyway**.
 - **Linux** — `OMP-<version>-x86_64.AppImage` or `OMP-<version>-linux-x64-portable.tar.gz`
 - **macOS** — `OMP-<version>-osx-arm64-portable.tar.gz` (Apple Silicon) or
   `OMP-<version>-osx-x64-portable.tar.gz` (Intel). Unsigned/not notarized, so Gatekeeper will
