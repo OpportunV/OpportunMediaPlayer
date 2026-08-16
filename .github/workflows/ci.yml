@@ -62,7 +62,7 @@ jobs:
         run: dotnet test OMP.Lib.IntegrationTests/OMP.Lib.IntegrationTests.csproj -c Release -r ${{ matrix.rid }}
 
       - name: Upload crash dump
-        if: steps.test.outcome == 'failure' && runner.os == 'Linux'
+        if: steps.test.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: crash-dump-${{ matrix.rid }}
