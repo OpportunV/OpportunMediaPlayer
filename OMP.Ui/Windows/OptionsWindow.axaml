@@ -178,8 +178,8 @@
                                         Value="{Binding Volume, Mode=TwoWay}"
                                         ValueChanged="OnRouteVolumeChanged"
                                         PointerCaptureLost="OnRouteVolumeReleased"
-                                        Minimum="0"
-                                        Maximum="200"
+                                        Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                        Maximum="{x:Static models:VolumeSliderRange.Max}"
                                         Width="130"
                                         VerticalAlignment="Center" />
 
@@ -197,6 +197,8 @@
                                                ValueChanged="OnRouteDelayChanged"
                                                FormatString="0"
                                                Increment="10"
+                                               Minimum="{x:Static models:AudioDelayInputRange.MinMs}"
+                                               Maximum="{x:Static models:AudioDelayInputRange.MaxMs}"
                                                Width="150"
                                                MinWidth="150"
                                                Margin="10,0,0,0"

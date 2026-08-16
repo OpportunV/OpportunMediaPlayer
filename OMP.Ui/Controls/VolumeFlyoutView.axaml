@@ -47,8 +47,8 @@
                                 Value="{Binding Volume, Mode=TwoWay}"
                                 ValueChanged="OnRowVolumeChanged"
                                 PointerCaptureLost="OnRowVolumeReleased"
-                                Minimum="0"
-                                Maximum="200"
+                                Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                Maximum="{x:Static models:VolumeSliderRange.Max}"
                                 VerticalAlignment="Center" />
 
                         <TextBlock Grid.Column="3"

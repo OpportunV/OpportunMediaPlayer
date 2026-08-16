@@ -3,6 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="clr-namespace:OMP.Ui"
     xmlns:loc="clr-namespace:OMP.Ui.Localization"
+    xmlns:models="clr-namespace:OMP.Ui.Models"
     x:Class="OMP.Ui.MainWindow"
     Icon="avares://OMP/Assets/app-icon.ico"
     Width="1200"
@@ -205,8 +206,8 @@
 
                             <Slider Name="VolumeSlider"
                                     Width="120"
-                                    Minimum="0"
-                                    Maximum="200"
+                                    Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                    Maximum="{x:Static models:VolumeSliderRange.Max}"
                                     Value="100"
                                     Focusable="False" />
 
