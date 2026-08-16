@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -66,6 +67,7 @@ public sealed partial class MainWindow : Window
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
+    private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
@@ -78,6 +80,7 @@ public sealed partial class MainWindow : Window
         IMainWindowHotkeyService hotkeyService,
         IWindowFactory windowFactory,
         IUserSettingsService settings,
+        SingleInstanceCoordinator singleInstanceCoordinator,
         StartupOptions startupOptions)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
@@ -85,8 +88,10 @@ public sealed partial class MainWindow : Window
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
         _settings = settings;
+        _singleInstanceCoordinator = singleInstanceCoordinator;
         InitializeComponent();
         Title = AppInfo.DisplayName;
+        RestoreWindowGeometry();
 
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
@@ -114,6 +119,8 @@ public sealed partial class MainWindow : Window
         SetupDragDrop();
         SetupVideoDoubleClick();
         SetupProgressSlider();
+        SetupWindowGeometryPersistence();
+        _singleInstanceCoordinator.StartWatchingForOpenRequests(HandleExternalOpenRequest);
         OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
@@ -131,11 +138,23 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    internal void HandleExternalOpenRequest(string? path)
+    {
+        Activate();
+
+        if (!string.IsNullOrEmpty(path))
+        {
+            _ = OpenPath(path);
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        _mediaSessionRegistry.Close();
         _settings.Save();
         _fullscreenController.Dispose();
         _videoRenderSurface.Dispose();
+        _singleInstanceCoordinator.Dispose();
 
         base.OnClosed(e);
     }
@@ -545,6 +564,83 @@ public sealed partial class MainWindow : Window
         {
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
             _isSeekingViaSlider = false;
+        };
+    }
+
+    private void RestoreWindowGeometry()
+    {
+        var window = _settings.Current.Window;
+
+        if (window is { Width: { } width, Height: { } height })
+        {
+            Width = width;
+            Height = height;
+        }
+
+        if (window is { Left: { } left, Top: { } top })
+        {
+            var position = new PixelPoint((int)left, (int)top);
+
+            if (IsPositionOnAnyScreen(position))
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Position = position;
+            }
+        }
+
+        if (window.IsMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private bool IsPositionOnAnyScreen(PixelPoint position)
+    {
+        try
+        {
+            return Screens.All.Count == 0 || Screens.All.Any(screen => screen.Bounds.Contains(position));
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    private void SetupWindowGeometryPersistence()
+    {
+        PositionChanged += (_, _) =>
+        {
+            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
+            {
+                return;
+            }
+
+            _settings.Current.Window.Left = Position.X;
+            _settings.Current.Window.Top = Position.Y;
+        };
+
+        Resized += (_, _) =>
+        {
+            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
+            {
+                return;
+            }
+
+            _settings.Current.Window.Width = Width;
+            _settings.Current.Window.Height = Height;
+        };
+
+        PropertyChanged += (_, e) =>
+        {
+            if (_fullscreenController.IsFullscreen || e.Property != WindowStateProperty)
+            {
+                return;
+            }
+
+            if (WindowState is WindowState.Normal or WindowState.Maximized)
+            {
+                _settings.Current.Window.IsMaximized = WindowState == WindowState.Maximized;
+            }
         };
     }
 

@@ -29,6 +29,15 @@ internal static class Program
 
         try
         {
+            var startupFilePath = args.Length > 0 ? args[0] : null;
+            var singleInstanceCoordinator = SingleInstanceCoordinator.AcquireOrHandOff(startupFilePath);
+
+            if (singleInstanceCoordinator.HandedOff)
+            {
+                Log.Information("Handed the open request off to the running instance.");
+                return;
+            }
+
             var appHost = Host.CreateDefaultBuilder(args)
                 .UseContentRoot(AppContext.BaseDirectory)
                 .UseSerilog((context, _, configuration) => configuration
@@ -38,7 +47,8 @@ internal static class Program
                     services.AddSingleton(
                         context.Configuration.GetSection(PlaybackTuningOptions.SectionName).Get<PlaybackTuningOptions>()
                         ?? new PlaybackTuningOptions());
-                    services.AddSingleton(new StartupOptions(args.Length > 0 ? args[0] : null));
+                    services.AddSingleton(new StartupOptions(startupFilePath));
+                    services.AddSingleton(singleInstanceCoordinator);
                     services.AddSingleton(FFmpegLibraryLocator.CreateOptions());
                     services.AddSingleton<IMediaSessionRegistry, MediaSessionRegistry>();
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
