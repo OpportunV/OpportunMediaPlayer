@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using OMP.Lib;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
@@ -68,6 +69,7 @@ public sealed partial class MainWindow : Window
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
+    private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
@@ -81,6 +83,7 @@ public sealed partial class MainWindow : Window
         IWindowFactory windowFactory,
         IUserSettingsService settings,
         SingleInstanceCoordinator singleInstanceCoordinator,
+        NativeLibraryOptions nativeLibraryOptions,
         StartupOptions startupOptions)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
@@ -89,6 +92,7 @@ public sealed partial class MainWindow : Window
         _windowFactory = windowFactory;
         _settings = settings;
         _singleInstanceCoordinator = singleInstanceCoordinator;
+        _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
         Title = AppInfo.DisplayName;
         RestoreWindowGeometry();
@@ -521,7 +525,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            var heading = ex is DllNotFoundException && OperatingSystem.IsMacOS()
+            var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
                 ? Strings.OpenFileError_FFmpegMacHeading
                 : Strings.OpenFileError_Heading;
 
