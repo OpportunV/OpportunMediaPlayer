@@ -139,7 +139,9 @@ public sealed partial class OptionsWindow : Window
 
     private void OnRestartNowClick(object? sender, RoutedEventArgs e)
     {
-        if (Environment.ProcessPath is { } exePath)
+        var exePath = Environment.GetEnvironmentVariable("APPIMAGE") ?? Environment.ProcessPath;
+
+        if (exePath is not null)
         {
             var startInfo = new ProcessStartInfo(exePath);
 
