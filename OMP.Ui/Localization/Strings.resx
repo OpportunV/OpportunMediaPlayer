@@ -13,13 +13,13 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
 
-  <data name="MainWindow_FileMenu" xml:space="preserve"><value>_File</value></data>
-  <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>_Open...</value></data>
-  <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>_Options...</value></data>
-  <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>E_xit</value></data>
-  <data name="MainWindow_HelpMenu" xml:space="preserve"><value>_Help</value></data>
-  <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>_Keyboard Shortcuts...</value></data>
-  <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>_About...</value></data>
+  <data name="MainWindow_FileMenu" xml:space="preserve"><value>File</value></data>
+  <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>Open...</value></data>
+  <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>Options...</value></data>
+  <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>Exit</value></data>
+  <data name="MainWindow_HelpMenu" xml:space="preserve"><value>Help</value></data>
+  <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>Keyboard Shortcuts...</value></data>
+  <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>About...</value></data>
   <data name="MainWindow_SpeedButtonTooltip" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MainWindow_SubtitlesButtonTooltip" xml:space="preserve"><value>Toggle subtitles</value></data>
   <data name="MainWindow_OutputVolumesButtonTooltip" xml:space="preserve"><value>Output volumes</value></data>

@@ -3,8 +3,8 @@
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
         xmlns:models="clr-namespace:OMP.Ui.Models"
         x:Class="OMP.Ui.Windows.SubtitleZoneEditorWindow"
-        Width="920"
-        SizeToContent="Height"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
         Title="{x:Static loc:Strings.SubtitleZoneEditor_NewTitle}">
 
     <Grid ColumnDefinitions="Auto,340"

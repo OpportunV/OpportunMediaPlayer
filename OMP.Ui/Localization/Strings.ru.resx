@@ -13,13 +13,13 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
 
-  <data name="MainWindow_FileMenu" xml:space="preserve"><value>_Файл</value></data>
-  <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>_Открыть...</value></data>
-  <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>_Настройки...</value></data>
-  <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>_Выход</value></data>
-  <data name="MainWindow_HelpMenu" xml:space="preserve"><value>_Справка</value></data>
-  <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>_Горячие клавиши...</value></data>
-  <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>_О программе...</value></data>
+  <data name="MainWindow_FileMenu" xml:space="preserve"><value>Файл</value></data>
+  <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>Открыть...</value></data>
+  <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>Настройки...</value></data>
+  <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>Выход</value></data>
+  <data name="MainWindow_HelpMenu" xml:space="preserve"><value>Справка</value></data>
+  <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>Горячие клавиши...</value></data>
+  <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>О программе...</value></data>
   <data name="MainWindow_SpeedButtonTooltip" xml:space="preserve"><value>Скорость воспроизведения</value></data>
   <data name="MainWindow_SubtitlesButtonTooltip" xml:space="preserve"><value>Субтитры</value></data>
   <data name="MainWindow_OutputVolumesButtonTooltip" xml:space="preserve"><value>Громкость по выходам</value></data>

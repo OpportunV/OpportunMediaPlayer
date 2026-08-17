@@ -16,6 +16,9 @@ internal sealed class FullscreenController : IDisposable
     private readonly Control _videoSurface;
     private readonly DispatcherTimer _overlayTimer = new();
     private WindowState _previousWindowState;
+    private PixelPoint _previousPosition;
+    private double _previousWidth;
+    private double _previousHeight;
 
     public FullscreenController(Window window, Control topMenu, Control overlayControls, Control videoSurface)
     {
@@ -42,9 +45,16 @@ internal sealed class FullscreenController : IDisposable
         if (IsFullscreen)
         {
             _previousWindowState = _window.WindowState;
+
+            if (_previousWindowState == WindowState.Normal)
+            {
+                _previousPosition = _window.Position;
+                _previousWidth = _window.Width;
+                _previousHeight = _window.Height;
+            }
+
             _window.PointerMoved += OnPointerMoved;
             _window.PointerExited += OnPointerExited;
-            _window.SystemDecorations = SystemDecorations.None;
             _window.WindowState = WindowState.FullScreen;
 
             _topMenu.IsVisible = false;
@@ -57,8 +67,14 @@ internal sealed class FullscreenController : IDisposable
         {
             _window.PointerMoved -= OnPointerMoved;
             _window.PointerExited -= OnPointerExited;
-            _window.SystemDecorations = SystemDecorations.Full;
             _window.WindowState = _previousWindowState;
+
+            if (_previousWindowState == WindowState.Normal)
+            {
+                _window.Position = _previousPosition;
+                _window.Width = _previousWidth;
+                _window.Height = _previousHeight;
+            }
 
             _topMenu.IsVisible = true;
             _overlayControls.Opacity = 1;

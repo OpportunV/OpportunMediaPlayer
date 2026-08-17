@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using OMP.Lib;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
@@ -68,6 +69,7 @@ public sealed partial class MainWindow : Window
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
+    private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
@@ -81,6 +83,7 @@ public sealed partial class MainWindow : Window
         IWindowFactory windowFactory,
         IUserSettingsService settings,
         SingleInstanceCoordinator singleInstanceCoordinator,
+        NativeLibraryOptions nativeLibraryOptions,
         StartupOptions startupOptions)
     {
         _mediaSessionRegistry = mediaSessionRegistry;
@@ -89,6 +92,7 @@ public sealed partial class MainWindow : Window
         _windowFactory = windowFactory;
         _settings = settings;
         _singleInstanceCoordinator = singleInstanceCoordinator;
+        _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
         Title = AppInfo.DisplayName;
         RestoreWindowGeometry();
@@ -109,6 +113,7 @@ public sealed partial class MainWindow : Window
                 ToggleFullscreen = () => _fullscreenController.Toggle(),
                 ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
             });
+        SetupNativeMenu();
         SetupButtons();
         SetupVolume();
         SetupSpeed();
@@ -471,14 +476,39 @@ public sealed partial class MainWindow : Window
         SpeakerMutedIcon.IsVisible = IsMuted;
     }
 
+    private void SetupNativeMenu()
+    {
+        // Built in code, not XAML - elements declared inside Window.NativeMenu don't get compiled x:Name fields
+        var openItem = new NativeMenuItem(Strings.MainWindow_OpenMenuItem);
+        openItem.Click += async (_, _) => await OpenFile();
+
+        var optionsItem = new NativeMenuItem(Strings.MainWindow_OptionsMenuItem);
+        optionsItem.Click += (_, _) => ShowOptionsWindow();
+
+        var exitItem = new NativeMenuItem(Strings.MainWindow_ExitMenuItem);
+        exitItem.Click += (_, _) => Close();
+
+        var fileMenu = new NativeMenuItem(Strings.MainWindow_FileMenu)
+        {
+            Menu = [openItem, optionsItem, new NativeMenuItemSeparator(), exitItem]
+        };
+
+        var hotkeysItem = new NativeMenuItem(Strings.MainWindow_HotkeysMenuItem);
+        hotkeysItem.Click += (_, _) => _windowFactory.Create<HotkeysWindow>().Show(this);
+
+        var aboutItem = new NativeMenuItem(Strings.MainWindow_AboutMenuItem);
+        aboutItem.Click += (_, _) => _windowFactory.Create<AboutWindow>().ShowDialog(this);
+
+        var helpMenu = new NativeMenuItem(Strings.MainWindow_HelpMenu)
+        {
+            Menu = [hotkeysItem, aboutItem]
+        };
+
+        NativeMenu.SetMenu(this, [fileMenu, helpMenu]);
+    }
+
     private void SetupButtons()
     {
-        OpenMenuItem.Click += async (_, _) => await OpenFile();
-        OptionsMenuItem.Click += (_, _) => ShowOptionsWindow();
-        ExitMenuItem.Click += (_, _) => Close();
-        HotkeysMenuItem.Click += (_, _) => _windowFactory.Create<HotkeysWindow>().Show(this);
-        AboutMenuItem.Click += (_, _) => _windowFactory.Create<AboutWindow>().ShowDialog(this);
-
         PlayPauseButton.Click += (_, _) => _commands.TogglePlayPause();
         StepBackButton.Click += (_, _) => _commands.StepBack();
         StepForwardButton.Click += (_, _) => _commands.StepForward();
@@ -521,7 +551,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            var heading = ex is DllNotFoundException && OperatingSystem.IsMacOS()
+            var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
                 ? Strings.OpenFileError_FFmpegMacHeading
                 : Strings.OpenFileError_Heading;
 
