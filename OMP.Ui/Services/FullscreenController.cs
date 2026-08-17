@@ -55,7 +55,6 @@ internal sealed class FullscreenController : IDisposable
 
             _window.PointerMoved += OnPointerMoved;
             _window.PointerExited += OnPointerExited;
-            _window.SystemDecorations = SystemDecorations.None;
             _window.WindowState = WindowState.FullScreen;
 
             _topMenu.IsVisible = false;
@@ -68,7 +67,6 @@ internal sealed class FullscreenController : IDisposable
         {
             _window.PointerMoved -= OnPointerMoved;
             _window.PointerExited -= OnPointerExited;
-            _window.SystemDecorations = SystemDecorations.Full;
             _window.WindowState = _previousWindowState;
 
             if (_previousWindowState == WindowState.Normal)
