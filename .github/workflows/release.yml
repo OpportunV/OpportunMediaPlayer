@@ -4,9 +4,16 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string for a manual test build (no tag is created, no release is published)"
+        required: false
+        default: "0.0.0-test"
 
 jobs:
   windows:
+    if: github.event_name == 'push'
     runs-on: windows-latest
 
     steps:
@@ -63,6 +70,7 @@ jobs:
             OMP-Setup-${{ env.VERSION }}.exe
 
   linux:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -107,7 +115,7 @@ jobs:
             OMP-${{ env.VERSION }}-x86_64.AppImage
 
   macos:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v7
@@ -119,7 +127,13 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Extract version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Publish osx-x64
         run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r osx-x64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/osx-x64
@@ -127,18 +141,48 @@ jobs:
       - name: Publish osx-arm64
         run: dotnet publish OMP.Ui/OMP.Ui.csproj -c Release -r osx-arm64 --self-contained true -p:Version=${{ env.VERSION }} -o publish/osx-arm64
 
-      - name: Create portable tarballs
+      - name: Build .app bundles, ad-hoc sign, package as .dmg
         run: |
-          chmod +x publish/osx-x64/OMP publish/osx-arm64/OMP
-          tar -czf "OMP-${VERSION}-osx-x64-portable.tar.gz" -C publish/osx-x64 .
-          tar -czf "OMP-${VERSION}-osx-arm64-portable.tar.gz" -C publish/osx-arm64 .
+          for rid in osx-x64 osx-arm64; do
+            APP="OMP.app"
+            rm -rf "$APP"
+            mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+            cp -R "publish/$rid/." "$APP/Contents/MacOS/"
+            chmod +x "$APP/Contents/MacOS/OMP"
+
+            sed "s/{{VERSION}}/${VERSION}/g" installer/macos/Info.plist > "$APP/Contents/Info.plist"
+
+            ICONSET="app-icon.iconset"
+            rm -rf "$ICONSET"
+            mkdir "$ICONSET"
+            for size in 16 32 128 256 512; do
+              sips -z "$size" "$size" OMP.Ui/Assets/app-icon.png --out "$ICONSET/icon_${size}x${size}.png" > /dev/null
+              double=$((size * 2))
+              sips -z "$double" "$double" OMP.Ui/Assets/app-icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" > /dev/null
+            done
+            iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/app-icon.icns"
+            rm -rf "$ICONSET"
+
+            codesign --force --deep --sign - "$APP"
+
+            DMG_ROOT="dmg-root"
+            rm -rf "$DMG_ROOT"
+            mkdir "$DMG_ROOT"
+            cp -R "$APP" "$DMG_ROOT/"
+            ln -s /Applications "$DMG_ROOT/Applications"
+
+            hdiutil create -volname "Opportun Media Player" -srcfolder "$DMG_ROOT" -ov -format UDZO "OMP-${VERSION}-${rid}.dmg"
+
+            rm -rf "$APP" "$DMG_ROOT"
+          done
 
       - uses: actions/upload-artifact@v7
         with:
           name: macos-artifacts
           path: |
-            OMP-${{ env.VERSION }}-osx-x64-portable.tar.gz
-            OMP-${{ env.VERSION }}-osx-arm64-portable.tar.gz
+            OMP-${{ env.VERSION }}-osx-x64.dmg
+            OMP-${{ env.VERSION }}-osx-arm64.dmg
 
   release:
     needs: [windows, linux, macos]

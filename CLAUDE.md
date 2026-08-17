@@ -127,8 +127,21 @@ name-matching hack it needed, no longer exist). On Windows, PortAudio otherwise 
 physical device once per host API (MME, DirectSound, WASAPI, WDM-KS); `OutputScanner` filters to
 the WASAPI host API's devices only — `OMP.Lib/Interop/PortAudioHostApi.cs` adds supplemental
 P/Invoke for `Pa_GetHostApiInfo`, which PortAudioSharp2 doesn't bind itself — to avoid showing
-3-4 duplicate entries per physical device. Linux/macOS don't have this duplication (ALSA and
-CoreAudio each expose a single host API), so the filter is a no-op there. WASAPI shared-mode
+3-4 duplicate entries per physical device. macOS's CoreAudio exposes a single host API with no
+such duplication, so the filter is a no-op there. Linux's ALSA is likewise a single PortAudio host
+API — but, confirmed via real-hardware testing on Astra Linux (~20 listed entries for 2 physical
+outputs), that one host API still enumerates every auto-generated virtual/plugin pseudo-device
+from `alsa.conf`/`asound.conf` (`front`, `surround40/51/71`, `iec958`, `dmix`, `dsnoop`, `default`,
+`pulse`, `sysdefault`, samplerate-converter plugins, ...) alongside the genuine physical hardware
+sub-devices, so the WASAPI-style host-API filter alone doesn't help there. `AlsaOutputDeviceFilter`
+(`OMP.Lib/Audio/Output/AlsaOutputDeviceFilter.cs`) instead filters Linux device names down to ones
+containing the literal `(hw:<card>,<device>)` substring PortAudio's ALSA backend uses for genuine
+hardware sub-devices (e.g. `"HD-Audio Generic: ALC3234 Analog (hw:0,0)"`), dropping alias/plugin
+names that lack it (`"front:CARD=PCH,DEV=0"`, `"pulse"`, ...) — collapsing to just `"pulse"`/
+`"default"` was ruled out since it would defeat the app's actual multi-output-routing feature. This
+heuristic is based on ALSA's documented naming convention rather than exhaustive real-device
+coverage and may need tuning; `OutputScanner` logs every raw pre-filter device name at Debug level
+specifically so it can be retuned from a user's log file alone. WASAPI shared-mode
 streams also reject a sample rate that doesn't match the device's own mix rate (confirmed via
 `PaErrorCode.InvalidSampleRate`), so `AudioPipeline` resamples to `IAudioOutput.PreferredSampleRate`
 (queried from the target device) rather than a fixed constant.

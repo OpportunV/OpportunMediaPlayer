@@ -26,12 +26,21 @@ internal sealed class OutputScanner(ILoggerFactory loggerFactory)
             for (var deviceIndex = 0; deviceIndex < PortAudio.DeviceCount; deviceIndex++)
             {
                 var info = PortAudio.GetDeviceInfo(deviceIndex);
+                _logger.LogDebug(
+                    "Raw PortAudio device {DeviceIndex}: '{Name}' (hostApi={HostApi}, maxOutputChannels={MaxOutputChannels}).",
+                    deviceIndex, info.name, info.hostApi, info.maxOutputChannels);
+
                 if (info.maxOutputChannels <= 0)
                 {
                     continue;
                 }
 
                 if (wasapiHostApiIndex is { } wasapiIndex && info.hostApi != wasapiIndex)
+                {
+                    continue;
+                }
+
+                if (OperatingSystem.IsLinux() && !AlsaOutputDeviceFilter.IsRealHardwareDevice(info.name))
                 {
                     continue;
                 }

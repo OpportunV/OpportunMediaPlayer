@@ -78,10 +78,10 @@ Help → Keyboard Shortcuts inside the app.
   so far has only been on a single Ubuntu 22.04/24.04 VirtualBox VM — broader distro and desktop
   environment coverage is unverified. If you try it on something else, a report via
   [Issues](https://github.com/OpportunV/OpportunMediaPlayer/issues) is welcome either way.
-- **macOS (Apple Silicon and Intel)** — builds are produced by CI, but **not yet verified on real
-  hardware** — no Mac has been available to test with. Unlike Windows/Linux, FFmpeg isn't bundled;
-  install it yourself first via Homebrew: `brew install ffmpeg@7`. Try it and report back via
-  [Issues](https://github.com/OpportunV/OpportunMediaPlayer/issues), good or bad.
+- **macOS (Apple Silicon and Intel)** — confirmed working on one Apple Silicon Mac so far — Intel
+  and broader macOS version coverage is still unverified. Unlike Windows/Linux, FFmpeg isn't
+  bundled; install it yourself first via Homebrew: `brew install ffmpeg@7`. Try it and report back
+  via [Issues](https://github.com/OpportunV/OpportunMediaPlayer/issues), good or bad.
 - Ships self-contained (bundles its own .NET 10 runtime) — no separate .NET install needed.
 
 ## Limitations
@@ -126,10 +126,11 @@ Pre-built binaries are published on the [Releases page](https://github.com/Oppor
   (no install required). Both are unsigned, so SmartScreen will show a "Windows protected your
   PC" warning the first time you run either one — click **More info → Run anyway**.
 - **Linux** — `OMP-<version>-x86_64.AppImage` or `OMP-<version>-linux-x64-portable.tar.gz`
-- **macOS** — `OMP-<version>-osx-arm64-portable.tar.gz` (Apple Silicon) or
-  `OMP-<version>-osx-x64-portable.tar.gz` (Intel). Unsigned/not notarized, so Gatekeeper will
-  refuse to launch it normally — clear the quarantine flag first: `xattr -cr OMP-*` after
-  extracting, or right-click the `OMP` executable and choose Open. Also requires
+- **macOS** — `OMP-<version>-osx-arm64.dmg` (Apple Silicon) or `OMP-<version>-osx-x64.dmg`
+  (Intel). Open the `.dmg` and drag `OMP.app` into Applications. It's ad-hoc signed but not
+  notarized (no Apple Developer account behind this project), so Gatekeeper will still block it
+  once on first launch — right-click `OMP.app` in Applications and choose **Open**, or approve it
+  via **System Settings → Privacy & Security** after the first blocked attempt. Also requires
   `brew install ffmpeg@7` beforehand.
 
 Building from source (below) is only needed if you want an unreleased change from `develop` or
