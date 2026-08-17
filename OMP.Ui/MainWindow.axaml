@@ -13,18 +13,7 @@
 
     <Grid RowDefinitions="Auto,*">
 
-        <Menu Name="TopMenu" Grid.Row="0">
-            <MenuItem Header="{x:Static loc:Strings.MainWindow_FileMenu}">
-                <MenuItem Header="{x:Static loc:Strings.MainWindow_OpenMenuItem}" Name="OpenMenuItem" />
-                <MenuItem Header="{x:Static loc:Strings.MainWindow_OptionsMenuItem}" Name="OptionsMenuItem" />
-                <Separator />
-                <MenuItem Header="{x:Static loc:Strings.MainWindow_ExitMenuItem}" Name="ExitMenuItem" />
-            </MenuItem>
-            <MenuItem Header="{x:Static loc:Strings.MainWindow_HelpMenu}">
-                <MenuItem Header="{x:Static loc:Strings.MainWindow_HotkeysMenuItem}" Name="HotkeysMenuItem" />
-                <MenuItem Header="{x:Static loc:Strings.MainWindow_AboutMenuItem}" Name="AboutMenuItem" />
-            </MenuItem>
-        </Menu>
+        <NativeMenuBar Name="TopMenu" Grid.Row="0" />
 
         <Grid Name="VideoHost"
               Grid.Row="1">
