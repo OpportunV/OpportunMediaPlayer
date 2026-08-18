@@ -401,8 +401,13 @@ public sealed partial class OptionsWindow : Window
     {
         _mediaSessionRegistry.Current?.SetAudioRoutes(_audioRouteRows.Select(row => row.Route));
 
-        _settings.Current.PreferredAudioOutputs = _audioRouteRows
-            .Select(row => row.Route.Output.FriendlyName)
+        _settings.Current.PreferredAudioTracks = _audioRouteRows
+            .Select(row => new PreferredAudioTrackSetting
+            {
+                OutputFriendlyName = row.Route.Output.FriendlyName,
+                Title = row.Route.Stream.Title,
+                Language = row.Route.Stream.Language
+            })
             .ToList();
 
         foreach (var row in _audioRouteRows)
