@@ -1,3 +1,6 @@
 namespace OMP.Ui;
 
-public sealed record StartupOptions(string? FilePath);
+public sealed class StartupOptions(string? filePath)
+{
+    public string? FilePath { get; set; } = filePath;
+}

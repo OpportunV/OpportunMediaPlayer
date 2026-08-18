@@ -34,6 +34,10 @@ internal static class Strings
 
     public static string MainWindow_NoVideoLabel => Get("MainWindow_NoVideoLabel");
 
+    public static string MainWindow_EmptyStateLabel => Get("MainWindow_EmptyStateLabel");
+
+    public static string MainWindow_EmptyStateLabelNoDragDrop => Get("MainWindow_EmptyStateLabelNoDragDrop");
+
     public static string Options_Title => Get("Options_Title");
 
     public static string Options_GeneralTab => Get("Options_GeneralTab");

@@ -8,8 +8,7 @@
     Icon="avares://OMP/Assets/app-icon.ico"
     Width="1200"
     Height="800"
-    x:DataType="ui:MainWindow"
-    DragDrop.AllowDrop="True">
+    x:DataType="ui:MainWindow">
 
     <Grid RowDefinitions="Auto,*">
 
@@ -46,6 +45,32 @@
                     </Viewbox>
 
                     <TextBlock Text="{x:Static loc:Strings.MainWindow_NoVideoLabel}"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               FontSize="14" />
+                </StackPanel>
+
+                <StackPanel Name="EmptyStateIndicator"
+                            IsVisible="True"
+                            IsHitTestVisible="False"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Opacity="0.35">
+
+                    <Viewbox Width="64"
+                             Height="64"
+                             HorizontalAlignment="Center">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="{StaticResource PlusIconGeometry}"
+                                  Stroke="White"
+                                  StrokeThickness="2"
+                                  StrokeLineCap="Round" />
+                        </Canvas>
+                    </Viewbox>
+
+                    <TextBlock Name="EmptyStateLabel"
+                               Text="{x:Static loc:Strings.MainWindow_EmptyStateLabel}"
                                Foreground="White"
                                HorizontalAlignment="Center"
                                FontSize="14" />

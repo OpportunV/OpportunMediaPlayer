@@ -55,7 +55,7 @@ public sealed partial class OptionsWindow : Window
 
             var delayMs = session.OutputDelays.TryGetValue(route.Output.Id, out var delaySeconds)
                 ? delaySeconds * 1000
-                : (double?)null;
+                : 0;
 
             _audioRouteRows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted, delayMs));
         }
@@ -168,7 +168,7 @@ public sealed partial class OptionsWindow : Window
         }
 
         var savedDelayMs = _settings.Current.OutputVolumes
-            .FirstOrDefault(o => o.FriendlyName == output.FriendlyName)?.DelayMs;
+            .FirstOrDefault(o => o.FriendlyName == output.FriendlyName)?.DelayMs ?? 0;
 
         _audioRouteRows.Add(
             new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false, savedDelayMs));
@@ -401,8 +401,13 @@ public sealed partial class OptionsWindow : Window
     {
         _mediaSessionRegistry.Current?.SetAudioRoutes(_audioRouteRows.Select(row => row.Route));
 
-        _settings.Current.PreferredAudioOutputs = _audioRouteRows
-            .Select(row => row.Route.Output.FriendlyName)
+        _settings.Current.PreferredAudioTracks = _audioRouteRows
+            .Select(row => new PreferredAudioTrackSetting
+            {
+                OutputFriendlyName = row.Route.Output.FriendlyName,
+                Title = row.Route.Stream.Title,
+                Language = row.Route.Stream.Language
+            })
             .ToList();
 
         foreach (var row in _audioRouteRows)

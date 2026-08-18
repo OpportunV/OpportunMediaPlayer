@@ -18,7 +18,7 @@ public sealed class UserSettings
 
     public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
 
-    public List<string> PreferredAudioOutputs { get; set; } = [];
+    public List<PreferredAudioTrackSetting> PreferredAudioTracks { get; set; } = [];
 
     public List<SubtitleZone> SubtitleZones { get; set; } = SubtitleZone.CreateBuiltIns();
 
