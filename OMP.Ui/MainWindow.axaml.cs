@@ -1,6 +1,5 @@
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -176,6 +175,7 @@ public sealed partial class MainWindow : Window
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
         NoVideoIndicator.IsVisible = registry.Current is { HasVideo: false };
+        EmptyStateIndicator.IsVisible = registry.Current is null;
 
         _areSubtitlesEnabled = false;
         _lastKnownSubtitleRouteCount = 0;
@@ -323,24 +323,17 @@ public sealed partial class MainWindow : Window
 
     private void RestoreAudioRoutes(IMediaSession session)
     {
-        var preferred = _settings.Current.PreferredAudioOutputs;
+        var preferred = _settings.Current.PreferredAudioTracks;
 
         if (preferred.Count == 0)
         {
             return;
         }
 
-        var routes = new List<AudioRoute>();
-
-        for (var i = 0; i < session.AudioStreams.Count && i < preferred.Count; i++)
-        {
-            var output = session.AudioOutputs.FirstOrDefault(o => o.FriendlyName == preferred[i]);
-
-            if (output is not null)
-            {
-                routes.Add(new AudioRoute(session.AudioStreams[i], output));
-            }
-        }
+        var routes = AudioRouteMatcher.Match(
+            session.AudioStreams,
+            session.AudioOutputs,
+            preferred.Select(p => new PreferredAudioTrack(p.OutputFriendlyName, p.Title, p.Language)).ToList());
 
         if (routes.Count > 0)
         {
@@ -566,6 +559,13 @@ public sealed partial class MainWindow : Window
 
     private void SetupDragDrop()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            EmptyStateLabel.Text = Strings.MainWindow_EmptyStateLabelNoDragDrop;
+            return;
+        }
+
+        DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DropEvent, OnFileDrop);
         AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
     }
