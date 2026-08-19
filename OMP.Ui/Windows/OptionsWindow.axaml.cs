@@ -14,6 +14,7 @@ using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Services;
@@ -366,11 +367,8 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateSubtitleStreamSelector()
     {
-        var usedStreamIds = _subtitleRows.Select(row => row.Stream.Id).ToHashSet();
-
-        var availableStreams = _subtitleStreamOptions
-            .Where(o => !usedStreamIds.Contains(o.Stream.Id))
-            .ToList();
+        var availableStreams = OptionsSelector.AvailableOptions(
+            _subtitleStreamOptions, _subtitleRows.Select(row => row.Stream.Id), o => o.Stream.Id);
 
         SubtitleStreamSelector.ItemsSource = availableStreams;
 
@@ -383,11 +381,8 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateSubtitleZoneSelector()
     {
-        var usedZoneIds = _subtitleRows.Select(row => row.Zone.Id).ToHashSet();
-
-        var availableZones = _subtitleZones
-            .Where(z => !usedZoneIds.Contains(z.Id))
-            .ToList();
+        var availableZones = OptionsSelector.AvailableOptions(
+            _subtitleZones, _subtitleRows.Select(row => row.Zone.Id), z => z.Id);
 
         SubtitleZoneSelector.ItemsSource = availableZones;
 
@@ -426,11 +421,8 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateOutputSelector()
     {
-        var usedOutputs = _audioRouteRows.Select(row => row.Route.Output.FriendlyName).ToHashSet();
-
-        var availableOutputs = _outputs
-            .Where(o => !usedOutputs.Contains(o.FriendlyName))
-            .ToList();
+        var availableOutputs = OptionsSelector.AvailableOptions(
+            _outputs, _audioRouteRows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
 
         OutputSelector.ItemsSource = availableOutputs;
 

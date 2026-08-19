@@ -6,16 +6,39 @@ different audio tracks from one file to different audio output devices simultane
 - `OMP.Lib` — the playback engine. No UI framework dependency. Stays that way.
 - `OMP.Ui` — Avalonia UI, DI composition root, hosts `OMP.Lib` via `IMediaSessionRegistry`.
 - `OMP.Lib.Tests` — xUnit. Covers pure/extracted logic only (see Testing below).
+- `OMP.Ui.Tests` — xUnit + `Avalonia.Headless`. Covers pure/extracted UI logic plus real headless
+  control/window behavior (see UI Testing below).
 
 `OMP.Ui`'s folder layout is folder-matches-namespace, same convention as `Models`/`Settings`/
-`Input`/`Extensions`/`Localization`: `Windows/` (namespace `OMP.Ui.Windows`) holds every dialog
-window except `MainWindow` itself (`AboutWindow`, `OptionsWindow`, `HotkeysWindow`, etc. —
+`Input`/`Extensions`/`Helpers`/`Localization`: `Windows/` (namespace `OMP.Ui.Windows`) holds every
+dialog window except `MainWindow` itself (`AboutWindow`, `OptionsWindow`, `HotkeysWindow`, etc. —
 `MainWindow` stays at root as the app shell, alongside `App`/`Program`). `Services/` (namespace
-`OMP.Ui.Services`) holds non-control helper/service classes (`MainWindowCommands`,
-`FullscreenController`, `WindowFactory`, `VideoRenderSurface`, `SubtitleOverlayRenderer`).
+`OMP.Ui.Services`) holds non-control classes with real identity/state/lifecycle
+(`MainWindowCommands`, `FullscreenController`, `WindowFactory`, `VideoRenderSurface`,
+`SubtitleOverlayRenderer`) — constructed instances a window owns and disposes, not stateless math.
 `Controls/` is reserved for genuine Avalonia `UserControl`s only (`SpeedFlyoutView`,
 `VolumeFlyoutView`) — it used to also hold the `Services/` classes, which is why "is this a real
 control or a plain helper" is the test to apply before adding something new to either folder.
+
+`Extensions/` (namespace `OMP.Ui.Extensions`) vs `Helpers/` (namespace `OMP.Ui.Helpers`) is a
+second, narrower distinction, settled while building out `OMP.Ui.Tests`: a class belongs in
+`Extensions/`, written with C# 13's `extension(...)` block syntax, only when its receiver type is
+already domain-specific (`AudioStream`, `AudioOutput`, `SubtitleZone`, `TimeSpan`, ...) *and* the
+operation only needs the receiver's own data — `TimeFormat.Format()` on any `TimeSpan`,
+`OutputVolumeExt`'s methods on `AudioOutput`/`AudioRoute` lists, `UserSettingsServiceExt` on
+`IUserSettingsService`. A method whose receiver is a bare primitive/generic (`double`, `string`,
+`T`) or that needs a whole second, unrelated parameter to mean anything goes in `Helpers/` instead,
+as a plain static method — extending `double` with a speed-specific `.Format()`
+(`PlaybackSpeedFormat`) or `string` with `.IsSupportedMediaFile(...)` (`MediaFileType`) would let
+any unrelated call site compile while silently doing the wrong thing, since nothing about a bare
+`double`/`string` says "this specifically means speed" or "this specifically means a media path".
+`OptionsSelector.AvailableOptions<T, TKey>` is `Helpers/` for the same reason — extending every
+`IEnumerable<T>` in the codebase with an "available options" concept that only makes sense for one
+specific screen. `VideoLetterbox` and `SubtitleZoneGeometry` are `Helpers/` too: pure, stateless
+coordinate math has no identity or lifecycle, so `Services/` was the wrong home even though nothing
+technically stopped them living there. Not enforced by an analyzer (a StyleCop/Roslyn rule for one
+project-specific naming convention isn't worth building) — apply this by hand, same as the
+member-ordering convention above.
 
 ## Member ordering
 
@@ -521,5 +544,89 @@ only real, automated verification the macOS `FFmpegLibraryLocator`/`ffmpeg@7` pa
 signal on real (if ephemeral) macOS hardware, which is otherwise unavailable for this project.
 
 Avalonia-side classes (`FullscreenController`, `VideoRenderSurface`, `WindowFactory`) are written
-with plain constructor dependencies so Avalonia-headless tests can be added later, but that test
-host isn't wired up yet.
+with plain constructor dependencies specifically so they're constructible with hand-written fakes
+in `OMP.Ui.Tests` — see UI Testing below, which is now wired up.
+
+## UI Testing
+
+`OMP.Ui.Tests` splits into two tiers, the same "pure vs needs the real thing" split as
+`OMP.Lib.Tests` vs `OMP.Lib.IntegrationTests`, just within one project since neither tier needs
+native FFmpeg libs or a real display:
+
+- **Tier 1** — plain `[Fact]`/`[Theory]`, no Avalonia runtime at all. Everything in `Extensions/`,
+  `Helpers/`, `Input/`, the logic-bearing `Models/` (manual `INotifyPropertyChanged` classes),
+  `Settings/` (`SubtitleZone`, `UserSettings` defaults, `UserSettingsJsonContext` round-trip), and
+  `Services/MainWindowCommands` all land here — none of it touches a live `Window`/`Control`.
+- **Tier 2** — `[AvaloniaFact]` (from `Avalonia.Headless.XUnit`), real control/window instances,
+  no real display. Currently covers `Controls/SpeedFlyoutView`, `Controls/VolumeFlyoutView`, and
+  `Services/FullscreenController`. `Windows/OptionsWindow` (now thin after extracting
+  `OptionsSelector`), the other `Windows/*` dialogs, `SubtitleZoneEditorWindow`,
+  `SubtitleOverlayRenderer`, and `MainWindow` itself are backlog, not yet covered.
+
+**Deliberately excluded** — `SingleInstanceCoordinator`, `Services/FFmpegLibraryLocator`, and
+`UserSettingsService` all hit hardcoded real OS paths (`Environment.SpecialFolder.ApplicationData`,
+Homebrew prefixes) with no injection seam; testing them meaningfully needs a path-injection seam
+first, which hasn't been added. `App.axaml.cs`/`Program.cs` are pure DI wiring, not tested directly.
+
+**Mocking: `Moq`, with one deliberate exception.** `Moq` covers interfaces that are naturally
+stateless/interaction-based (`IUserSettingsService`, `IWindowFactory`, `IMainWindowHotkeyService`).
+`IMediaSession`/`IMediaSessionRegistry` get hand-written fakes instead
+(`TestDoubles/FakeMediaSession.cs`, `FakeMediaSessionRegistry.cs`), because every `IMediaSession`
+property is get-only and `Services/MainWindowCommands` relies on state coherence across calls
+(`ApplySpeed` calls `session.SetSpeed(speed)` then immediately reads `session.Speed` back). Moq's
+`SetupProperty`/`SetupAllProperties` need a *settable* property to auto-back a value, which
+get-only interface members don't have — faithfully mocking this would mean a
+`.Setup(s => s.SetSpeed(...)).Callback<double>(v => mock.Setup(s => s.Speed).Returns(v))` per
+mutator/property pair, which is more code and more fragile (easy to add a new command and forget
+the matching callback) than the ~90-line hand-written fake with ordinary auto-properties.
+
+**`TestAppBuilder.cs` must set `App.Services` before any `[AvaloniaFact]` test runs, or every
+single one fails identically.** Confirmed by testing, not assumed: `Avalonia.Headless.XUnit`'s
+`HeadlessUnitTestSession` runs the *full* `AppBuilder.SetupUnsafe()` path, which calls both
+`Initialize()` (loads `App.axaml`'s styles/resources — needed for any window/control's
+`StaticResource` lookups to resolve) **and** `OnFrameworkInitializationCompleted()` — not just
+`Initialize()` the way a naive reading of "headless test host" suggests. Since `App
+.OnFrameworkInitializationCompleted` does `Services!.GetRequiredService<IUserSettingsService>()`,
+an unset `Services` throws `ArgumentNullException` out of `AppBuilder.SetupUnsafe()` before any
+test body runs, and every `[AvaloniaFact]` test in the assembly fails with the same opaque
+stack trace. `TestAppBuilder` configures the **real** `App` type (needed for `App.axaml`'s
+resources to load at all) with `.UseHeadless(...)`, then uses `.AfterSetup(builder => ((App)
+builder.Instance!).Services = ...)` — the same hook `Program.cs` uses — to hand it a minimal
+`IServiceProvider` stub that only resolves `IUserSettingsService`. `ApplicationLifetime` is not a
+`IClassicDesktopStyleApplicationLifetime` under the headless unit-test session, so the
+`desktop.MainWindow = Services!.GetRequiredService<MainWindow>()` branch never runs and the stub
+doesn't need to resolve `MainWindow`.
+
+**XAML-named fields are `internal` by default**, confirmed by reflecting on the compiled `OMP.dll`
+rather than guessed — combined with `OMP.Ui/AssemblyInfo.cs`'s `[assembly:
+InternalsVisibleTo("OMP.Ui.Tests")]`, this means a test can reach e.g. `speedFlyoutView.SpeedSlider`
+or `speedFlyoutView.SpeedValueLabel` directly, with no visual-tree traversal needed, for any control
+named directly in a `UserControl`/`Window`'s own XAML. Controls realized inside an `ItemsControl`
+`DataTemplate` (e.g. `VolumeFlyoutView`'s per-row `RowVolumeSlider`) aren't fields on the outer
+class at all — those still need `Avalonia.VisualTree`'s `GetVisualDescendants()`, matched by
+`.Name`, after the container has actually been realized (see next point).
+
+**Raise real routed pointer events directly on the control that subscribed the handler, rather than
+simulating pixel-accurate mouse coordinates, when the test only cares about event sequencing.**
+`control.RaiseEvent(new PointerPressedEventArgs(control, pointer, control, new Point(0, 0), 0, new
+PointerPointProperties(), KeyModifiers.None, 1))` (with `pointer = new Avalonia.Input.Pointer(0,
+PointerType.Mouse, isPrimary: true)`) reaches a `Tunnel`-registered handler even without the control
+being attached to a shown `Window` — `RaiseEvent`'s route walks the `Parent` chain that already
+exists once a control is added to its parent's `Children` via `InitializeComponent()`, regardless of
+whether that subtree is ever shown. This is what the `SpeedFlyoutView`/`VolumeFlyoutView` drag-vs-
+commit tests do, and it sidesteps needing a real layout pass or coordinate math entirely for tests
+that don't need it. **`PointerCaptureLostEventArgs`'s 2-arg constructor is `[Obsolete]` in
+`Avalonia` 11.3.11** ("might be removed in 12.0") — the stable replacement, and what a genuine
+pointer release does under the hood, is `pointer.Capture(control); pointer.Capture(null);`, which
+raises the real event through `IPointer` instead of hand-building the args.
+
+**`TopLevel.LayoutManager` is not public** (confirmed via reflection — non-public getter), so a
+test that needs to flush a pending layout pass (e.g. realizing an `ItemsControl`'s `DataTemplate`
+containers after `SetOutputs(...)`, or picking up a `Height` change made after `Window.Show()`) can't
+call `window.LayoutManager.ExecuteLayoutPass()` directly. Use `Avalonia.Threading.Dispatcher
+.UIThread.RunJobs()` instead — it flushes the dispatcher queue, including the layout pass Avalonia
+schedules at Render priority, and is what `FullscreenControllerTests`/`VolumeFlyoutViewTests` use.
+
+`dotnet test OMP.Ui.Tests/OMP.Ui.Tests.csproj` needs no `-r <rid>` flag, unlike `OMP.Lib
+.IntegrationTests` — nothing in either tier constructs a real `MediaSession` or loads native FFmpeg,
+so there's no RID-dependent native content to resolve.

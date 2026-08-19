@@ -6,7 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Lib;
-using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 
 namespace OMP.Ui.Controls;
 

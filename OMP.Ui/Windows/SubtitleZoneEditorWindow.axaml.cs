@@ -7,6 +7,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
@@ -159,14 +160,13 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             }
 
             var position = e.GetPosition(PreviewCanvas);
-            var newLeft = Math.Clamp(
+            var (newLeft, newTop) = SubtitleZoneGeometry.ClampPosition(
                 _dragStartLeft + (position.X - _dragStartPointerPosition.X),
-                0,
-                CanvasWidth - ZoneBorder.Width);
-            var newTop = Math.Clamp(
                 _dragStartTop + (position.Y - _dragStartPointerPosition.Y),
-                0,
-                PreviewCanvas.Height - ZoneBorder.Height);
+                ZoneBorder.Width,
+                ZoneBorder.Height,
+                CanvasWidth,
+                PreviewCanvas.Height);
 
             Canvas.SetLeft(ZoneBorder, newLeft);
             Canvas.SetTop(ZoneBorder, newTop);
@@ -202,14 +202,14 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             var position = e.GetPosition(PreviewCanvas);
             var left = Canvas.GetLeft(ZoneBorder);
             var top = Canvas.GetTop(ZoneBorder);
-            var newWidth = Math.Clamp(
+            var (newWidth, newHeight) = SubtitleZoneGeometry.ClampSize(
                 _dragStartWidth + (position.X - _dragStartPointerPosition.X),
-                MinZoneSizePx,
-                CanvasWidth - left);
-            var newHeight = Math.Clamp(
                 _dragStartHeight + (position.Y - _dragStartPointerPosition.Y),
                 MinZoneSizePx,
-                PreviewCanvas.Height - top);
+                left,
+                top,
+                CanvasWidth,
+                PreviewCanvas.Height);
 
             ZoneBorder.Width = newWidth;
             ZoneBorder.Height = newHeight;

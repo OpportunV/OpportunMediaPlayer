@@ -1,6 +1,5 @@
 using System;
 using System.Buffers;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -16,6 +15,7 @@ using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Input;
 using OMP.Ui.Localization;
 using OMP.Ui.Services;
@@ -247,15 +247,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var rows = session.AudioRoutes.Select(route =>
-        {
-            var state = session.OutputVolumes.TryGetValue(route.Output.Id, out var s)
-                ? s
-                : new OutputVolumeState(1.0, false);
-            return (route.Output, state.Volume * 100, state.Muted);
-        });
-
-        _volumeFlyoutView.SetOutputs(rows);
+        _volumeFlyoutView.SetOutputs(session.AudioRoutes.ToVolumeRows(session.OutputVolumes));
     }
 
     private void PersistOutputVolumeSetting(AudioOutput output)
@@ -347,18 +339,11 @@ public sealed partial class MainWindow : Window
         session.SetMasterMuted(_settings.Current.IsMuted);
         IsMuted = _settings.Current.IsMuted;
 
-        foreach (var saved in _settings.Current.OutputVolumes)
+        foreach (var (output, setting) in session.AudioOutputs.MatchSettings(_settings.Current.OutputVolumes))
         {
-            var output = session.AudioOutputs.FirstOrDefault(o => o.FriendlyName == saved.FriendlyName);
-
-            if (output is null)
-            {
-                continue;
-            }
-
-            session.SetOutputVolume(output.Id, saved.Volume);
-            session.SetOutputMuted(output.Id, saved.Muted);
-            session.SetOutputDelay(output.Id, saved.DelayMs / 1000.0);
+            session.SetOutputVolume(output.Id, setting.Volume);
+            session.SetOutputMuted(output.Id, setting.Muted);
+            session.SetOutputDelay(output.Id, setting.DelayMs / 1000.0);
         }
     }
 
@@ -382,7 +367,7 @@ public sealed partial class MainWindow : Window
                 ProgressSlider.Value = current;
             }
 
-            CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
+            CurrentTimeLabel.Text = session.CurrentTime.Format();
 
             var subtitleRouteCount = session.SubtitleRoutes.Count;
             if (subtitleRouteCount > 0 && _lastKnownSubtitleRouteCount == 0)
@@ -445,16 +430,6 @@ public sealed partial class MainWindow : Window
     private void OnPlaybackEnded()
     {
         Dispatcher.UIThread.Post(() => IsPlaying = false);
-    }
-
-    private static string FormatTime(TimeSpan time)
-    {
-        if (time.TotalHours >= 1)
-        {
-            return time.ToString(@"hh\:mm\:ss");
-        }
-
-        return time.ToString(@"mm\:ss");
     }
 
     private void UpdatePlayPauseIcon()
@@ -586,7 +561,7 @@ public sealed partial class MainWindow : Window
 
             var ratio = Math.Clamp(e.GetPosition(ProgressSlider).X / ProgressSlider.Bounds.Width, 0, 1);
             var hoveredTime = TimeSpan.FromSeconds(ratio * ProgressSlider.Maximum);
-            ToolTip.SetTip(ProgressSlider, FormatTime(hoveredTime));
+            ToolTip.SetTip(ProgressSlider, hoveredTime.Format());
         };
 
         ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
@@ -683,7 +658,7 @@ public sealed partial class MainWindow : Window
     {
         var path = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
 
-        if (path == null || !IsSupportedMediaFile(path))
+        if (path == null || !MediaFileType.IsSupportedMediaFile(path, _mediaFileTypeFilter.Patterns!))
         {
             return;
         }
@@ -692,18 +667,10 @@ public sealed partial class MainWindow : Window
         await OpenPath(path);
     }
 
-    private static bool IsSupportedMediaFile(string path)
-    {
-        var extension = Path.GetExtension(path);
-
-        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern =>
-            pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void UpdateSessionData()
     {
         Title = $"{_mediaSessionRegistry.Current!.FileName} | {AppInfo.DisplayName}";
-        DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
+        DurationLabel.Text = _mediaSessionRegistry.Current!.Duration.Format();
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }
 
