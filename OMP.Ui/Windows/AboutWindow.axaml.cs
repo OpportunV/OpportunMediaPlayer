@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Avalonia.Controls;
-using OMP.Ui;
 using OMP.Ui.Localization;
 
 namespace OMP.Ui.Windows;

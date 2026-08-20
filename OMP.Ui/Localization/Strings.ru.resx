@@ -15,6 +15,7 @@
 
   <data name="MainWindow_FileMenu" xml:space="preserve"><value>Файл</value></data>
   <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>Открыть...</value></data>
+  <data name="MainWindow_OpenUrlMenuItem" xml:space="preserve"><value>Открыть по ссылке...</value></data>
   <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>Настройки...</value></data>
   <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>Выход</value></data>
   <data name="MainWindow_HelpMenu" xml:space="preserve"><value>Справка</value></data>
@@ -50,6 +51,10 @@
   <data name="Options_AddZoneButton" xml:space="preserve"><value>Новая зона</value></data>
   <data name="Options_LanguageLabel" xml:space="preserve"><value>Язык:</value></data>
   <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Перезапустить сейчас</value></data>
+  <data name="Options_YtDlpPathLabel" xml:space="preserve"><value>Путь к yt-dlp:</value></data>
+  <data name="Options_YtDlpPathWatermark" xml:space="preserve"><value>yt-dlp (по умолчанию — из PATH)</value></data>
+  <data name="Options_YtDlpPathResetButton" xml:space="preserve"><value>Сбросить</value></data>
+  <data name="Options_YtDlpPathResetTooltip" xml:space="preserve"><value>Использовать путь к yt-dlp по умолчанию (через PATH)</value></data>
 
   <data name="ThemeMode_Light" xml:space="preserve"><value>Светлая</value></data>
   <data name="ThemeMode_Dark" xml:space="preserve"><value>Тёмная</value></data>
@@ -93,6 +98,32 @@ sudo apt install libjack-jackd2-0</value>
 brew install ffmpeg@7</value>
   </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Технические детали:</value></data>
+  <data name="OpenFileError_YtDlpNotFoundWindowsHeading" xml:space="preserve">
+    <value>yt-dlp не найден. Установите его и повторите попытку:
+
+winget install yt-dlp.yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundMacHeading" xml:space="preserve">
+    <value>yt-dlp не найден. Установите его и повторите попытку:
+
+brew install yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundLinuxHeading" xml:space="preserve">
+    <value>yt-dlp не найден. Установите его через менеджер пакетов вашего дистрибутива и повторите попытку, либо:
+
+pip install -U yt-dlp</value>
+  </data>
+
+  <data name="OpenUrl_Title" xml:space="preserve"><value>Открыть по ссылке</value></data>
+  <data name="OpenUrl_Label" xml:space="preserve"><value>Введите ссылку на веб-страницу для воспроизведения:</value></data>
+  <data name="OpenUrl_Watermark" xml:space="preserve"><value>https://...</value></data>
+  <data name="OpenUrl_ResolvingLabel" xml:space="preserve"><value>Обработка...</value></data>
+  <data name="OpenUrl_InvalidUrlError" xml:space="preserve"><value>Введите корректную ссылку http:// или https://.</value></data>
+  <data name="OpenUrl_OkButton" xml:space="preserve"><value>Открыть</value></data>
+  <data name="OpenUrl_CancelButton" xml:space="preserve"><value>Отмена</value></data>
+  <data name="OpenUrl_TimeoutError" xml:space="preserve"><value>yt-dlp слишком долго не отвечал.</value></data>
+  <data name="OpenUrl_GenericResolveError" xml:space="preserve"><value>yt-dlp не смог обработать эту ссылку.</value></data>
+  <data name="OpenUrl_NoPlayableFormatError" xml:space="preserve"><value>На этой странице нет единого потока с аудио и видео вместе, который OMP пока может воспроизвести.</value></data>
 
   <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>Новая зона субтитров</value></data>
   <data name="SubtitleZoneEditor_EditTitleFormat" xml:space="preserve"><value>Изменение зоны субтитров — {0}</value></data>

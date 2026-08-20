@@ -17,7 +17,8 @@
                    FontWeight="Bold"
                    TextWrapping="Wrap" />
 
-        <TextBlock Text="{x:Static loc:Strings.OpenFileError_TechnicalDetailLabel}"
+        <TextBlock Name="TechnicalDetailLabel"
+                   Text="{x:Static loc:Strings.OpenFileError_TechnicalDetailLabel}"
                    Opacity="0.7"
                    Margin="0,10,0,0" />
 

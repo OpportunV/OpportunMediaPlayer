@@ -91,6 +91,8 @@ public sealed partial class OptionsWindow : Window
         LanguageSelector.SelectedItem = languageOptions
             .FirstOrDefault(option => option.CultureCode == _settings.Current.Language) ?? languageOptions[0];
 
+        YtDlpPathTextBox.Text = _settings.Current.YtDlpPath ?? string.Empty;
+
         RoutesList.ItemsSource = _audioRouteRows;
         StreamSelector.ItemsSource = _streamOptions;
         ZonesList.ItemsSource = _subtitleZones;
@@ -135,6 +137,20 @@ public sealed partial class OptionsWindow : Window
         }
 
         _settings.Current.Language = option.CultureCode;
+        _settings.Save();
+    }
+
+    private void OnYtDlpPathChanged(object? sender, RoutedEventArgs e)
+    {
+        var text = YtDlpPathTextBox.Text?.Trim();
+        _settings.Current.YtDlpPath = string.IsNullOrEmpty(text) ? null : text;
+        _settings.Save();
+    }
+
+    private void OnResetYtDlpPath(object? sender, RoutedEventArgs e)
+    {
+        YtDlpPathTextBox.Text = string.Empty;
+        _settings.Current.YtDlpPath = null;
         _settings.Save();
     }
 

@@ -15,6 +15,7 @@
 
   <data name="MainWindow_FileMenu" xml:space="preserve"><value>File</value></data>
   <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>Open...</value></data>
+  <data name="MainWindow_OpenUrlMenuItem" xml:space="preserve"><value>Open URL...</value></data>
   <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>Options...</value></data>
   <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>Exit</value></data>
   <data name="MainWindow_HelpMenu" xml:space="preserve"><value>Help</value></data>
@@ -50,6 +51,10 @@
   <data name="Options_AddZoneButton" xml:space="preserve"><value>New Zone</value></data>
   <data name="Options_LanguageLabel" xml:space="preserve"><value>Language:</value></data>
   <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Restart Now</value></data>
+  <data name="Options_YtDlpPathLabel" xml:space="preserve"><value>yt-dlp path:</value></data>
+  <data name="Options_YtDlpPathWatermark" xml:space="preserve"><value>yt-dlp (default: use PATH)</value></data>
+  <data name="Options_YtDlpPathResetButton" xml:space="preserve"><value>Reset</value></data>
+  <data name="Options_YtDlpPathResetTooltip" xml:space="preserve"><value>Use the default yt-dlp lookup (PATH)</value></data>
 
   <data name="ThemeMode_Light" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeMode_Dark" xml:space="preserve"><value>Dark</value></data>
@@ -93,6 +98,32 @@ sudo apt install libjack-jackd2-0</value>
 brew install ffmpeg@7</value>
   </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Technical detail:</value></data>
+  <data name="OpenFileError_YtDlpNotFoundWindowsHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it, then try again:
+
+winget install yt-dlp.yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundMacHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it, then try again:
+
+brew install yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundLinuxHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it via your distro's package manager, then try again, or:
+
+pip install -U yt-dlp</value>
+  </data>
+
+  <data name="OpenUrl_Title" xml:space="preserve"><value>Open URL</value></data>
+  <data name="OpenUrl_Label" xml:space="preserve"><value>Enter a web page URL to play:</value></data>
+  <data name="OpenUrl_Watermark" xml:space="preserve"><value>https://...</value></data>
+  <data name="OpenUrl_ResolvingLabel" xml:space="preserve"><value>Resolving...</value></data>
+  <data name="OpenUrl_InvalidUrlError" xml:space="preserve"><value>Enter a valid http:// or https:// URL.</value></data>
+  <data name="OpenUrl_OkButton" xml:space="preserve"><value>Open</value></data>
+  <data name="OpenUrl_CancelButton" xml:space="preserve"><value>Cancel</value></data>
+  <data name="OpenUrl_TimeoutError" xml:space="preserve"><value>yt-dlp took too long to respond.</value></data>
+  <data name="OpenUrl_GenericResolveError" xml:space="preserve"><value>yt-dlp could not process this URL.</value></data>
+  <data name="OpenUrl_NoPlayableFormatError" xml:space="preserve"><value>This page has no single combined audio+video stream that OMP can currently play.</value></data>
 
   <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>New Subtitle Zone</value></data>
   <data name="SubtitleZoneEditor_EditTitleFormat" xml:space="preserve"><value>Edit Subtitle Zone - {0}</value></data>

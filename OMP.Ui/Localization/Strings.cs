@@ -10,6 +10,8 @@ internal static class Strings
 
     public static string MainWindow_OpenMenuItem => Get("MainWindow_OpenMenuItem");
 
+    public static string MainWindow_OpenUrlMenuItem => Get("MainWindow_OpenUrlMenuItem");
+
     public static string MainWindow_OptionsMenuItem => Get("MainWindow_OptionsMenuItem");
 
     public static string MainWindow_ExitMenuItem => Get("MainWindow_ExitMenuItem");
@@ -78,6 +80,14 @@ internal static class Strings
 
     public static string Options_LanguageRestartButton => Get("Options_LanguageRestartButton");
 
+    public static string Options_YtDlpPathLabel => Get("Options_YtDlpPathLabel");
+
+    public static string Options_YtDlpPathWatermark => Get("Options_YtDlpPathWatermark");
+
+    public static string Options_YtDlpPathResetButton => Get("Options_YtDlpPathResetButton");
+
+    public static string Options_YtDlpPathResetTooltip => Get("Options_YtDlpPathResetTooltip");
+
     public static string ThemeMode_Light => Get("ThemeMode_Light");
 
     public static string ThemeMode_Dark => Get("ThemeMode_Dark");
@@ -135,6 +145,32 @@ internal static class Strings
     public static string OpenFileError_FFmpegMacHeading => Get("OpenFileError_FFmpegMacHeading");
 
     public static string OpenFileError_TechnicalDetailLabel => Get("OpenFileError_TechnicalDetailLabel");
+
+    public static string OpenFileError_YtDlpNotFoundWindowsHeading => Get("OpenFileError_YtDlpNotFoundWindowsHeading");
+
+    public static string OpenFileError_YtDlpNotFoundMacHeading => Get("OpenFileError_YtDlpNotFoundMacHeading");
+
+    public static string OpenFileError_YtDlpNotFoundLinuxHeading => Get("OpenFileError_YtDlpNotFoundLinuxHeading");
+
+    public static string OpenUrl_Title => Get("OpenUrl_Title");
+
+    public static string OpenUrl_Label => Get("OpenUrl_Label");
+
+    public static string OpenUrl_Watermark => Get("OpenUrl_Watermark");
+
+    public static string OpenUrl_ResolvingLabel => Get("OpenUrl_ResolvingLabel");
+
+    public static string OpenUrl_InvalidUrlError => Get("OpenUrl_InvalidUrlError");
+
+    public static string OpenUrl_OkButton => Get("OpenUrl_OkButton");
+
+    public static string OpenUrl_CancelButton => Get("OpenUrl_CancelButton");
+
+    public static string OpenUrl_TimeoutError => Get("OpenUrl_TimeoutError");
+
+    public static string OpenUrl_GenericResolveError => Get("OpenUrl_GenericResolveError");
+
+    public static string OpenUrl_NoPlayableFormatError => Get("OpenUrl_NoPlayableFormatError");
 
     public static string SubtitleZoneEditor_NewTitle => Get("SubtitleZoneEditor_NewTitle");
 

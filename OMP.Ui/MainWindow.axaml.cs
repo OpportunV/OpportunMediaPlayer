@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -59,14 +60,17 @@ public sealed partial class MainWindow : Window
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
+    private bool _isResolvingUrl;
     private int _lastKnownSubtitleRouteCount;
     private int _sessionGeneration;
+    private string? _resolvedTitleOverride;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
+    private readonly IYtDlpResolver _ytDlpResolver;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
@@ -81,6 +85,7 @@ public sealed partial class MainWindow : Window
         IMainWindowHotkeyService hotkeyService,
         IWindowFactory windowFactory,
         IUserSettingsService settings,
+        IYtDlpResolver ytDlpResolver,
         SingleInstanceCoordinator singleInstanceCoordinator,
         NativeLibraryOptions nativeLibraryOptions,
         StartupOptions startupOptions)
@@ -90,6 +95,7 @@ public sealed partial class MainWindow : Window
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
         _settings = settings;
+        _ytDlpResolver = ytDlpResolver;
         _singleInstanceCoordinator = singleInstanceCoordinator;
         _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
@@ -450,6 +456,9 @@ public sealed partial class MainWindow : Window
         var openItem = new NativeMenuItem(Strings.MainWindow_OpenMenuItem);
         openItem.Click += async (_, _) => await OpenFile();
 
+        var openUrlItem = new NativeMenuItem(Strings.MainWindow_OpenUrlMenuItem);
+        openUrlItem.Click += async (_, _) => await OpenUrl();
+
         var optionsItem = new NativeMenuItem(Strings.MainWindow_OptionsMenuItem);
         optionsItem.Click += (_, _) => ShowOptionsWindow();
 
@@ -458,7 +467,7 @@ public sealed partial class MainWindow : Window
 
         var fileMenu = new NativeMenuItem(Strings.MainWindow_FileMenu)
         {
-            Menu = [openItem, optionsItem, new NativeMenuItemSeparator(), exitItem]
+            Menu = [openItem, openUrlItem, optionsItem, new NativeMenuItemSeparator(), exitItem]
         };
 
         var hotkeysItem = new NativeMenuItem(Strings.MainWindow_HotkeysMenuItem);
@@ -513,23 +522,106 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenPath(string path)
     {
-        try
-        {
-            _mediaSessionRegistry.Open(path);
-        }
-        catch (Exception ex)
-        {
-            var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
-                ? Strings.OpenFileError_FFmpegMacHeading
-                : Strings.OpenFileError_Heading;
+        _resolvedTitleOverride = null;
 
-            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-            errorWindow.Load(heading, ex.Message);
-            await errorWindow.ShowDialog(this);
+        if (await OpenSessionOrShowError(path))
+        {
+            UpdateSessionData();
+        }
+    }
+
+    private async Task OpenUrl()
+    {
+        if (_isResolvingUrl)
+        {
             return;
         }
 
-        UpdateSessionData();
+        _isResolvingUrl = true;
+
+        try
+        {
+            string? prefillUrl = null;
+
+            while (true)
+            {
+                var dialog = _windowFactory.Create<OpenUrlWindow>();
+                dialog.Load(prefillUrl);
+
+                var result = await dialog.ShowDialog<YtDlpResolveResult?>(this);
+
+                if (result is null)
+                {
+                    return;
+                }
+
+                _resolvedTitleOverride = result.Title;
+
+                if (TryOpenSessionSilently(result.Url!, out _))
+                {
+                    UpdateSessionData();
+                    return;
+                }
+
+                var retryResult = await _ytDlpResolver.ResolveAsync(result.PageUrl, CancellationToken.None);
+                var retryUrl = result.Url!;
+
+                if (retryResult.Status == YtDlpResolveStatus.Success)
+                {
+                    _resolvedTitleOverride = retryResult.Title;
+                    retryUrl = retryResult.Url!;
+                }
+
+                if (await OpenSessionOrShowError(retryUrl))
+                {
+                    UpdateSessionData();
+                    return;
+                }
+
+                prefillUrl = result.PageUrl;
+            }
+        }
+        finally
+        {
+            _isResolvingUrl = false;
+        }
+    }
+
+    private async Task<bool> OpenSessionOrShowError(string mediaPath)
+    {
+        if (TryOpenSessionSilently(mediaPath, out var error))
+        {
+            return true;
+        }
+
+        var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
+            ? Strings.OpenFileError_FFmpegMacHeading
+            : Strings.OpenFileError_Heading;
+
+        await ShowError(heading, error!.Message);
+        return false;
+    }
+
+    private bool TryOpenSessionSilently(string mediaPath, out Exception? error)
+    {
+        try
+        {
+            _mediaSessionRegistry.Open(mediaPath);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            return false;
+        }
+    }
+
+    private async Task ShowError(string heading, string reason)
+    {
+        var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
+        errorWindow.Load(heading, reason);
+        await errorWindow.ShowDialog(this);
     }
 
     private void SetupDragDrop()
@@ -669,7 +761,8 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSessionData()
     {
-        Title = $"{_mediaSessionRegistry.Current!.FileName} | {AppInfo.DisplayName}";
+        var displayName = _resolvedTitleOverride ?? _mediaSessionRegistry.Current!.FileName;
+        Title = $"{displayName} | {AppInfo.DisplayName}";
         DurationLabel.Text = _mediaSessionRegistry.Current!.Duration.Format();
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }
