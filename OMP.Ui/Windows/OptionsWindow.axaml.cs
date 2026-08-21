@@ -104,9 +104,9 @@ public sealed partial class OptionsWindow : Window
         ZonesList.ItemsSource = _subtitleZones;
         SubtitleRoutesList.ItemsSource = _subtitleRows;
 
-        AddRouteButton.Click += OnAddRouteButton;
+        ClearDraftRouteButton.Click += OnClearDraftRoute;
         AddZoneButton.Click += OnAddZone;
-        AddSubtitleRouteButton.Click += OnAddSubtitleRoute;
+        ClearDraftSubtitleRouteButton.Click += OnClearDraftSubtitleRoute;
         UpdateOutputSelector();
         UpdateRowStreamOptions();
         UpdateSubtitleStreamSelector();
@@ -209,10 +209,32 @@ public sealed partial class OptionsWindow : Window
         }
     }
 
-    private void OnAddRouteButton(object? sender, RoutedEventArgs e)
+    private void OnDraftOutputChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (StreamSelector.SelectedItem is not AudioStreamOption streamOption ||
-            OutputSelector.SelectedItem is not AudioOutput output)
+        if (OutputSelector.SelectedItem is not AudioOutput)
+        {
+            StreamSelector.IsEnabled = false;
+            StreamSelector.SelectedItem = null;
+            return;
+        }
+
+        StreamSelector.IsEnabled = true;
+        if (_streamOptions.Count == 1)
+        {
+            StreamSelector.SelectedIndex = 0;
+        }
+
+        TryCommitDraftRoute();
+    }
+
+    private void OnDraftStreamChanged(object? sender, SelectionChangedEventArgs e) => TryCommitDraftRoute();
+
+    private void OnClearDraftRoute(object? sender, RoutedEventArgs e) => OutputSelector.SelectedItem = null;
+
+    private void TryCommitDraftRoute()
+    {
+        if (OutputSelector.SelectedItem is not AudioOutput output ||
+            StreamSelector.SelectedItem is not AudioStreamOption streamOption)
         {
             return;
         }
@@ -222,10 +244,12 @@ public sealed partial class OptionsWindow : Window
 
         _audioRouteRows.Add(
             new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false, savedDelayMs));
-        UpdateOutputSelector();
         UpdateRowStreamOptions();
         RefreshRows();
         ApplyAndPersistRoutes();
+
+        UpdateOutputSelector();
+        OutputSelector.Focus();
     }
 
     private void OnDeleteRoute(object? sender, RoutedEventArgs e)
@@ -381,7 +405,31 @@ public sealed partial class OptionsWindow : Window
         ApplySubtitleRoutes();
     }
 
-    private void OnAddSubtitleRoute(object? sender, RoutedEventArgs e)
+    private void OnDraftSubtitleStreamChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true })
+        {
+            SubtitleZoneSelector.IsEnabled = false;
+            SubtitleZoneSelector.SelectedItem = null;
+            return;
+        }
+
+        SubtitleZoneSelector.IsEnabled = true;
+        if (SubtitleZoneSelector.Items.Count == 1)
+        {
+            SubtitleZoneSelector.SelectedIndex = 0;
+        }
+
+        TryCommitDraftSubtitleRoute();
+    }
+
+    private void OnDraftSubtitleZoneChanged(object? sender, SelectionChangedEventArgs e) =>
+        TryCommitDraftSubtitleRoute();
+
+    private void OnClearDraftSubtitleRoute(object? sender, RoutedEventArgs e) =>
+        SubtitleStreamSelector.SelectedItem = null;
+
+    private void TryCommitDraftSubtitleRoute()
     {
         if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true } streamOption ||
             SubtitleZoneSelector.SelectedItem is not SubtitleZone zone)
@@ -390,9 +438,11 @@ public sealed partial class OptionsWindow : Window
         }
 
         _subtitleRows.Add(new SubtitleRouteRow(streamOption.Stream, zone));
+        ApplySubtitleRoutes();
+
         UpdateSubtitleStreamSelector();
         UpdateSubtitleZoneSelector();
-        ApplySubtitleRoutes();
+        SubtitleStreamSelector.Focus();
     }
 
     private void OnDeleteSubtitleRoute(object? sender, RoutedEventArgs e)

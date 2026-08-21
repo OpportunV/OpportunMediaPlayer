@@ -7,7 +7,7 @@
         CanResize="False"
         Title="{x:Static loc:Strings.SubtitleZoneEditor_NewTitle}">
 
-    <Grid ColumnDefinitions="Auto,340"
+    <Grid ColumnDefinitions="Auto,Auto"
           Margin="20"
           ColumnSpacing="24">
 
@@ -16,21 +16,30 @@
 
             <StackPanel Orientation="Horizontal"
                         Spacing="10">
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_ScreenLabel}"
-                           Width="50"
+                <TextBlock Classes="hint"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_ScreenLabel}"
                            VerticalAlignment="Center" />
                 <ComboBox Name="ScreenAspectRatioSelector"
-                          Width="100" />
-                <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_VideoLabel}"
-                           Width="40"
-                           VerticalAlignment="Center" />
+                          Width="100"
+                          Height="26"
+                          FontFamily="Consolas"
+                          FontSize="11.5" />
+                <TextBlock Classes="hint"
+                           Text="{x:Static loc:Strings.SubtitleZoneEditor_VideoLabel}"
+                           VerticalAlignment="Center"
+                           Margin="6,0,0,0" />
                 <ComboBox Name="VideoAspectRatioSelector"
-                          Width="100" />
+                          Width="100"
+                          Height="26"
+                          FontFamily="Consolas"
+                          FontSize="11.5" />
             </StackPanel>
 
             <Border Name="ScreenBorder"
-                    BorderBrush="#808080"
-                    BorderThickness="1">
+                    BorderBrush="{DynamicResource SettingsRuleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    ClipToBounds="True">
                 <Canvas Name="PreviewCanvas"
                         Width="480"
                         Height="270"
@@ -40,17 +49,17 @@
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0%,0%"
                                                   EndPoint="0%,100%">
-                                <GradientStop Color="#2A2A2A"
+                                <GradientStop Color="#1E1E1E"
                                               Offset="0" />
-                                <GradientStop Color="#141414"
+                                <GradientStop Color="#0F0F0F"
                                               Offset="1" />
                             </LinearGradientBrush>
                         </Border.Background>
                     </Border>
 
                     <Border Name="ZoneBorder"
-                            Background="#4000AEEF"
-                            BorderBrush="#AA00AEEF"
+                            Background="#264FAE7C"
+                            BorderBrush="#CC4FAE7C"
                             BorderThickness="1"
                             Cursor="SizeAll">
                         <TextBlock Name="SampleText"
@@ -60,10 +69,18 @@
                     <Border Name="ResizeHandle"
                             Width="12"
                             Height="12"
-                            Background="White"
-                            BorderBrush="#AA00AEEF"
+                            Background="#8FDBAD"
+                            BorderBrush="#4FAE7C"
                             BorderThickness="1"
                             Cursor="BottomRightCorner" />
+
+                    <TextBlock Name="DragHintText"
+                               Canvas.Left="10"
+                               Canvas.Top="8"
+                               Classes="mono"
+                               FontSize="10.5"
+                               Opacity="0.55"
+                               Text="{x:Static loc:Strings.SubtitleZoneEditor_DragHint}" />
                 </Canvas>
             </Border>
         </StackPanel>
@@ -72,11 +89,14 @@
                     Spacing="10">
 
             <TextBox Name="NameTextBox"
+                     BorderBrush="{DynamicResource AccentLineBrush}"
                      Watermark="{x:Static loc:Strings.SubtitleZoneEditor_NameWatermark}" />
-            <TextBlock Text="{x:Static loc:Strings.SubtitleZoneEditor_NameHint}"
-                       Opacity="0.7"
-                       FontSize="11"
+            <TextBlock Classes="hint"
+                       Text="{x:Static loc:Strings.SubtitleZoneEditor_NameHint}"
                        Margin="0,-6,0,0" />
+
+            <Border Classes="rule"
+                    Margin="0,4" />
 
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
@@ -94,77 +114,132 @@
                 <TextBlock Grid.Row="1" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_SizeLabel}"
                            VerticalAlignment="Center" />
-                <Slider Grid.Row="1" Grid.Column="1"
-                        Name="FontSizeSlider"
-                        Minimum="2"
-                        Maximum="12"
-                        Width="200"
-                        HorizontalAlignment="Left" />
+                <Grid Grid.Row="1" Grid.Column="1"
+                      ColumnDefinitions="160,40"
+                      ColumnSpacing="8"
+                      HorizontalAlignment="Left">
+                    <Slider Grid.Column="0"
+                            Name="FontSizeSlider"
+                            Minimum="2"
+                            Maximum="12"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Name="FontSizeValueText"
+                               Classes="mono"
+                               VerticalAlignment="Center" />
+                </Grid>
 
                 <TextBlock Grid.Row="2" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_TextColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Grid.Row="2" Grid.Column="1"
-                             Name="FontColorPicker"
-                             IsAlphaEnabled="False"
-                             Width="200"
-                             HorizontalAlignment="Left" />
+                <Border Grid.Row="2" Grid.Column="1"
+                        Classes="seg-group"
+                        Width="200"
+                        Height="32"
+                        HorizontalAlignment="Left">
+                    <ColorPicker Name="FontColorPicker"
+                                 IsAlphaEnabled="False"
+                                 Width="200"
+                                 Height="30"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch" />
+                </Border>
 
                 <TextBlock Grid.Row="3" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_BgColorLabel}"
                            VerticalAlignment="Center" />
-                <ColorPicker Grid.Row="3" Grid.Column="1"
-                             Name="BackgroundColorPicker"
-                             IsAlphaEnabled="False"
-                             Width="200"
-                             HorizontalAlignment="Left" />
+                <Border Grid.Row="3" Grid.Column="1"
+                        Classes="seg-group"
+                        Width="200"
+                        Height="32"
+                        HorizontalAlignment="Left">
+                    <ColorPicker Name="BackgroundColorPicker"
+                                 IsAlphaEnabled="False"
+                                 Width="200"
+                                 Height="30"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch" />
+                </Border>
 
                 <TextBlock Grid.Row="4" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_BgOpacityLabel}"
                            VerticalAlignment="Center" />
-                <Slider Grid.Row="4" Grid.Column="1"
-                        Name="BackgroundOpacitySlider"
-                        Minimum="0"
-                        Maximum="100"
-                        Width="200"
-                        HorizontalAlignment="Left" />
+                <Grid Grid.Row="4" Grid.Column="1"
+                      ColumnDefinitions="160,40"
+                      ColumnSpacing="8"
+                      HorizontalAlignment="Left">
+                    <Slider Grid.Column="0"
+                            Name="BackgroundOpacitySlider"
+                            Minimum="0"
+                            Maximum="100"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Name="BackgroundOpacityValueText"
+                               Classes="mono"
+                               VerticalAlignment="Center" />
+                </Grid>
 
                 <TextBlock Grid.Row="5" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignHLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Grid.Row="5" Grid.Column="1"
-                          Name="HorizontalAlignSelector"
-                          Width="200"
-                          HorizontalAlignment="Left">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:HorizontalAlignmentOption">
-                            <TextBlock Text="{Binding Label}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <Border Grid.Row="5" Grid.Column="1"
+                        Classes="seg-group"
+                        Width="200"
+                        HorizontalAlignment="Left">
+                    <ItemsControl Name="HorizontalAlignSelector">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:HorizontalAlignmentOption">
+                                <ToggleButton Classes="seg"
+                                              Content="{Binding Label}"
+                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              IsCheckedChanged="OnHorizontalAlignChanged" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
 
                 <TextBlock Grid.Row="6" Grid.Column="0"
                            Text="{x:Static loc:Strings.SubtitleZoneEditor_AlignVLabel}"
                            VerticalAlignment="Center" />
-                <ComboBox Grid.Row="6" Grid.Column="1"
-                          Name="VerticalAlignSelector"
-                          Width="200"
-                          HorizontalAlignment="Left">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:VerticalAlignmentOption">
-                            <TextBlock Text="{Binding Label}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <Border Grid.Row="6" Grid.Column="1"
+                        Classes="seg-group"
+                        Width="200"
+                        HorizontalAlignment="Left">
+                    <ItemsControl Name="VerticalAlignSelector">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:VerticalAlignmentOption">
+                                <ToggleButton Classes="seg"
+                                              Content="{Binding Label}"
+                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              IsCheckedChanged="OnVerticalAlignChanged" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
             </Grid>
 
             <StackPanel Orientation="Horizontal"
-                        Spacing="10"
+                        Spacing="8"
                         HorizontalAlignment="Right"
                         Margin="0,20,0,0">
                 <Button Name="CancelButton"
+                        Classes="link"
+                        Foreground="{DynamicResource SettingsHintBrush}"
+                        Padding="12,6"
                         Content="{x:Static loc:Strings.SubtitleZoneEditor_CancelButton}" />
                 <Button Name="SaveButton"
+                        Classes="primary-outline"
+                        Padding="14,5"
                         Content="{x:Static loc:Strings.SubtitleZoneEditor_SaveButton}" />
             </StackPanel>
         </StackPanel>

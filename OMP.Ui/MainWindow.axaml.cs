@@ -181,7 +181,14 @@ public sealed partial class MainWindow : Window
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
         NoVideoIndicator.IsVisible = registry.Current is { HasVideo: false };
-        EmptyStateIndicator.IsVisible = registry.Current is null;
+        var isEmpty = registry.Current is null;
+        EmptyStateIndicator.IsVisible = isEmpty;
+
+        OutputVolumesButton.IsVisible = !isEmpty;
+        SpeedButton.IsVisible = !isEmpty;
+        SubtitlesButton.IsVisible = !isEmpty;
+        TransportGroup.Opacity = isEmpty ? 0.35 : 1;
+        TimelineRow.Opacity = isEmpty ? 0.35 : 1;
 
         _areSubtitlesEnabled = false;
         _lastKnownSubtitleRouteCount = 0;

@@ -29,7 +29,7 @@ public class SpeedFlyoutViewTests
         view.SetSpeed(1.5);
 
         Assert.Equal(1.5, view.SpeedSlider.Value);
-        Assert.Equal("1.5x", view.SpeedValueLabel.Text);
+        Assert.Equal("1.50×", view.SpeedValueLabel.Text);
     }
 
     [AvaloniaFact]
@@ -58,7 +58,7 @@ public class SpeedFlyoutViewTests
         view.SpeedSlider.Value = 1.75;
 
         Assert.Empty(committedValues);
-        Assert.Equal("1.75x", view.SpeedValueLabel.Text);
+        Assert.Equal("1.75×", view.SpeedValueLabel.Text);
 
         window.MouseUp(point, MouseButton.Left);
 
@@ -73,7 +73,7 @@ public class SpeedFlyoutViewTests
 
         view.SpeedSlider.Value = 1.75;
 
-        Assert.Equal("1x", view.SpeedValueLabel.Text);
+        Assert.Equal("1.00×", view.SpeedValueLabel.Text);
     }
 
     private static (SpeedFlyoutView View, Window Window) CreateShown()

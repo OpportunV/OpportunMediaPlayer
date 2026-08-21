@@ -24,6 +24,8 @@ internal static class Strings
 
     public static string MainWindow_SpeedButtonTooltip => Get("MainWindow_SpeedButtonTooltip");
 
+    public static string MainWindow_PlaybackSpeedHeader => Get("MainWindow_PlaybackSpeedHeader");
+
     public static string MainWindow_SubtitlesButtonTooltip => Get("MainWindow_SubtitlesButtonTooltip");
 
     public static string MainWindow_OutputVolumesButtonTooltip => Get("MainWindow_OutputVolumesButtonTooltip");
@@ -52,6 +54,8 @@ internal static class Strings
 
     public static string Options_ThemeLabel => Get("Options_ThemeLabel");
 
+    public static string Options_ThemeHint => Get("Options_ThemeHint");
+
     public static string Options_MuteOutputTooltip => Get("Options_MuteOutputTooltip");
 
     public static string Options_DelayMsTooltip => Get("Options_DelayMsTooltip");
@@ -64,7 +68,19 @@ internal static class Strings
 
     public static string Options_DelayMsHeader => Get("Options_DelayMsHeader");
 
+    public static string Options_SelectOutputPlaceholder => Get("Options_SelectOutputPlaceholder");
+
+    public static string Options_SelectStreamPlaceholder => Get("Options_SelectStreamPlaceholder");
+
     public static string Options_SubtitlesHelpText => Get("Options_SubtitlesHelpText");
+
+    public static string Options_TrackHeader => Get("Options_TrackHeader");
+
+    public static string Options_ZoneHeader => Get("Options_ZoneHeader");
+
+    public static string Options_SelectTrackPlaceholder => Get("Options_SelectTrackPlaceholder");
+
+    public static string Options_SelectZonePlaceholder => Get("Options_SelectZonePlaceholder");
 
     public static string Options_ZonesHelpText => Get("Options_ZonesHelpText");
 
@@ -78,11 +94,15 @@ internal static class Strings
 
     public static string Options_LanguageLabel => Get("Options_LanguageLabel");
 
+    public static string Options_LanguageHint => Get("Options_LanguageHint");
+
     public static string Options_LanguageRestartButton => Get("Options_LanguageRestartButton");
 
     public static string Options_YtDlpPathLabel => Get("Options_YtDlpPathLabel");
 
-    public static string Options_YtDlpPathWatermark => Get("Options_YtDlpPathWatermark");
+    public static string Options_YtDlpPathHint => Get("Options_YtDlpPathHint");
+
+    public static string Options_YtDlpPathWatermarkShort => Get("Options_YtDlpPathWatermarkShort");
 
     public static string Options_YtDlpPathResetButton => Get("Options_YtDlpPathResetButton");
 
@@ -102,11 +122,19 @@ internal static class Strings
 
     public static string Hotkeys_Title => Get("Hotkeys_Title");
 
+    public static string Hotkeys_GroupPlayback => Get("Hotkeys_GroupPlayback");
+
+    public static string Hotkeys_GroupAudio => Get("Hotkeys_GroupAudio");
+
+    public static string Hotkeys_GroupView => Get("Hotkeys_GroupView");
+
     public static string Hotkeys_PlayPause => Get("Hotkeys_PlayPause");
 
     public static string Hotkeys_StepBack => Get("Hotkeys_StepBack");
 
     public static string Hotkeys_StepForward => Get("Hotkeys_StepForward");
+
+    public static string Hotkeys_StepBackForward => Get("Hotkeys_StepBackForward");
 
     public static string Hotkeys_ToggleFullscreen => Get("Hotkeys_ToggleFullscreen");
 
@@ -120,9 +148,13 @@ internal static class Strings
 
     public static string Hotkeys_IncreaseSpeed => Get("Hotkeys_IncreaseSpeed");
 
+    public static string Hotkeys_SpeedDownUp => Get("Hotkeys_SpeedDownUp");
+
     public static string Hotkeys_IncreaseVolume => Get("Hotkeys_IncreaseVolume");
 
     public static string Hotkeys_DecreaseVolume => Get("Hotkeys_DecreaseVolume");
+
+    public static string Hotkeys_VolumeDownUp => Get("Hotkeys_VolumeDownUp");
 
     public static string About_Title => Get("About_Title");
 
@@ -185,6 +217,8 @@ internal static class Strings
     public static string SubtitleZoneEditor_ScreenLabel => Get("SubtitleZoneEditor_ScreenLabel");
 
     public static string SubtitleZoneEditor_VideoLabel => Get("SubtitleZoneEditor_VideoLabel");
+
+    public static string SubtitleZoneEditor_DragHint => Get("SubtitleZoneEditor_DragHint");
 
     public static string SubtitleZoneEditor_NameWatermark => Get("SubtitleZoneEditor_NameWatermark");
 

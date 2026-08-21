@@ -453,6 +453,42 @@ hardcoded inside a *nested* `ControlTemplate` that Fluent's outer `Slider` templ
 per-instance resource override never reaches it, so shrinking that padding would need a full
 custom `Slider` template, not a resource override.
 
+**`SliderHorizontalThumbWidth`/`Height` must never both be `0` at the same time as overriding
+`SliderHorizontalHeight`** — confirmed by rendering to a real `RenderTargetBitmap` in a headless
+test (see below), not guessed: with both thumb dimensions at `0` *and* a smaller
+`SliderHorizontalHeight` present, the whole track — not just the thumb — renders with zero visual
+height and the slider is completely invisible, even though `Slider.Bounds` still reports a normal,
+non-zero size (the collapse happens deeper, in the `Track`/`RepeatButton` arrange pass, not at the
+outer control). `SliderHorizontalThumbWidth="0"` alone (no `SliderHorizontalHeight` override) is
+fine and is what actually makes a thumb invisible — a thumb has no width to draw a circle in.
+`ProgressSlider`'s fix: `SliderHorizontalThumbWidth="0"` stays, but `SliderHorizontalThumbHeight`
+is set to match the track height (currently `3`, not `0`) purely to keep that arrange pass
+non-degenerate — the thumb is still invisible (zero width), this has no visible effect beyond
+preventing the collapse.
+
+Every other `Slider` in the app (main-window volume, `Options` audio routing rows, both flyouts —
+anywhere the thumb stays visible) gets its knob size from **app-level** (not per-instance)
+overrides in `App.axaml`: `SliderHorizontalThumbWidth`/`Height` = `14`, `SliderHorizontalHeight` =
+`24`, `SliderThumbCornerRadius` = `7`, plus `SliderThumbBackground`/`SliderTrackValueFill` = the
+accent color and a themed `SliderTrackFill` for the unfilled portion. `DynamicResource` lookups
+fall through app-level resources exactly like any other ancestor scope, so this cascades to every
+slider that doesn't declare its own `<Slider.Resources>` — `ProgressSlider`'s per-instance override
+still wins locally over this app-level default, the same way instance styles always beat inherited
+ones. One shared set of tokens instead of duplicating thumb-size XAML at every call site.
+
+**Rendering an `AvaloniaFact` test to a real bitmap needs both `UseSkia()` and
+`UseHeadlessDrawing = false`** on the shared `TestAppBuilder` (`OMP.Ui.Tests/TestAppBuilder.cs`) —
+confirmed by testing: the default headless setup (`UseHeadlessDrawing` true, no explicit Skia
+platform) *measures and arranges* controls correctly but never actually rasterizes anything, so
+`RenderTargetBitmap.Render(window)` + `.Save(path)` silently produces nothing to look at (no
+exception either). With both flags set, a `[AvaloniaFact]` test can `window.Show()`,
+`Dispatcher.UIThread.RunJobs()`, render to a `RenderTargetBitmap`, and save a real PNG — this is
+how the thumb-collapse bug above was actually found and confirmed, not guessed from reading XAML.
+Verified this doesn't regress the existing Tier 1/2 suite (133 tests, ~500ms either way). Use this
+technique for any future "is this actually visible / what does this actually look like" question
+about a control template — it's far faster than reasoning about nested `ControlTemplate` XAML by
+eye, and it's the only way that actually catches a rendering collapse like this one.
+
 `OptionsWindow`'s Audio tab enforces that an *output* can only carry one active route at a time
 (`UpdateOutputSelector` excludes already-used outputs — you can't send two different tracks to one
 physical speaker), but deliberately does **not** apply the same exclusivity to *streams*: the same

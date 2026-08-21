@@ -11,7 +11,8 @@ public static class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+            .UseSkia()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .AfterSetup(builder => ((App)builder.Instance!).Services = new TestServiceProvider());
 
     private sealed class TestServiceProvider : IServiceProvider

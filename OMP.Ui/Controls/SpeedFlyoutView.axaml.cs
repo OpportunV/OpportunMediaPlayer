@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
-using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Lib;
 using OMP.Ui.Helpers;
@@ -14,7 +15,7 @@ internal sealed partial class SpeedFlyoutView : UserControl
 {
     public event Action<double>? SpeedCommitted;
 
-    private readonly List<Button> _presetButtons = [];
+    private readonly List<ToggleButton> _presetButtons = [];
     private double _currentSpeed = 1.0;
     private bool _isDragging;
 
@@ -27,19 +28,14 @@ internal sealed partial class SpeedFlyoutView : UserControl
 
         foreach (var preset in PlaybackSpeedPresets.Values)
         {
-            var button = new Button
+            var button = new ToggleButton
             {
+                Classes = { "seg" },
                 Content = PlaybackSpeedFormat.Format(preset),
                 Tag = preset,
-                Padding = new Thickness(6, 4),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center
             };
             button.Click += (_, _) => SpeedCommitted?.Invoke(preset);
             _presetButtons.Add(button);
-
-            PresetsPanel.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-            Grid.SetColumn(button, PresetsPanel.ColumnDefinitions.Count - 1);
             PresetsPanel.Children.Add(button);
         }
 
@@ -56,7 +52,7 @@ internal sealed partial class SpeedFlyoutView : UserControl
         {
             if (_isDragging)
             {
-                SpeedValueLabel.Text = PlaybackSpeedFormat.Format(e.NewValue);
+                SpeedValueLabel.Text = FormatFineValue(e.NewValue);
             }
         };
         SpeedSlider.PointerCaptureLost += (_, _) =>
@@ -75,18 +71,31 @@ internal sealed partial class SpeedFlyoutView : UserControl
             SpeedSlider.Value = speed;
         }
 
-        SpeedValueLabel.Text = PlaybackSpeedFormat.Format(speed);
+        SpeedValueLabel.Text = FormatFineValue(speed);
         HighlightActivePreset(speed);
     }
 
     private void HighlightActivePreset(double speed)
     {
+        var matchedPreset = false;
+
         foreach (var button in _presetButtons)
         {
             var isActive = Math.Abs((double)button.Tag! - speed) < PresetHighlightEpsilon;
-            button.FontWeight = isActive ? FontWeight.Bold : FontWeight.Normal;
-            button.BorderBrush = isActive ? Brushes.White : Brushes.Transparent;
-            button.BorderThickness = new Thickness(isActive ? 1.5 : 0);
+            button.IsChecked = isActive;
+            matchedPreset |= isActive;
+        }
+
+        if (matchedPreset)
+        {
+            SpeedValueLabel.ClearValue(TextBlock.ForegroundProperty);
+        }
+        else if (Application.Current!.TryGetResource("AccentTextBrush", ActualThemeVariant, out var resource) &&
+                 resource is IBrush brush)
+        {
+            SpeedValueLabel.Foreground = brush;
         }
     }
+
+    private static string FormatFineValue(double speed) => speed.ToString("0.00", CultureInfo.InvariantCulture) + "×";
 }
