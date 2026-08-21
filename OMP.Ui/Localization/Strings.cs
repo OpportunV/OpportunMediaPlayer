@@ -88,6 +88,12 @@ internal static class Strings
 
     public static string Options_YtDlpPathResetTooltip => Get("Options_YtDlpPathResetTooltip");
 
+    public static string Options_YtDlpPathBrowseButton => Get("Options_YtDlpPathBrowseButton");
+
+    public static string Options_YtDlpPathBrowseTitle => Get("Options_YtDlpPathBrowseTitle");
+
+    public static string Options_YtDlpPathFileTypeFilterName => Get("Options_YtDlpPathFileTypeFilterName");
+
     public static string ThemeMode_Light => Get("ThemeMode_Light");
 
     public static string ThemeMode_Dark => Get("ThemeMode_Dark");

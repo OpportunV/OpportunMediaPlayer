@@ -196,16 +196,33 @@ through it would tear down devices on every tick.
 
 ## Playback speed
 
-`MediaSession.SetSpeed` does a **narrow flush**, deliberately less than `Seek`: no seek-generation
-bump, no packet-channel drain, no `av_seek_frame`, no video flush, no session Pause/Play. The
-demuxer is already reading from the right place — only the already-decoded PCM sitting in each
-`AudioPipeline` needs discarding and re-decoding at the new rate, or it would keep playing at the
-old speed for up to `BufferDurationSeconds`. That flush loop runs under `_seekSync` (not a new
-lock): `AudioPipeline.Flush()` drains the pipeline's single-reader `_decodedPcmChannel`, and
-`PumpToOutput` on the presentation thread reads that same channel every iteration. `SetSpeed` is
-called from the UI thread, so without serializing against a concurrent `Seek()` the two could touch
-the channel's reader side from two threads at once — the channel opts into single-reader fast paths
-and isn't safe for that. This mirrors (and doesn't widen) a race that already exists around `Seek`.
+`MediaSession.SetSpeed` calls `Seek(CurrentTime)` — a real, full reseek (seek-generation bump,
+packet-channel drain, `av_seek_frame`, video flush, session Pause/Play), not a lighter path. A
+**narrow flush** (skip the `av_seek_frame`, just discard+re-decode each `AudioPipeline`'s buffered
+PCM at the new rate) looks like the obviously-cheaper design and was tried — it's wrong, confirmed
+by testing, not a style preference. The demuxer routinely reads *ahead* of actual playback position
+(`ThrottleDemuxAhead`/`MaxDemuxLookaheadSeconds` keep a lookahead margin of pre-fetched packets) —
+narrow-flush clears each pipeline's decoded/buffered PCM and its packet channel, but never touches
+the demuxer's read position, so the next packets handed to audio are whatever was already
+pre-fetched, several seconds ahead of where playback actually is. `PumpToOutput` correctly refuses
+to play a decoded chunk whose timestamp is that far ahead of the clock (`chunk.TimeSeconds >
+delayedTargetSeconds + PumpWindowSeconds` → withheld, not played) and just sits silent until the
+clock — ticking at the new speed, unaffected since video/clock were never flushed — walks forward
+to catch up to that already-fetched content. Confirmed directly via real playback: video keeps
+running instantly on a speed change, audio goes silent for several seconds. The full `Seek` avoids
+this because `av_seek_frame` physically re-positions the demuxer to the target, which erases that
+read-ahead margin as a side effect — there is currently no cheaper way to get that same
+re-synchronization. (This becomes relevant again once a session can have multiple independent
+demuxed sources — each `av_seek_frame` becomes its own network round-trip for a web source's
+sidecar audio track — but that's unsolved future work, not a reason to reintroduce narrow-flush
+today; don't re-attempt it without also fixing `PumpToOutput`'s ahead-of-target handling.)
+
+That reseek runs under `_seekSync` (not a new lock): `AudioPipeline.Flush()` drains the pipeline's
+single-reader `_decodedPcmChannel`, and `PumpToOutput` on the presentation thread reads that same
+channel every iteration. `SetSpeed` is called from the UI thread, so without serializing against a
+concurrent `Seek()` the two could touch the channel's reader side from two threads at once — the
+channel opts into single-reader fast paths and isn't safe for that. This mirrors (and doesn't
+widen) a race that already exists around `Seek`.
 
 `PlaybackSpeedPresets` (the YouTube-style preset list) and `PlaybackSpeedLimits` both live in
 `OMP.Lib`, not `OMP.Ui`: they're the engine's own declared set of supported rates, not host

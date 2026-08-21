@@ -9,6 +9,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
@@ -24,6 +25,11 @@ namespace OMP.Ui.Windows;
 
 public sealed partial class OptionsWindow : Window
 {
+    private static readonly FilePickerFileType _ytDlpFileTypeFilter = new(Strings.Options_YtDlpPathFileTypeFilterName)
+    {
+        Patterns = OperatingSystem.IsWindows() ? ["*.exe"] : ["*"]
+    };
+
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IUserSettingsService _settings;
     private readonly IWindowFactory _windowFactory;
@@ -151,6 +157,33 @@ public sealed partial class OptionsWindow : Window
     {
         YtDlpPathTextBox.Text = string.Empty;
         _settings.Current.YtDlpPath = null;
+        _settings.Save();
+    }
+
+    private async void OnBrowseYtDlpPath(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(
+            new FilePickerOpenOptions
+            {
+                Title = Strings.Options_YtDlpPathBrowseTitle,
+                AllowMultiple = false,
+                FileTypeFilter = [_ytDlpFileTypeFilter]
+            });
+
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+
+        if (path == null)
+        {
+            return;
+        }
+
+        YtDlpPathTextBox.Text = path;
+        _settings.Current.YtDlpPath = path;
         _settings.Save();
     }
 

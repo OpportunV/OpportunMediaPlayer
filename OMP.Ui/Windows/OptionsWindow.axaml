@@ -81,6 +81,11 @@
                              Watermark="{x:Static loc:Strings.Options_YtDlpPathWatermark}"
                              LostFocus="OnYtDlpPathChanged" />
 
+                    <Button Name="BrowseYtDlpPathButton"
+                            Content="{x:Static loc:Strings.Options_YtDlpPathBrowseButton}"
+                            Click="OnBrowseYtDlpPath"
+                            VerticalAlignment="Center" />
+
                     <Button Name="ResetYtDlpPathButton"
                             Content="{x:Static loc:Strings.Options_YtDlpPathResetButton}"
                             Click="OnResetYtDlpPath"

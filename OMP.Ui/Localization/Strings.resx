@@ -55,6 +55,9 @@
   <data name="Options_YtDlpPathWatermark" xml:space="preserve"><value>yt-dlp (default: use PATH)</value></data>
   <data name="Options_YtDlpPathResetButton" xml:space="preserve"><value>Reset</value></data>
   <data name="Options_YtDlpPathResetTooltip" xml:space="preserve"><value>Use the default yt-dlp lookup (PATH)</value></data>
+  <data name="Options_YtDlpPathBrowseButton" xml:space="preserve"><value>Browse...</value></data>
+  <data name="Options_YtDlpPathBrowseTitle" xml:space="preserve"><value>Select yt-dlp executable</value></data>
+  <data name="Options_YtDlpPathFileTypeFilterName" xml:space="preserve"><value>yt-dlp</value></data>
 
   <data name="ThemeMode_Light" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeMode_Dark" xml:space="preserve"><value>Dark</value></data>
