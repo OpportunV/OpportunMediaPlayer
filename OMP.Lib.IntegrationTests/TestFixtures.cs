@@ -8,6 +8,8 @@ internal static class TestFixtures
 
     public static string AudioSidecarFlac => Path.Combine(FixturesRoot, "audio", "sample.flac");
 
+    public static string SubtitleSidecarSrt => Path.Combine(FixturesRoot, "subtitle", "sample.srt");
+
     public static TheoryData<string> AllFormats => new(AllFormatPaths);
 
     private static string FixturesRoot => Path.Combine(AppContext.BaseDirectory, "test-fixtures");

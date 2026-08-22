@@ -53,6 +53,10 @@
   <data name="Options_ZoneHeader" xml:space="preserve"><value>Zone</value></data>
   <data name="Options_SelectTrackPlaceholder" xml:space="preserve"><value>Select track</value></data>
   <data name="Options_SelectZonePlaceholder" xml:space="preserve"><value>Select zone</value></data>
+  <data name="Options_LoadSubtitleFileButton" xml:space="preserve"><value>Load Subtitle File...</value></data>
+  <data name="Options_LoadSubtitleFileTitle" xml:space="preserve"><value>Select subtitle file</value></data>
+  <data name="Options_SubtitleFileTypeFilterName" xml:space="preserve"><value>Subtitles</value></data>
+  <data name="Options_SubtitleRouteError" xml:space="preserve"><value>Could not load this subtitle track. It may be temporarily unavailable - try again in a moment.</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. The first two zones are default and can't be removed.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>
@@ -118,6 +122,7 @@ sudo apt install libjack-jackd2-0</value>
 brew install ffmpeg@7</value>
   </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Technical detail:</value></data>
+  <data name="OpenFileError_SubtitleHeading" xml:space="preserve"><value>Could not load this subtitle file. It may be corrupted or in an unsupported format.</value></data>
   <data name="OpenFileError_YtDlpNotFoundWindowsHeading" xml:space="preserve">
     <value>yt-dlp wasn't found. Install it, then try again:
 

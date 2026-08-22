@@ -577,7 +577,7 @@ public sealed partial class MainWindow : Window
                 }
 
                 _resolvedTitleOverride = result.Title;
-                var request = new MediaOpenRequest(result.Url!, result.AudioSidecars, result.Headers);
+                var request = new MediaOpenRequest(result.Url!, result.AudioSidecars, result.Headers, result.SubtitleSidecars);
 
                 if (await OpenSessionAsync(request) is null)
                 {
@@ -591,7 +591,8 @@ public sealed partial class MainWindow : Window
                 if (retryResult.Status == YtDlpResolveStatus.Success)
                 {
                     _resolvedTitleOverride = retryResult.Title;
-                    retryRequest = new MediaOpenRequest(retryResult.Url!, retryResult.AudioSidecars, retryResult.Headers);
+                    retryRequest = new MediaOpenRequest(
+                        retryResult.Url!, retryResult.AudioSidecars, retryResult.Headers, retryResult.SubtitleSidecars);
                 }
 
                 if (await TryOpenSessionAsync(retryRequest))

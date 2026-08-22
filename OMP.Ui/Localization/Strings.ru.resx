@@ -53,6 +53,10 @@
   <data name="Options_ZoneHeader" xml:space="preserve"><value>Зона</value></data>
   <data name="Options_SelectTrackPlaceholder" xml:space="preserve"><value>Выберите дорожку</value></data>
   <data name="Options_SelectZonePlaceholder" xml:space="preserve"><value>Выберите зону</value></data>
+  <data name="Options_LoadSubtitleFileButton" xml:space="preserve"><value>Загрузить файл субтитров...</value></data>
+  <data name="Options_LoadSubtitleFileTitle" xml:space="preserve"><value>Выберите файл субтитров</value></data>
+  <data name="Options_SubtitleFileTypeFilterName" xml:space="preserve"><value>Субтитры</value></data>
+  <data name="Options_SubtitleRouteError" xml:space="preserve"><value>Не удалось загрузить эту дорожку субтитров. Возможно, она временно недоступна - попробуйте ещё раз через некоторое время.</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Зоны определяют, где на экране показываются субтитры. Первые две зоны заданы по умолчанию, их нельзя удалить.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Изменить</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Сбросить</value></data>
@@ -118,6 +122,7 @@ sudo apt install libjack-jackd2-0</value>
 brew install ffmpeg@7</value>
   </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Технические детали:</value></data>
+  <data name="OpenFileError_SubtitleHeading" xml:space="preserve"><value>Не удалось загрузить файл субтитров. Возможно, он повреждён или имеет неподдерживаемый формат.</value></data>
   <data name="OpenFileError_YtDlpNotFoundWindowsHeading" xml:space="preserve">
     <value>yt-dlp не найден. Установите его и повторите попытку:
 

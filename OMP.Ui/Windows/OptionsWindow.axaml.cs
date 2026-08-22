@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -11,6 +12,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
@@ -30,6 +32,11 @@ public sealed partial class OptionsWindow : Window
     private static readonly FilePickerFileType _ytDlpFileTypeFilter = new(Strings.Options_YtDlpPathFileTypeFilterName)
     {
         Patterns = OperatingSystem.IsWindows() ? ["*.exe"] : ["*"]
+    };
+
+    private static readonly FilePickerFileType _subtitleFileTypeFilter = new(Strings.Options_SubtitleFileTypeFilterName)
+    {
+        Patterns = ["*.srt", "*.vtt", "*.ass", "*.ssa", "*.sub"]
     };
 
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
@@ -441,6 +448,7 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
+        SubtitleRouteErrorText.IsVisible = false;
         _subtitleRows.Add(new SubtitleRouteRow(streamOption.Stream, zone));
         ApplySubtitleRoutes();
 
@@ -462,10 +470,95 @@ public sealed partial class OptionsWindow : Window
         ApplySubtitleRoutes();
     }
 
+    private async void OnLoadSubtitleFile(object? sender, RoutedEventArgs e)
+    {
+        var session = _mediaSessionRegistry.Current;
+        if (session is null)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(
+            new FilePickerOpenOptions
+            {
+                Title = Strings.Options_LoadSubtitleFileTitle,
+                AllowMultiple = false,
+                FileTypeFilter = [_subtitleFileTypeFilter]
+            });
+
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var sidecar = new SubtitleSidecarSource(path, Title: Path.GetFileNameWithoutExtension(path));
+            var added = await Task.Run(() => session.AddSubtitleSidecar(sidecar));
+
+            _subtitleStreamOptions.Add(new SubtitleStreamOption(added));
+            UpdateSubtitleStreamSelector();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not load subtitle file {Path}.", path);
+
+            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
+            errorWindow.Load(Strings.OpenFileError_SubtitleHeading, ex.Message);
+            await errorWindow.ShowDialog(this);
+        }
+    }
+
     private void ApplySubtitleRoutes()
     {
-        _mediaSessionRegistry.Current?.SetSubtitleRoutes(
-            _subtitleRows.Select(row => new SubtitleRoute(row.Stream, row.Zone.Id)));
+        var session = _mediaSessionRegistry.Current;
+        if (session is null)
+        {
+            return;
+        }
+
+        var routes = _subtitleRows.Select(row => new SubtitleRoute(row.Stream, row.Zone.Id)).ToList();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var applied = session.SetSubtitleRoutes(routes);
+                Dispatcher.UIThread.Post(() => ReconcileSubtitleRoutes(applied));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Applying subtitle routes failed.");
+            }
+        });
+    }
+
+    private void ReconcileSubtitleRoutes(IReadOnlyList<SubtitleRoute> applied)
+    {
+        var failedRows = _subtitleRows
+            .Where(row => !applied.Any(r => r.Stream.Id == row.Stream.Id && r.ZoneId == row.Zone.Id))
+            .ToList();
+
+        if (failedRows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var row in failedRows)
+        {
+            _subtitleRows.Remove(row);
+        }
+
+        UpdateSubtitleStreamSelector();
+        UpdateSubtitleZoneSelector();
+
+        SubtitleRouteErrorText.Text = Strings.Options_SubtitleRouteError;
+        SubtitleRouteErrorText.IsVisible = true;
     }
 
     private void UpdateSubtitleStreamSelector()

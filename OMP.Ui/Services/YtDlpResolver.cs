@@ -73,10 +73,15 @@ internal sealed class YtDlpResolver(IUserSettingsService settings, ILogger<YtDlp
 
         using var document = JsonDocument.Parse(stdout);
 
-        return YtDlpFormatSelector.SelectMediaSources(document) is { } selection
-            ? YtDlpResolveResult.Success(
-                pageUrl, selection.Url, selection.Title, selection.AudioSidecars, selection.Headers)
-            : YtDlpResolveResult.Failed(pageUrl, Strings.OpenUrl_NoPlayableFormatError);
+        if (YtDlpFormatSelector.SelectMediaSources(document) is not { } selection)
+        {
+            return YtDlpResolveResult.Failed(pageUrl, Strings.OpenUrl_NoPlayableFormatError);
+        }
+
+        var subtitleSidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, settings.Current.Language);
+
+        return YtDlpResolveResult.Success(
+            pageUrl, selection.Url, selection.Title, selection.AudioSidecars, subtitleSidecars, selection.Headers);
     }
 
     private static void TryKill(Process process)

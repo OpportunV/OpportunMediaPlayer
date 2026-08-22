@@ -84,6 +84,14 @@ internal static class Strings
 
     public static string Options_SelectZonePlaceholder => Get("Options_SelectZonePlaceholder");
 
+    public static string Options_LoadSubtitleFileButton => Get("Options_LoadSubtitleFileButton");
+
+    public static string Options_LoadSubtitleFileTitle => Get("Options_LoadSubtitleFileTitle");
+
+    public static string Options_SubtitleFileTypeFilterName => Get("Options_SubtitleFileTypeFilterName");
+
+    public static string Options_SubtitleRouteError => Get("Options_SubtitleRouteError");
+
     public static string Options_ZonesHelpText => Get("Options_ZonesHelpText");
 
     public static string Options_EditZoneButton => Get("Options_EditZoneButton");
@@ -185,6 +193,8 @@ internal static class Strings
     public static string OpenFileError_FFmpegMacHeading => Get("OpenFileError_FFmpegMacHeading");
 
     public static string OpenFileError_TechnicalDetailLabel => Get("OpenFileError_TechnicalDetailLabel");
+
+    public static string OpenFileError_SubtitleHeading => Get("OpenFileError_SubtitleHeading");
 
     public static string OpenFileError_YtDlpNotFoundWindowsHeading => Get("OpenFileError_YtDlpNotFoundWindowsHeading");
 

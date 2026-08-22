@@ -1,0 +1,11 @@
+1
+00:00:00,500 --> 00:00:03,000
+First test caption.
+
+2
+00:00:04,000 --> 00:00:07,000
+Second test caption, for OMP integration tests.
+
+3
+00:00:08,000 --> 00:00:11,500
+Third and final test caption.

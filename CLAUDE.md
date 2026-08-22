@@ -451,6 +451,138 @@ table built once from every neutral culture's own `ThreeLetterISOLanguageName` f
 persisted audio-track preference saved against one kind of source (local file vs. web) silently
 failed to match the "same" language reported by the other.
 
+**Subtitles are now generalized to the same multi-source architecture as audio.** Before this,
+`MediaSession.SubtitleStreams` was scanned once, at construction, from the primary source only,
+and `SetSubtitleRoutes` always built its `SubtitlePipeline` against `PrimarySource`. The
+generalization turned out cheap: `SubtitlePipeline`'s `SourceId` constructor parameter and
+`DemuxLoop`'s per-source subtitle-dispatch filter (`pipeline.SourceId == source.SourceId`) already
+existed, built defensively during the original audio multi-source work and simply unused for
+subtitles until now. `SubtitleStreams` is now a mutable-backed read-only view
+(`_subtitleStreamCatalog.AsReadOnly()`, mirroring `AudioRoutes`) so it can grow after construction.
+`BuildSubtitleCatalog`/`_subtitleStreamLocations`/`_pendingSubtitleSidecars`/
+`_pendingSubtitleSidecarStreamIds` directly parallel their audio equivalents, and
+`TryOpenPendingSubtitleSidecar` parallels `TryOpenPendingSidecar` (open, scan, seek to the current
+position with the same lookback margin, start its demux worker). A `SubtitleSidecarSource.Url`
+works equally for a real network URL (a future web-source caption track) and a bare local file path
+(`AddSubtitleSidecar`, below) — `MediaInputSource`'s `avformat_open_input` already treats both
+identically, the same as it does for the primary source via `MediaOpenRequest.ForFile`.
+
+`IMediaSession.AddSubtitleSidecar(SubtitleSidecarSource)` is a second entry point alongside the
+lazy pending-sidecar path, for attaching a subtitle to an *already-running* session (a local file
+picked mid-playback). Unlike a pending sidecar, it opens immediately — a single local file open is
+cheap, there's no lazy-loading benefit to defer it — and appends straight into
+`_subtitleStreamCatalog`, returning the new `SubtitleStream` (not a tuple, matching this codebase's
+convention) or throwing on failure, mirroring `MediaInputSource`'s own throw-on-open-failure
+convention so `OMP.Ui` can catch and show its existing error-dialog pattern.
+
+Generalizing surfaced two real, pre-existing gaps the single-source design had never had to handle,
+both now fixed:
+- `GetSeekReferenceStreamIndex` fell back only to a source's own *audio* pipeline for its seek
+  reference stream — a subtitle-only sidecar (no audio pipeline of its own, e.g. a standalone
+  `.srt`) had no reference stream at all, so `Seek()` silently skipped re-seeking it entirely and
+  its demux position would drift out of sync with the rest of the session after any seek. It now
+  falls back to a matching subtitle pipeline's `StreamIndex` when no audio pipeline claims that
+  source.
+- `Seek()` only flushed `_subtitlePipelines` when the *primary* source was among the ones that
+  actually seeked, since subtitles had only ever come from the primary. Now gated per-pipeline on
+  whether that specific pipeline's own `SourceId` was seeked, the same way audio sidecar pipelines
+  already are — otherwise a subtitle sidecar's pipeline would keep serving cues from its pre-seek
+  position after a seek that only touched the sidecar's own source.
+
+`SetSubtitleRoutes`'s pre-existing pipeline-reuse optimization (keep an existing `SubtitlePipeline`
+alive across a route update if the same stream+zone combination is still requested, rather than
+always tearing down and rebuilding every pipeline like `SetAudioRoutes` does) is preserved — the
+comparison just now matches on the resolved `(SourceId, LocalStreamIndex)` pair instead of directly
+comparing the catalog's global `Stream.Id` to `SubtitlePipeline.StreamIndex`, since those two
+numbers are no longer the same thing once multi-source remapping exists.
+
+Test fixture: `test-fixtures/subtitle/sample.srt` is hand-authored (three short placeholder caption
+lines timed against the existing 12-second video clip), not sourced from any external work —
+unlike the video/audio fixtures, no license/attribution applies, recorded as such in
+`test-fixtures/CREDITS.md`.
+
+**`OMP.Ui/Helpers/YtDlpSubtitleSelector.cs` parses yt-dlp's `subtitles` (real, human-provided) and
+`automatic_captions` (auto-generated) JSON fields**, kept as its own file rather than folded into
+`YtDlpFormatSelector` (which stays focused on AV format selection). Confirmed against two real
+yt-dlp dumps, not guessed: both fields are an object keyed by language code, each value a list of
+`{url, ext, name, ...}` entries (one per container format — only `vtt`/`srt` are usable, FFmpeg
+can't parse YouTube's own `srv1`/`srv2`/`srv3`/`json3`/`ttml` timed-text formats directly; `vtt` is
+preferred when both are present, no functional difference — `SubtitlePipeline`'s rect extraction
+already normalizes through the same `AVSubtitleType.SUBTITLE_ASS` path regardless of source codec).
+
+A real video can report 150+ `automatic_captions` languages, nearly all of them YouTube
+auto-translating the one original-language transcript rather than independent recognitions (each
+translated entry's `timedtext` URL carries a `tlang` query param differing from its `lang`).
+Exposing all of them would flood the picker with near-duplicate options, so only two are ever
+surfaced: the original (non-translated) track, labeled "(auto-generated)", plus — only if
+`_settings.Current.Language` differs from the original and a matching translation exists — one
+translated into the app's own UI language, labeled "(auto-generated, translated)". A translated
+entry's `Language` is the translation's *target*, not the `lang` query param it was translated
+from — caught via a failing unit test before shipping (a French translation was otherwise
+mislabeled `en`, since `lang` is always the source language the translation started from).
+
+A yt-dlp `subtitles`/`automatic_captions` dictionary key is not reliably a clean language code —
+confirmed for real: a genuine community-provided caption track can be keyed like
+`en-US-<opaque-id>` when YouTube has multiple named tracks for one language (disambiguated by that
+track's own `name` field, e.g. "English (United States) - Captions"), so `subtitles` entries always
+derive `Language`/`Title` from each entry's own `lang` query param and `name` field, never the
+dictionary key. `automatic_captions` keys, by contrast, are always a plain, reliable language code
+(YouTube never needs the same disambiguation there) — confirmed useful as a fallback for a real
+edge case found via a live/DVR video's real dump: its auto-generated caption entries are delivered
+as an HLS playlist URL with none of the usual `lang`/`name` query params a normal video's
+`timedtext` URL carries, so `BuildAutomaticCaptionSidecar` falls back to the dictionary key
+(`CultureInfo.GetCultureInfo(key).NativeName` when there's no `name` either) rather than leaving
+that entry unlabeled.
+
+`YtDlpResolveResult`/`MediaOpenRequest` thread `SubtitleSidecars` through the same way
+`AudioSidecars` already does, going through the *lazy* pending-sidecar path (not
+`AddSubtitleSidecar`, which is reserved for the eager, attach-to-a-running-session local-file case)
+since a video can expose several caption languages at once and eagerly opening all of them would
+reintroduce the exact "slow open" problem the lazy-audio-sidecar fix already solved.
+
+**A lazy sidecar's pending registration is only retired once its open has genuinely succeeded** —
+`TryOpenPendingSidecar` (audio) and `TryOpenPendingSubtitleSidecar` (subtitle) both used to remove
+the pending entry unconditionally, before attempting the open, so a failed attempt (a translated
+auto-caption's `timedtext` URL that didn't resolve, a not-yet-existent local file, a transient
+network issue) permanently and silently lost the ability to ever route that stream again for the
+rest of the session — confirmed for real: routing a Russian auto-translated caption failed
+silently, and the entry then behaved as if it no longer existed on any later attempt. Both methods
+now defer removing the pending entry until after the open, scan, and seek have all succeeded;
+retrying (e.g. re-selecting the same stream in Options) now genuinely retries the open rather than
+immediately failing via a already-empty pending lookup. Covered by
+`SetSubtitleRoutes_RetryAfterFailedSidecarOpen_SucceedsOnceTheSourceBecomesAvailable`, which points
+a pending sidecar at a file that doesn't exist yet, confirms the first routing attempt fails
+cleanly, creates the file, and confirms a second attempt at the *same* stream id then succeeds —
+confirmed to actually catch the regression by temporarily reverting the fix and watching it fail
+with an empty `SubtitleRoutes` collection.
+
+**`MediaSession.SetSubtitleRoutes` returns `IReadOnlyList<SubtitleRoute>`** (the routes that
+actually got applied) instead of `void`. A route can fail to resolve (an unreachable sidecar,
+confirmed for real by a YouTube `timedtext` request returning HTTP 429 for a translated
+auto-caption) without throwing — the failure is logged and the route is silently dropped from
+`_subtitleRoutes`. Previously `OMP.Ui` had no way to notice this: `OptionsWindow` added the row to
+its own `_subtitleRows` optimistically and never found out the engine had actually rejected it, so
+a failed route just sat there doing nothing with zero on-screen indication (confirmed by a user
+report - "nothing happens"). `OptionsWindow.ReconcileSubtitleRoutes` now compares the returned set
+against `_subtitleRows` after every `SetSubtitleRoutes` call (backgrounded, so this runs via
+`Dispatcher.UIThread.Post` from the worker thread - not the `await`-resumes-on-the-calling-context
+case, since there's no `await` here to resume from), removes any row that didn't actually apply,
+and shows `SubtitleRouteErrorText` (same inline red-text pattern `OpenUrlWindow` already uses for a
+failed resolve, rather than a modal dialog) with a generic "temporarily unavailable, try again"
+message - deliberately generic, not the raw exception text, since the expected failure mode here is
+an external, transient condition (a rate limit), not something the user needs the technical detail
+for.
+
+**`_loggedLandingGenerationBySource` is a `ConcurrentDictionary`, not a plain `Dictionary`** — it's
+written from every source's own demux thread (`LogLandingPositionOnce`, called from `DemuxLoop`),
+so any session with 2+ sources (any sidecar, audio or subtitle) has genuinely concurrent writers.
+A plain `Dictionary` isn't safe for concurrent mutation even across different keys - its internal
+bucket array can corrupt under concurrent writes, confirmed via a real crash surfaced by
+`SubtitleSidecarTests` (an unhandled exception on a background demux thread, intermittent - passed
+most runs, then reliably reproduced once a test routed two sidecar-backed sources in quick
+succession). Same fix shape as `MediaInputSource.Dispose`'s cancellation-aware interrupt check
+earlier in this file: found by real multi-source testing, not by inspection alone.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`

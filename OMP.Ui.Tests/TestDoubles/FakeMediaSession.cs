@@ -61,9 +61,10 @@ internal sealed class FakeMediaSession : IMediaSession
     {
     }
 
-    public void SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes)
-    {
-    }
+    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes) => routes.ToList();
+
+    public SubtitleStream AddSubtitleSidecar(SubtitleSidecarSource sidecar) =>
+        new(SubtitleStreams.Count, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown", IsTextBased: true);
 
     public IReadOnlyList<SubtitleCue> GetActiveSubtitleCues() => [];
 
