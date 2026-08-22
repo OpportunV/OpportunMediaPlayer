@@ -110,6 +110,24 @@
 
                 <Canvas Name="SubtitleOverlay"
                         IsHitTestVisible="False" />
+
+                <StackPanel Name="LoadingIndicator"
+                            IsVisible="False"
+                            IsHitTestVisible="False"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+
+                    <ProgressBar IsIndeterminate="True"
+                                 Width="28"
+                                 Height="28"
+                                 HorizontalAlignment="Center" />
+
+                    <TextBlock Text="{x:Static loc:Strings.MainWindow_OpeningLabel}"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               FontSize="13.5" />
+                </StackPanel>
             </Grid>
 
             <Border Name="OverlayControls"

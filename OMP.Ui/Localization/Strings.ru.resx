@@ -29,6 +29,7 @@
   <data name="MainWindow_OpenFileDialogTitle" xml:space="preserve"><value>Открыть медиафайл</value></data>
   <data name="MainWindow_OpenFileTypeFilterName" xml:space="preserve"><value>Медиафайлы</value></data>
   <data name="MainWindow_NoVideoLabel" xml:space="preserve"><value>Нет видео</value></data>
+  <data name="MainWindow_OpeningLabel" xml:space="preserve"><value>Открытие...</value></data>
   <data name="MainWindow_EmptyStateLabel" xml:space="preserve"><value>Откройте файл или перетащите его сюда</value></data>
   <data name="MainWindow_EmptyStateLabelNoDragDrop" xml:space="preserve"><value>Откройте файл</value></data>
 

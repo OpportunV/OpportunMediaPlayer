@@ -627,6 +627,12 @@ public sealed partial class MainWindow : Window
 
     private async Task<Exception?> OpenSessionAsync(MediaOpenRequest request)
     {
+        var isNetworkSource = UrlType.IsHttpUrl(request.PrimarySource);
+        if (isNetworkSource)
+        {
+            LoadingIndicator.IsVisible = true;
+        }
+
         try
         {
             await Task.Run(() => _mediaSessionRegistry.Open(request));
@@ -635,6 +641,13 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             return ex;
+        }
+        finally
+        {
+            if (isNetworkSource)
+            {
+                LoadingIndicator.IsVisible = false;
+            }
         }
     }
 

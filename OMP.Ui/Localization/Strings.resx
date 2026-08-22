@@ -29,6 +29,7 @@
   <data name="MainWindow_OpenFileDialogTitle" xml:space="preserve"><value>Open media file</value></data>
   <data name="MainWindow_OpenFileTypeFilterName" xml:space="preserve"><value>Media Files</value></data>
   <data name="MainWindow_NoVideoLabel" xml:space="preserve"><value>No video</value></data>
+  <data name="MainWindow_OpeningLabel" xml:space="preserve"><value>Opening...</value></data>
   <data name="MainWindow_EmptyStateLabel" xml:space="preserve"><value>Open a file, or drag and drop it here</value></data>
   <data name="MainWindow_EmptyStateLabelNoDragDrop" xml:space="preserve"><value>Open a file</value></data>
 

@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Services;
 
@@ -38,7 +39,7 @@ public sealed partial class OpenUrlWindow : Window
     {
         var url = UrlTextBox.Text?.Trim();
 
-        if (string.IsNullOrEmpty(url) || !LooksLikeUrl(url))
+        if (string.IsNullOrEmpty(url) || !UrlType.IsHttpUrl(url))
         {
             ShowInlineError(Strings.OpenUrl_InvalidUrlError);
             return;
@@ -88,8 +89,4 @@ public sealed partial class OpenUrlWindow : Window
         CancelButton.IsEnabled = !isBusy;
         BusyPanel.IsVisible = isBusy;
     }
-
-    private static bool LooksLikeUrl(string text) =>
-        Uri.TryCreate(text, UriKind.Absolute, out var uri) &&
-        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 }
