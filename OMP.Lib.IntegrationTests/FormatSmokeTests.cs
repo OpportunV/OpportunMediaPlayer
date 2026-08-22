@@ -9,7 +9,7 @@ public sealed class FormatSmokeTests
     [MemberData(nameof(TestFixtures.AllFormats), MemberType = typeof(TestFixtures))]
     public void Open_EveryTestFixtureFormat_OpensWithoutThrowing(string filePath)
     {
-        var registry = new MediaSessionRegistry(
+        IMediaSessionRegistry registry = new MediaSessionRegistry(
             new PlaybackTuningOptions(),
             NullLoggerFactory.Instance,
             NativeLibraryOptionsFactory.Create());

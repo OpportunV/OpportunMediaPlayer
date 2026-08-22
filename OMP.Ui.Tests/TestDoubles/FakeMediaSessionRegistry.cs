@@ -18,6 +18,12 @@ internal sealed class FakeMediaSessionRegistry : IMediaSessionRegistry
         SessionChanged?.Invoke(this);
     }
 
+    public void Open(MediaOpenRequest request)
+    {
+        LastOpenedFilePath = request.PrimarySource;
+        SessionChanged?.Invoke(this);
+    }
+
     public void Close()
     {
         CloseCallCount++;

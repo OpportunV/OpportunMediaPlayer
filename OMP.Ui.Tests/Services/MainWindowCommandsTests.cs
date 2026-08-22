@@ -1,4 +1,5 @@
 using OMP.Lib;
+using OMP.Lib.Session;
 using OMP.Ui.Services;
 using OMP.Ui.Tests.TestDoubles;
 
@@ -45,7 +46,7 @@ public class MainWindowCommandsTests
     [Fact]
     public void TogglePlayPause_NoCurrentSession_DoesNothing()
     {
-        var registry = new FakeMediaSessionRegistry();
+        IMediaSessionRegistry registry = new FakeMediaSessionRegistry();
         var commands = new MainWindowCommands(registry);
         commands.Attach(new RecordingCommandContext().ToContext());
 

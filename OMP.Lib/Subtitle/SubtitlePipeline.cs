@@ -9,6 +9,8 @@ internal sealed unsafe class SubtitlePipeline : IDisposable
 {
     public int StreamIndex { get; }
 
+    public int SourceId { get; }
+
     public string ZoneId { get; }
 
     private readonly ILogger _logger;
@@ -23,11 +25,12 @@ internal sealed unsafe class SubtitlePipeline : IDisposable
 
     private const double DefaultCueDurationSeconds = 4;
 
-    public SubtitlePipeline(AVFormatContext* formatContext, int streamIndex, string zoneId,
+    public SubtitlePipeline(AVFormatContext* formatContext, int streamIndex, int sourceId, string zoneId,
         ILoggerFactory loggerFactory)
     {
         _logger = loggerFactory.CreateLogger<SubtitlePipeline>();
         StreamIndex = streamIndex;
+        SourceId = sourceId;
         ZoneId = zoneId;
 
         var stream = formatContext->streams[streamIndex];

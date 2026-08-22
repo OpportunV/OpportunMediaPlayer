@@ -299,6 +299,40 @@ correction) when `_videoPipeline is null`; a video session always passes an anch
 disables the correction outright and trusts raw PTS as ground truth for where a seek landed —
 consistent with `ThrottleDemuxAhead`'s own fix above.
 
+**A session can now be built from multiple independent input sources** — one primary (video,
+optionally with its own audio) plus zero or more audio-only sidecar sources (`OMP.Lib/Session
+/MediaInputSource.cs`), the shape a web source needs when yt-dlp exposes separate per-language
+audio URLs instead of one muxed file. Local-file `Open` is unchanged — it's just the trivial
+"one primary source, zero sidecars" case of the same `MediaSession` constructor, not a parallel
+code path. Each `MediaInputSource` owns its own `AVFormatContext*`, its own `FormatSync` lock, its
+own demux thread, and its own `EndOfStreamTracker` — session EOF is now the AND of every source's
+tracker, combined with the existing `HasPendingPlayableContent()` tolerance. The mp3/wav/aac
+PTS-baseline-anchor policy above generalizes to a per-source `IsSourceAudioOnly` check (true for
+every sidecar unconditionally, and for the primary exactly when `_videoPipeline is null` — the
+same expression as before, just asked once per source instead of once for the whole session) with
+no new policy invented; each `MediaInputSource` keeps its own PTS-baseline-offset dictionary keyed
+by *local* stream index, which is what actually fixes the id-collision bug a naive single shared
+dictionary would have had (every sidecar's own stream 0 would otherwise collide as one key).
+`Seek()` now loops over every source, seeking each independently and best-effort — one sidecar
+failing to seek is logged and does not abort the others, matching the same "don't let one bad
+source take down the rest" philosophy as the `AudioPipeline` construction try/catch in
+`SetAudioRoutes`. A known, deliberately-accepted consequence: `SetSpeed` still calls
+`Seek(CurrentTime)` (see Playback speed above), so a speed change on a session with N sidecars now
+does N independent `av_seek_frame` calls — real cost for a web source, not yet solved, flagged
+rather than hidden.
+
+`AudioStream.Id`/`SubtitleStream.Id` are session-assigned surrogate ids, not raw FFmpeg stream
+indices, precisely because a raw index is only unique *within one `AVFormatContext`* — two
+different sidecar sources each reporting their own stream 0 would otherwise be indistinguishable.
+`MediaSession.BuildAudioCatalog` remaps every source's locally-scanned streams to a global id and
+records `(SourceId, LocalStreamIndex)` in `_audioStreamLocations`, consulted by `SetAudioRoutes`
+before constructing an `AudioPipeline`. `AudioScanner`/`SubtitleScanner` themselves are unchanged —
+still a correct, reusable "scan one context" unit. `AudioRouteMatcher` (persisted-preference
+restore) needed zero changes, since it already matched by Title+Language, never by `Id`. A bare
+sidecar CDN URL carries no container metadata worth trusting, so `AudioSidecarSource.Language`/
+`Title` (supplied by the caller, who already has them from wherever the URL was resolved) are
+preferred over whatever the scanner finds, rather than trusting an almost-certainly-absent tag.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`
@@ -306,6 +340,12 @@ Playback worker threads (demux/audio/video/render) are identified by `PipelineWo
 identity and doubles as a tag for future structured logging. Don't reach for empty
 subclass-per-role types to get "stronger" identity than an enum already provides; that's
 inheritance used for labeling, not behavior, and is the pattern to avoid here.
+
+A session with sidecar sources runs N demux threads, not one — `PipelineWorker.Start` takes an
+optional `threadName` override (defaulting to `role.ToString()` when omitted, so every other call
+site is unaffected) so each source's demux thread gets a distinct `Thread.Name` (`"Demux-0"`,
+`"Demux-1"`, ...) instead of N threads all named identically, which would otherwise make a
+debugger/thread-dump session ambiguous about which thread belongs to which source.
 
 `PlaybackClock` locks its state with a plain `Lock`/short critical section (field reads/writes,
 no I/O, no blocking, no nested locks) — that's the correct, unremarkable use of a lock, not a

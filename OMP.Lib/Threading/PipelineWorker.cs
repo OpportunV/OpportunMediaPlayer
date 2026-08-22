@@ -7,9 +7,9 @@ internal sealed class PipelineWorker(PipelineWorkerRole role, CancellationToken 
     private readonly ManualResetEventSlim _resumeGate = new(true);
     private Thread? _thread;
 
-    public void Start(Action<PipelineWorker> loopBody)
+    public void Start(Action<PipelineWorker> loopBody, string? threadName = null)
     {
-        _thread = new Thread(() => loopBody(this)) { IsBackground = true, Name = role.ToString() };
+        _thread = new Thread(() => loopBody(this)) { IsBackground = true, Name = threadName ?? role.ToString() };
         _thread.Start();
     }
 
