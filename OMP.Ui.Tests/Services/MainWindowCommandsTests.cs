@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using OMP.Lib;
 using OMP.Lib.Session;
 using OMP.Ui.Services;
@@ -8,113 +9,113 @@ namespace OMP.Ui.Tests.Services;
 public class MainWindowCommandsTests
 {
     [Fact]
-    public void TogglePlayPause_WhenPaused_PlaysAndUpdatesContext()
+    public async Task TogglePlayPause_WhenPaused_PlaysAndUpdatesContext()
     {
         var (commands, session, context) = CreateAttached();
 
-        commands.TogglePlayPause();
+        await commands.TogglePlayPauseAsync();
 
         Assert.Equal(1, session.PlayCallCount);
         Assert.True(context.IsPlaying);
     }
 
     [Fact]
-    public void TogglePlayPause_WhenPlaying_PausesAndUpdatesContext()
+    public async Task TogglePlayPause_WhenPlaying_PausesAndUpdatesContext()
     {
         var (commands, session, context) = CreateAttached();
         context.IsPlaying = true;
 
-        commands.TogglePlayPause();
+        await commands.TogglePlayPauseAsync();
 
         Assert.Equal(1, session.PauseCallCount);
         Assert.False(context.IsPlaying);
     }
 
     [Fact]
-    public void TogglePlayPause_AtEndOfDuration_SeeksToZeroBeforePlaying()
+    public async Task TogglePlayPause_AtEndOfDuration_SeeksToZeroBeforePlaying()
     {
         var (commands, session, _) = CreateAttached();
         session.Duration = TimeSpan.FromSeconds(60);
         session.CurrentTime = TimeSpan.FromSeconds(60);
 
-        commands.TogglePlayPause();
+        await commands.TogglePlayPauseAsync();
 
         Assert.Equal(TimeSpan.Zero, session.LastSeekTarget);
         Assert.Equal(1, session.PlayCallCount);
     }
 
     [Fact]
-    public void TogglePlayPause_NoCurrentSession_DoesNothing()
+    public async Task TogglePlayPause_NoCurrentSession_DoesNothing()
     {
         IMediaSessionRegistry registry = new FakeMediaSessionRegistry();
-        var commands = new MainWindowCommands(registry);
+        var commands = new MainWindowCommands(registry, NullLogger<MainWindowCommands>.Instance);
         commands.Attach(new RecordingCommandContext().ToContext());
 
-        commands.TogglePlayPause();
+        await commands.TogglePlayPauseAsync();
     }
 
     [Fact]
-    public void StepBack_CallsSessionStepWithNegativeFiveSeconds()
+    public async Task StepBack_CallsSessionStepWithNegativeFiveSeconds()
     {
         var (commands, session, _) = CreateAttached();
 
-        commands.StepBack();
+        await commands.StepBackAsync();
 
         Assert.Equal(TimeSpan.FromSeconds(-5), session.LastStepOffset);
     }
 
     [Fact]
-    public void StepForward_CallsSessionStepWithPositiveFiveSeconds()
+    public async Task StepForward_CallsSessionStepWithPositiveFiveSeconds()
     {
         var (commands, session, _) = CreateAttached();
 
-        commands.StepForward();
+        await commands.StepForwardAsync();
 
         Assert.Equal(TimeSpan.FromSeconds(5), session.LastStepOffset);
     }
 
     [Fact]
-    public void IncreaseSpeed_AppliesNextPresetAboveCurrent()
+    public async Task IncreaseSpeed_AppliesNextPresetAboveCurrent()
     {
         var (commands, session, context) = CreateAttached();
         session.SetSpeed(1.0);
 
-        commands.IncreaseSpeed();
+        await commands.IncreaseSpeedAsync();
 
         Assert.Equal(PlaybackSpeedPresets.Next(1.0), session.Speed);
         Assert.Equal(session.Speed, context.LastSpeedDisplay);
     }
 
     [Fact]
-    public void DecreaseSpeed_AppliesPreviousPresetBelowCurrent()
+    public async Task DecreaseSpeed_AppliesPreviousPresetBelowCurrent()
     {
         var (commands, session, context) = CreateAttached();
         session.SetSpeed(1.0);
 
-        commands.DecreaseSpeed();
+        await commands.DecreaseSpeedAsync();
 
         Assert.Equal(PlaybackSpeedPresets.Previous(1.0), session.Speed);
         Assert.Equal(session.Speed, context.LastSpeedDisplay);
     }
 
     [Fact]
-    public void SetSpeed_AppliesGivenSpeedAndUpdatesDisplay()
+    public async Task SetSpeed_AppliesGivenSpeedAndUpdatesDisplay()
     {
         var (commands, session, context) = CreateAttached();
 
-        commands.SetSpeed(1.75);
+        await commands.ApplySpeedAsync(1.75);
 
         Assert.Equal(1.75, session.Speed);
         Assert.Equal(1.75, context.LastSpeedDisplay);
     }
 
     [Fact]
-    public void ResetSpeed_SetsSpeedToOne()
+    public async Task ResetSpeed_SetsSpeedToOne()
     {
         var (commands, session, _) = CreateAttached();
         session.SetSpeed(2.0);
 
-        commands.ResetSpeed();
+        await commands.ApplySpeedAsync(1.0);
 
         Assert.Equal(1.0, session.Speed);
     }
@@ -216,7 +217,7 @@ public class MainWindowCommandsTests
     {
         var session = new FakeMediaSession();
         var registry = new FakeMediaSessionRegistry { Current = session };
-        var commands = new MainWindowCommands(registry);
+        var commands = new MainWindowCommands(registry, NullLogger<MainWindowCommands>.Instance);
         var context = new RecordingCommandContext();
         commands.Attach(context.ToContext());
         return (commands, session, context);

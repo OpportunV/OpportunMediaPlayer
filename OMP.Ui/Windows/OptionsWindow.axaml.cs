@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,6 +11,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
@@ -33,6 +35,7 @@ public sealed partial class OptionsWindow : Window
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IUserSettingsService _settings;
     private readonly IWindowFactory _windowFactory;
+    private readonly ILogger<OptionsWindow> _logger;
     private readonly ObservableCollection<AudioRouteRow> _audioRouteRows = [];
     private readonly ObservableCollection<SubtitleZone> _subtitleZones = [];
     private readonly ObservableCollection<SubtitleRouteRow> _subtitleRows = [];
@@ -42,13 +45,14 @@ public sealed partial class OptionsWindow : Window
     private readonly List<SubtitleStreamOption> _subtitleStreamOptions = [];
 
     public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings,
-        IWindowFactory windowFactory)
+        IWindowFactory windowFactory, ILogger<OptionsWindow> logger)
     {
         InitializeComponent();
 
         _mediaSessionRegistry = mediaSessionRegistry;
         _settings = settings;
         _windowFactory = windowFactory;
+        _logger = logger;
 
         var session = _mediaSessionRegistry.Current;
         _streamOptions.AddRange((session?.AudioStreams ?? []).Select(stream => new AudioStreamOption(stream)));
@@ -268,7 +272,7 @@ public sealed partial class OptionsWindow : Window
 
     private void OnRouteStreamChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (((Control)sender!).DataContext is not AudioRouteRow)
+        if (((Control)sender!).DataContext is not AudioRouteRow || e.RemovedItems.Count == 0)
         {
             return;
         }
@@ -493,7 +497,22 @@ public sealed partial class OptionsWindow : Window
 
     private void ApplyAndPersistRoutes()
     {
-        _mediaSessionRegistry.Current?.SetAudioRoutes(_audioRouteRows.Select(row => row.Route));
+        var session = _mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            var routes = _audioRouteRows.Select(row => row.Route).ToList();
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    session.SetAudioRoutes(routes);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Applying audio routes failed.");
+                }
+            });
+        }
 
         _settings.Current.PreferredAudioTracks = _audioRouteRows
             .Select(row => new PreferredAudioTrackSetting

@@ -169,7 +169,7 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             }
 
             var position = e.GetPosition(PreviewCanvas);
-            var (newLeft, newTop) = SubtitleZoneGeometry.ClampPosition(
+            var newPosition = SubtitleZoneGeometry.ClampPosition(
                 _dragStartLeft + (position.X - _dragStartPointerPosition.X),
                 _dragStartTop + (position.Y - _dragStartPointerPosition.Y),
                 ZoneBorder.Width,
@@ -177,10 +177,10 @@ public sealed partial class SubtitleZoneEditorWindow : Window
                 CanvasWidth,
                 PreviewCanvas.Height);
 
-            Canvas.SetLeft(ZoneBorder, newLeft);
-            Canvas.SetTop(ZoneBorder, newTop);
-            _zone.X = newLeft / CanvasWidth;
-            _zone.Y = newTop / PreviewCanvas.Height;
+            Canvas.SetLeft(ZoneBorder, newPosition.X);
+            Canvas.SetTop(ZoneBorder, newPosition.Y);
+            _zone.X = newPosition.X / CanvasWidth;
+            _zone.Y = newPosition.Y / PreviewCanvas.Height;
             UpdateResizeHandlePosition();
         };
         ZoneBorder.PointerReleased += (_, e) =>
@@ -211,7 +211,7 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             var position = e.GetPosition(PreviewCanvas);
             var left = Canvas.GetLeft(ZoneBorder);
             var top = Canvas.GetTop(ZoneBorder);
-            var (newWidth, newHeight) = SubtitleZoneGeometry.ClampSize(
+            var newSize = SubtitleZoneGeometry.ClampSize(
                 _dragStartWidth + (position.X - _dragStartPointerPosition.X),
                 _dragStartHeight + (position.Y - _dragStartPointerPosition.Y),
                 MinZoneSizePx,
@@ -220,10 +220,10 @@ public sealed partial class SubtitleZoneEditorWindow : Window
                 CanvasWidth,
                 PreviewCanvas.Height);
 
-            ZoneBorder.Width = newWidth;
-            ZoneBorder.Height = newHeight;
-            _zone.Width = newWidth / CanvasWidth;
-            _zone.Height = newHeight / PreviewCanvas.Height;
+            ZoneBorder.Width = newSize.Width;
+            ZoneBorder.Height = newSize.Height;
+            _zone.Width = newSize.Width / CanvasWidth;
+            _zone.Height = newSize.Height / PreviewCanvas.Height;
             UpdateResizeHandlePosition();
         };
         ResizeHandle.PointerReleased += (_, e) =>

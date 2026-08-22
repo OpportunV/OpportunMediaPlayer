@@ -1,10 +1,13 @@
 using System;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OMP.Lib;
 using OMP.Lib.Session;
 
 namespace OMP.Ui.Services;
 
-internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistry) : IMainWindowCommands
+internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegistry, ILogger<MainWindowCommands> logger)
+    : IMainWindowCommands
 {
     private static readonly TimeSpan _seekStep = TimeSpan.FromSeconds(5);
     private MainWindowCommandContext? _context;
@@ -15,68 +18,19 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         _context = context;
     }
 
-    public void TogglePlayPause()
-    {
-        var session = mediaSessionRegistry.Current;
+    public void TogglePlayPause() => _ = TogglePlayPauseAsync();
 
-        if (session == null || _context == null)
-        {
-            return;
-        }
+    public void StepBack() => _ = StepBackAsync();
 
-        if (_context.GetIsPlaying())
-        {
-            session.Pause();
-            _context.SetIsPlaying(false);
-            return;
-        }
+    public void StepForward() => _ = StepForwardAsync();
 
-        if (session.Duration > TimeSpan.Zero && session.CurrentTime >= session.Duration)
-        {
-            session.Seek(TimeSpan.Zero);
-        }
+    public void IncreaseSpeed() => _ = IncreaseSpeedAsync();
 
-        session.Play();
-        _context.SetIsPlaying(true);
-    }
+    public void DecreaseSpeed() => _ = DecreaseSpeedAsync();
 
-    public void StepBack()
-    {
-        mediaSessionRegistry.Current?.Step(-_seekStep);
-    }
+    public void SetSpeed(double speed) => _ = ApplySpeedAsync(speed);
 
-    public void StepForward()
-    {
-        mediaSessionRegistry.Current?.Step(_seekStep);
-    }
-
-    public void IncreaseSpeed()
-    {
-        var session = mediaSessionRegistry.Current;
-        if (session != null)
-        {
-            ApplySpeed(PlaybackSpeedPresets.Next(session.Speed));
-        }
-    }
-
-    public void DecreaseSpeed()
-    {
-        var session = mediaSessionRegistry.Current;
-        if (session != null)
-        {
-            ApplySpeed(PlaybackSpeedPresets.Previous(session.Speed));
-        }
-    }
-
-    public void SetSpeed(double speed)
-    {
-        ApplySpeed(speed);
-    }
-
-    public void ResetSpeed()
-    {
-        ApplySpeed(1.0);
-    }
+    public void ResetSpeed() => _ = ApplySpeedAsync(1.0);
 
     public void SetMasterVolume(double volume)
     {
@@ -124,7 +78,81 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
         }
     }
 
-    private void ApplySpeed(double speed)
+    internal async Task TogglePlayPauseAsync()
+    {
+        var session = mediaSessionRegistry.Current;
+
+        if (session == null || _context == null)
+        {
+            return;
+        }
+
+        if (_context.GetIsPlaying())
+        {
+            session.Pause();
+            _context.SetIsPlaying(false);
+            return;
+        }
+
+        try
+        {
+            if (session.Duration > TimeSpan.Zero && session.CurrentTime >= session.Duration)
+            {
+                await Task.Run(() => session.Seek(TimeSpan.Zero));
+            }
+
+            session.Play();
+            _context.SetIsPlaying(true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "TogglePlayPause failed.");
+        }
+    }
+
+    internal async Task StepBackAsync()
+    {
+        try
+        {
+            await Task.Run(() => mediaSessionRegistry.Current?.Step(-_seekStep));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "StepBack failed.");
+        }
+    }
+
+    internal async Task StepForwardAsync()
+    {
+        try
+        {
+            await Task.Run(() => mediaSessionRegistry.Current?.Step(_seekStep));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "StepForward failed.");
+        }
+    }
+
+    internal async Task IncreaseSpeedAsync()
+    {
+        var session = mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            await ApplySpeedAsync(PlaybackSpeedPresets.Next(session.Speed));
+        }
+    }
+
+    internal async Task DecreaseSpeedAsync()
+    {
+        var session = mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            await ApplySpeedAsync(PlaybackSpeedPresets.Previous(session.Speed));
+        }
+    }
+
+    internal async Task ApplySpeedAsync(double speed)
     {
         var session = mediaSessionRegistry.Current;
         if (session == null)
@@ -132,8 +160,15 @@ internal sealed class MainWindowCommands(IMediaSessionRegistry mediaSessionRegis
             return;
         }
 
-        session.SetSpeed(speed);
-        _context?.SetSpeedDisplay(session.Speed);
+        try
+        {
+            await Task.Run(() => session.SetSpeed(speed));
+            _context?.SetSpeedDisplay(session.Speed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "SetSpeed failed.");
+        }
     }
 
     private void AdjustMasterVolume(double delta)

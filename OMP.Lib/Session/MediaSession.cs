@@ -65,7 +65,10 @@ internal sealed unsafe class MediaSession : IMediaSession
     private int _suppressedLoopErrors;
 
     private readonly List<MediaInputSource> _sources = [];
+    private readonly Dictionary<int, int> _loggedLandingGenerationBySource = [];
     private readonly Dictionary<int, (int SourceId, int LocalStreamIndex)> _audioStreamLocations = [];
+    private readonly Dictionary<int, AudioSidecarSource> _pendingSidecars = [];
+    private readonly Dictionary<int, int> _pendingSidecarStreamIds = [];
 
     private readonly List<AudioPipeline> _audioPipelines = [];
     private readonly List<AudioRoute> _audioRoutes = [];
@@ -96,6 +99,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly Stopwatch _fpsStopwatch = Stopwatch.StartNew();
     private readonly Stopwatch _syncLogStopwatch = Stopwatch.StartNew();
     private bool _isPlaying;
+    private int _videoStaleDropStreak;
+    private readonly Stopwatch _videoStaleDropStopwatch = new();
     private double? _pendingSeekTargetSeconds;
     private double _lastSeekTargetSeconds;
     private int _seekGeneration;
@@ -136,26 +141,18 @@ internal sealed unsafe class MediaSession : IMediaSession
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
         var primary = new MediaInputSource(
-            0, request.PrimarySource, loggerFactory, cancellationToken: _cancellationTokenSource.Token);
+            0,
+            request.PrimarySource,
+            loggerFactory,
+            cancellationToken: _cancellationTokenSource.Token,
+            headers: request.PrimaryHeaders);
         _sources.Add(primary);
 
+        var nextPendingSourceId = 1;
         foreach (var sidecar in request.AudioSidecars)
         {
-            try
-            {
-                _sources.Add(
-                    new MediaInputSource(
-                        _sources.Count,
-                        sidecar.Url,
-                        loggerFactory,
-                        sidecar.Language,
-                        sidecar.Title,
-                        _cancellationTokenSource.Token));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not open audio sidecar {Url}; skipping.", sidecar.Url);
-            }
+            _pendingSidecars[nextPendingSourceId] = sidecar;
+            nextPendingSourceId++;
         }
 
         FileName = Path.GetFileName(request.PrimarySource);
@@ -229,73 +226,95 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes)
     {
-        var wasPlaying = _isPlaying;
-        Pause();
-        _audioPipelines.ForEach(p => p.Flush());
-
-        ClearAudioPipelines();
-
-        foreach (var route in routes)
+        // Guarded by _seekSync (shared with Seek()) because both mutate _audioPipelines/_sources.
+        // Now that OMP.Ui backgrounds this call (see the UI-freeze fix), nothing on the calling
+        // side serializes overlapping calls the way the UI thread used to for free - without this
+        // lock, two routes committed close together (or a route committed during a seek) could
+        // race on the same collections and pipeline lifecycle.
+        lock (_seekSync)
         {
-            if (!_audioStreamLocations.TryGetValue(route.Stream.Id, out var location))
+            var wasPlaying = _isPlaying;
+            Pause();
+            _audioPipelines.ForEach(p => p.Flush());
+
+            ClearAudioPipelines();
+
+            var openedLazySource = false;
+
+            foreach (var route in routes)
             {
-                _logger.LogError(
-                    "Could not resolve audio stream {StreamId} to a source; skipping route to '{FriendlyName}'.",
-                    route.Stream.Id,
+                if (!_audioStreamLocations.TryGetValue(route.Stream.Id, out var location))
+                {
+                    if (TryOpenPendingSidecar(route.Stream.Id, out location))
+                    {
+                        openedLazySource = true;
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            "Could not resolve audio stream {StreamId} to a source; skipping route to '{FriendlyName}'.",
+                            route.Stream.Id,
+                            route.Output.FriendlyName);
+                        continue;
+                    }
+                }
+
+                var source = _sources.First(s => s.SourceId == location.SourceId);
+
+                AudioPipeline pipeline;
+                lock (source.FormatSync)
+                {
+                    try
+                    {
+                        pipeline = new AudioPipeline(
+                            source.FormatContext,
+                            location.LocalStreamIndex,
+                            source.SourceId,
+                            route.Output,
+                            _audioBufferDurationSeconds,
+                            _audioPacketChannelCapacity,
+                            () => Volatile.Read(ref _seekGeneration),
+                            () => _clock.CurrentSeconds,
+                            _loggerFactory,
+                            _cancellationTokenSource.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Could not route '{Title}' [{Language}] -> '{FriendlyName}'; skipping this route.",
+                            route.Stream.Title,
+                            route.Stream.Language,
+                            route.Output.FriendlyName);
+                        continue;
+                    }
+                }
+
+                _audioRoutes.Add(route);
+                _audioPipelines.Add(pipeline);
+
+                _logger.LogDebug(
+                    "Audio route: '{Title}' [{Language}] -> '{FriendlyName}'.",
+                    route.Stream.Title,
+                    route.Stream.Language,
                     route.Output.FriendlyName);
-                continue;
             }
 
-            var source = _sources[location.SourceId];
+            _logger.LogInformation("Set {RouteCount} audio route(s).", _audioRoutes.Count);
 
-            AudioPipeline pipeline;
-            lock (source.FormatSync)
+            _audioPipelines.ForEach(p => p.SetSpeed(Speed));
+            ApplyVolumeToPipelines();
+            ApplyDelayToPipelines();
+
+            if (openedLazySource)
             {
-                try
-                {
-                    pipeline = new AudioPipeline(
-                        source.FormatContext,
-                        location.LocalStreamIndex,
-                        source.SourceId,
-                        route.Output,
-                        _audioBufferDurationSeconds,
-                        _audioPacketChannelCapacity,
-                        () => Volatile.Read(ref _seekGeneration),
-                        () => _clock.CurrentSeconds,
-                        _loggerFactory,
-                        _cancellationTokenSource.Token);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Could not route '{Title}' [{Language}] -> '{FriendlyName}'; skipping this route.",
-                        route.Stream.Title,
-                        route.Stream.Language,
-                        route.Output.FriendlyName);
-                    continue;
-                }
+                _pendingSeekTargetSeconds = CurrentTime.TotalSeconds;
             }
 
-            _audioRoutes.Add(route);
-            _audioPipelines.Add(pipeline);
-
-            _logger.LogDebug(
-                "Audio route: '{Title}' [{Language}] -> '{FriendlyName}'.",
-                route.Stream.Title,
-                route.Stream.Language,
-                route.Output.FriendlyName);
-        }
-
-        _logger.LogInformation("Set {RouteCount} audio route(s).", _audioRoutes.Count);
-
-        _audioPipelines.ForEach(p => p.SetSpeed(Speed));
-        ApplyVolumeToPipelines();
-        ApplyDelayToPipelines();
-
-        if (wasPlaying)
-        {
-            Play();
+            if (wasPlaying)
+            {
+                Play();
+            }
         }
     }
 
@@ -451,7 +470,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             DrainPacketChannel(_subtitleChannel);
             var seekTargetSeconds = Math.Max(0, targetSeconds - SeekLookbackSeconds);
 
-            var anySeeked = false;
+            var seekedSourceIds = new HashSet<int>();
 
             foreach (var source in _sources)
             {
@@ -463,28 +482,41 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 bool seeked;
                 int seekResult;
+                bool seekTimedOut;
                 lock (source.FormatSync)
                 {
                     seeked = source.TrySeek(
-                        seekTargetSeconds, referenceStreamIndex.Value, IsSourceAudioOnly(source), out seekResult);
+                        seekTargetSeconds, referenceStreamIndex.Value, IsSourceAudioOnly(source),
+                        out seekResult, out seekTimedOut);
                 }
 
                 if (!seeked)
                 {
-                    _logger.LogWarning(
-                        "Seek to {TargetSeconds:F3}s failed for source {SourceId}: {Error}.",
-                        targetSeconds,
-                        source.SourceId,
-                        FFmpegError.Describe(seekResult));
+                    if (seekTimedOut)
+                    {
+                        _logger.LogWarning(
+                            "Seek to {TargetSeconds:F3}s timed out for source {SourceId} and was aborted.",
+                            targetSeconds,
+                            source.SourceId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Seek to {TargetSeconds:F3}s failed for source {SourceId}: {Error}.",
+                            targetSeconds,
+                            source.SourceId,
+                            FFmpegError.Describe(seekResult));
+                    }
+
                     continue;
                 }
 
-                anySeeked = true;
+                seekedSourceIds.Add(source.SourceId);
                 source.ResetPtsBaseline(IsSourceAudioOnly(source) ? seekTargetSeconds : 0);
                 source.EndOfStreamTracker.MarkStreamReadable();
             }
 
-            if (anySeeked)
+            if (seekedSourceIds.Count > 0)
             {
                 _clock.Rebase(targetSeconds);
                 _pendingSeekTargetSeconds = targetSeconds;
@@ -492,12 +524,22 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 _audioPipelines.ForEach(pipeline =>
                 {
-                    var anchorSeconds = IsSourceAudioOnly(_sources[pipeline.SourceId]) ? seekTargetSeconds : 0;
+                    if (!seekedSourceIds.Contains(pipeline.SourceId))
+                    {
+                        return;
+                    }
+
+                    var pipelineSource = _sources.First(s => s.SourceId == pipeline.SourceId);
+                    var anchorSeconds = IsSourceAudioOnly(pipelineSource) ? seekTargetSeconds : 0;
                     pipeline.Flush();
                     pipeline.ResetClock(targetSeconds, anchorSeconds);
                 });
-                _videoPipeline?.Flush();
-                _subtitlePipelines.ForEach(p => p.Flush());
+
+                if (seekedSourceIds.Contains(PrimarySource.SourceId))
+                {
+                    _videoPipeline?.Flush();
+                    _subtitlePipelines.ForEach(p => p.Flush());
+                }
             }
 
             if (wasPlaying)
@@ -509,7 +551,13 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void SetSpeed(double speed)
     {
-        _clock.SetSpeed(Math.Clamp(speed, PlaybackSpeedLimits.Min, PlaybackSpeedLimits.Max));
+        var clampedSpeed = Math.Clamp(speed, PlaybackSpeedLimits.Min, PlaybackSpeedLimits.Max);
+        if (clampedSpeed.Equals(Speed))
+        {
+            return;
+        }
+
+        _clock.SetSpeed(clampedSpeed);
         _audioPipelines.ForEach(p => p.SetSpeed(Speed));
         Seek(CurrentTime);
 
@@ -566,7 +614,68 @@ internal sealed unsafe class MediaSession : IMediaSession
             }
         }
 
+        foreach (var (sourceId, sidecar) in _pendingSidecars)
+        {
+            var globalId = nextId++;
+            _pendingSidecarStreamIds[globalId] = sourceId;
+            result.Add(new AudioStream(globalId, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown"));
+        }
+
         return result;
+    }
+
+    private bool TryOpenPendingSidecar(int globalStreamId, out (int SourceId, int LocalStreamIndex) location)
+    {
+        if (!_pendingSidecarStreamIds.TryGetValue(globalStreamId, out var sourceId) ||
+            !_pendingSidecars.Remove(sourceId, out var sidecar))
+        {
+            location = default;
+            return false;
+        }
+
+        _pendingSidecarStreamIds.Remove(globalStreamId);
+
+        MediaInputSource source;
+        try
+        {
+            source = new MediaInputSource(
+                sourceId,
+                sidecar.Url,
+                _loggerFactory,
+                sidecar.Language,
+                sidecar.Title,
+                _cancellationTokenSource.Token,
+                sidecar.Headers);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not open audio sidecar {Url}; skipping.", sidecar.Url);
+            location = default;
+            return false;
+        }
+
+        var localStream = new AudioScanner(_loggerFactory).GetAudioStreams(source.FormatContext).FirstOrDefault();
+        if (localStream is null)
+        {
+            _logger.LogWarning("Audio sidecar {Url} has no audio stream; skipping.", sidecar.Url);
+            source.Dispose();
+            location = default;
+            return false;
+        }
+
+        var seekTargetSeconds = Math.Max(0, CurrentTime.TotalSeconds - SeekLookbackSeconds);
+        lock (source.FormatSync)
+        {
+            source.TrySeek(seekTargetSeconds, localStream.Id, isAudioOnly: true, out _, out _);
+        }
+
+        source.ResetPtsBaseline(seekTargetSeconds);
+        _sources.Add(source);
+        source.DemuxWorker.Start(worker => DemuxLoop(source, worker), $"{PipelineWorkerRole.Demux}-{source.SourceId}");
+
+        location = (sourceId, localStream.Id);
+        _audioStreamLocations[globalStreamId] = location;
+        return true;
     }
 
     private bool IsSourceAudioOnly(MediaInputSource source) => !(source.IsPrimary && _videoPipeline is not null);
@@ -586,6 +695,9 @@ internal sealed unsafe class MediaSession : IMediaSession
         var packet = ffmpeg.av_packet_alloc();
 
         var cancellationToken = _cancellationTokenSource.Token;
+        var consecutiveReadFailures = 0;
+        var suppressedReadFailures = 0;
+        var readFailureLogStopwatch = Stopwatch.StartNew();
 
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
@@ -593,6 +705,8 @@ internal sealed unsafe class MediaSession : IMediaSession
             {
                 break;
             }
+
+            source.ArmInterruptDeadline();
 
             int readResult;
             lock (source.FormatSync)
@@ -602,17 +716,39 @@ internal sealed unsafe class MediaSession : IMediaSession
 
             if (readResult < 0)
             {
-                _logger.LogWarning(
-                    "Demux read failed for source {SourceId} at generation {Generation}: {Error} ({Code}).",
-                    source.SourceId,
-                    Volatile.Read(ref _seekGeneration),
-                    FFmpegError.Describe(readResult),
-                    readResult);
-                source.EndOfStreamTracker.MarkEndOfStream();
-                worker.Pause();
+                var timedOut = source.ConsumeInterruptFired();
+
+                if (readResult == ffmpeg.AVERROR_EOF)
+                {
+                    _logger.LogDebug("Reached end of stream reading source {SourceId}.", source.SourceId);
+                    source.EndOfStreamTracker.MarkEndOfStream();
+                    worker.Pause();
+                    continue;
+                }
+
+                consecutiveReadFailures++;
+
+                if (consecutiveReadFailures == 1)
+                {
+                    LogDemuxReadFailure(source, timedOut, readResult, suppressedCount: 0);
+                    readFailureLogStopwatch.Restart();
+                }
+                else if (readFailureLogStopwatch.ElapsedMilliseconds >= LoopErrorLogIntervalMs)
+                {
+                    LogDemuxReadFailure(source, timedOut, readResult, suppressedReadFailures);
+                    suppressedReadFailures = 0;
+                    readFailureLogStopwatch.Restart();
+                }
+                else
+                {
+                    suppressedReadFailures++;
+                }
+
+                Thread.Sleep(100);
                 continue;
             }
 
+            consecutiveReadFailures = 0;
             source.EndOfStreamTracker.MarkStreamReadable();
 
             var streamIndex = packet->stream_index;
@@ -624,6 +760,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                 var packetSeconds = packet->pts * ffmpeg.av_q2d(source.FormatContext->streams[streamIndex]->time_base);
                 var baselineOffset = source.GetOrDetectPtsBaselineOffset(streamIndex, packetSeconds);
 
+                LogLandingPositionOnce(source, streamIndex, packetSeconds + baselineOffset, generation);
                 ThrottleDemuxAhead(packetSeconds + baselineOffset, generation, worker);
             }
 
@@ -653,6 +790,50 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         ffmpeg.av_packet_free(&packet);
         _logger.LogDebug("{Role} worker stopping for source {SourceId}.", worker.Role, source.SourceId);
+    }
+
+    private void LogDemuxReadFailure(MediaInputSource source, bool timedOut, int readResult, int suppressedCount)
+    {
+        if (timedOut)
+        {
+            _logger.LogWarning(
+                "Demux read timed out for source {SourceId} at generation {Generation} and was aborted; " +
+                "retrying ({SuppressedCount} further failure(s) suppressed since last log).",
+                source.SourceId,
+                Volatile.Read(ref _seekGeneration),
+                suppressedCount);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Demux read failed for source {SourceId} at generation {Generation}: {Error} ({Code}); " +
+                "retrying ({SuppressedCount} further failure(s) suppressed since last log).",
+                source.SourceId,
+                Volatile.Read(ref _seekGeneration),
+                FFmpegError.Describe(readResult),
+                readResult,
+                suppressedCount);
+        }
+    }
+
+    private void LogLandingPositionOnce(MediaInputSource source, int streamIndex, double packetSeconds, int generation)
+    {
+        if (_loggedLandingGenerationBySource.GetValueOrDefault(source.SourceId, -1) == generation)
+        {
+            return;
+        }
+
+        _loggedLandingGenerationBySource[source.SourceId] = generation;
+
+        _logger.LogDebug(
+            "Source {SourceId} stream {StreamIndex}: first packet after seek generation {Generation} landed at " +
+            "{PacketSeconds:F3}s (target was {TargetSeconds:F3}s, gap {GapSeconds:F3}s).",
+            source.SourceId,
+            streamIndex,
+            generation,
+            packetSeconds,
+            _lastSeekTargetSeconds,
+            packetSeconds - _lastSeekTargetSeconds);
     }
 
     private void ThrottleDemuxAhead(double packetSeconds, int generation, PipelineWorker worker)
@@ -775,6 +956,12 @@ internal sealed unsafe class MediaSession : IMediaSession
 
                 if (leadSeconds < -MaxFrameLagSeconds)
                 {
+                    if (_videoStaleDropStreak == 0)
+                    {
+                        _videoStaleDropStopwatch.Restart();
+                    }
+
+                    _videoStaleDropStreak++;
                     videoPipeline.Pop();
                     continue;
                 }
@@ -783,6 +970,15 @@ internal sealed unsafe class MediaSession : IMediaSession
                 {
                     Thread.Yield();
                     continue;
+                }
+
+                if (_videoStaleDropStreak > 0)
+                {
+                    _logger.LogDebug(
+                        "Video caught up after dropping {DroppedCount} stale frame(s) over {ElapsedMs}ms.",
+                        _videoStaleDropStreak,
+                        _videoStaleDropStopwatch.ElapsedMilliseconds);
+                    _videoStaleDropStreak = 0;
                 }
 
                 VideoFrameReady?.Invoke(frame);

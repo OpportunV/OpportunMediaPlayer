@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Microsoft.Extensions.Logging;
 using OMP.Lib;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
@@ -71,6 +72,7 @@ public sealed partial class MainWindow : Window
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
     private readonly IYtDlpResolver _ytDlpResolver;
+    private readonly ILogger<MainWindow> _logger;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
@@ -86,6 +88,7 @@ public sealed partial class MainWindow : Window
         IWindowFactory windowFactory,
         IUserSettingsService settings,
         IYtDlpResolver ytDlpResolver,
+        ILogger<MainWindow> logger,
         SingleInstanceCoordinator singleInstanceCoordinator,
         NativeLibraryOptions nativeLibraryOptions,
         StartupOptions startupOptions)
@@ -96,6 +99,7 @@ public sealed partial class MainWindow : Window
         _windowFactory = windowFactory;
         _settings = settings;
         _ytDlpResolver = ytDlpResolver;
+        _logger = logger;
         _singleInstanceCoordinator = singleInstanceCoordinator;
         _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
@@ -135,7 +139,7 @@ public sealed partial class MainWindow : Window
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
-        _mediaSessionRegistry.SessionChanged += OnSessionChanged;
+        _mediaSessionRegistry.SessionChanged += registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
 
         if (_mediaSessionRegistry.Current is not null)
         {
@@ -342,7 +346,17 @@ public sealed partial class MainWindow : Window
 
         if (routes.Count > 0)
         {
-            session.SetAudioRoutes(routes);
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    session.SetAudioRoutes(routes);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Restoring persisted audio routes failed.");
+                }
+            });
         }
     }
 
@@ -531,7 +545,7 @@ public sealed partial class MainWindow : Window
     {
         _resolvedTitleOverride = null;
 
-        if (await OpenSessionOrShowError(path))
+        if (await TryOpenSessionAsync(MediaOpenRequest.ForFile(path)))
         {
             UpdateSessionData();
         }
@@ -563,23 +577,24 @@ public sealed partial class MainWindow : Window
                 }
 
                 _resolvedTitleOverride = result.Title;
+                var request = new MediaOpenRequest(result.Url!, result.AudioSidecars, result.Headers);
 
-                if (TryOpenSessionSilently(result.Url!, out _))
+                if (await OpenSessionAsync(request) is null)
                 {
                     UpdateSessionData();
                     return;
                 }
 
                 var retryResult = await _ytDlpResolver.ResolveAsync(result.PageUrl, CancellationToken.None);
-                var retryUrl = result.Url!;
+                var retryRequest = request;
 
                 if (retryResult.Status == YtDlpResolveStatus.Success)
                 {
                     _resolvedTitleOverride = retryResult.Title;
-                    retryUrl = retryResult.Url!;
+                    retryRequest = new MediaOpenRequest(retryResult.Url!, retryResult.AudioSidecars, retryResult.Headers);
                 }
 
-                if (await OpenSessionOrShowError(retryUrl))
+                if (await TryOpenSessionAsync(retryRequest))
                 {
                     UpdateSessionData();
                     return;
@@ -594,9 +609,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> OpenSessionOrShowError(string mediaPath)
+    private async Task<bool> TryOpenSessionAsync(MediaOpenRequest request)
     {
-        if (TryOpenSessionSilently(mediaPath, out var error))
+        var error = await OpenSessionAsync(request);
+        if (error is null)
         {
             return true;
         }
@@ -605,22 +621,20 @@ public sealed partial class MainWindow : Window
             ? Strings.OpenFileError_FFmpegMacHeading
             : Strings.OpenFileError_Heading;
 
-        await ShowError(heading, error!.Message);
+        await ShowError(heading, error.Message);
         return false;
     }
 
-    private bool TryOpenSessionSilently(string mediaPath, out Exception? error)
+    private async Task<Exception?> OpenSessionAsync(MediaOpenRequest request)
     {
         try
         {
-            _mediaSessionRegistry.Open(mediaPath);
-            error = null;
-            return true;
+            await Task.Run(() => _mediaSessionRegistry.Open(request));
+            return null;
         }
         catch (Exception ex)
         {
-            error = ex;
-            return false;
+            return ex;
         }
     }
 

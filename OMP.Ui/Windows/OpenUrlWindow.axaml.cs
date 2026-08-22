@@ -52,7 +52,7 @@ public sealed partial class OpenUrlWindow : Window
         SetBusy(false);
 
         var errorMessage = result.Match(
-            onSuccess: (_, _, _) => (string?)null,
+            onSuccess: (_, _, _, _) => (string?)null,
             onNotFound: YtDlpNotFoundMessage,
             onFailed: message => message);
 

@@ -333,6 +333,124 @@ sidecar CDN URL carries no container metadata worth trusting, so `AudioSidecarSo
 `Title` (supplied by the caller, who already has them from wherever the URL was resolved) are
 preferred over whatever the scanner finds, rather than trusting an almost-certainly-absent tag.
 
+**Every blocking native FFmpeg call is now abortable via `AVFormatContext.interrupt_callback`**,
+confirmed to be fully bound in `FFmpeg.AutoGen` with no new P/Invoke needed. Real-world testing
+against a multi-dub YouTube video surfaced a session that could hang forever: a web source's
+`avformat_open_input`/`av_seek_frame`/`av_read_frame` had no configured timeout anywhere, so a
+single stalled connection blocked the calling thread indefinitely. `MediaInputSource` now
+allocates its `AVFormatContext` up front (`avformat_alloc_context`) specifically so
+`interrupt_callback` can be set *before* the abortable open, arms a per-call deadline
+(`ArmInterruptDeadline`, 15s, a first guess flagged for tuning) before every blocking call, and
+distinguishes "timed out and was aborted" from a genuine failure in its logging
+(`ConsumeInterruptFired`) — both `MediaSession.Seek`/`DemuxLoop` and `MediaInputSource`'s own
+constructor branch on this. No new error-handling paths were needed: an aborted call already
+returns/throws through a path that existed before this fix (open failure → existing dialog;
+seek failure → existing per-source warning-and-continue; read failure → existing
+`EndOfStreamTracker.MarkEndOfStream()`).
+
+**None of `OMP.Ui`'s calls into a session may run on the UI thread once a session can be
+network-backed.** `IMediaSessionRegistry.Open`/`IMediaSession.Step`/`Seek`/`SetSpeed`/
+`SetAudioRoutes` were previously called fully synchronously from the UI thread — invisible for
+local files, but a real freeze for a network session even with the interrupt fix above (the UI
+is still blocked for however long the call legitimately takes). `MainWindowCommands`' affected
+public methods (`StepBack`/`StepForward`/`SetSpeed`/`IncreaseSpeed`/`DecreaseSpeed`/`ResetSpeed`/
+`TogglePlayPause`) are thin fire-and-forget wrappers (`public void StepBack() => _ =
+StepBackAsync();`) around internal `async Task` siblings that do the real work inside
+`Task.Run(...)` — deliberately *not* widening `IMainWindowCommands` itself to `Task`-returning,
+which would ripple into every hotkey/button call site for a problem that only affects these
+methods. Tests call the internal async methods directly (`InternalsVisibleTo` already covers
+`OMP.Ui.Tests`) rather than racing a fire-and-forget `void` call against an immediate assertion.
+`MainWindow.TryOpenSessionSilentlyAsync` backgrounds `_mediaSessionRegistry.Open` the same way,
+returning `Exception?` (null = success) rather than a tuple or a new named type for one piece of
+information. Once `Open` can run off the UI thread, `SessionChanged` can fire from a non-UI
+thread too — `OnSessionChanged` touches Avalonia controls directly, so the subscription itself
+is wrapped in `Dispatcher.UIThread.Post` rather than requiring every raiser to already be on the
+right thread. `RestoreAudioRoutes` and `OptionsWindow.ApplyAndPersistRoutes` both background
+their `SetAudioRoutes` call the same way, for the reason below.
+
+**One thing this did *not* need: an explicit re-marshal back to the UI thread after the
+backgrounded work.** The first version of `MainWindowCommands.ApplySpeedAsync` wrapped its
+post-`Task.Run` UI callback in `Dispatcher.UIThread.Post`, reasoning (wrongly) that the
+continuation after `await Task.Run(...)` might resume on a thread-pool thread. In production it
+doesn't need to: `await`'s default `ConfigureAwait(true)` captures and resumes on whatever
+`SynchronizationContext` was current when the `await` was reached, which is Avalonia's
+UI-thread context when called from the UI thread — so the line after `await Task.Run(...)`
+already runs back on the UI thread with no extra step. The `Dispatcher.UIThread.Post` was worse
+than redundant: in a plain `[Fact]` unit test (no Avalonia app running, no dispatcher loop
+pumping), the posted callback was queued but never executed, so the test's awaited assertion
+read a value that was never actually set — confirmed by three tests failing with the expected
+value read back as `null`/default until the `Post` was removed.
+
+**Sidecars now open lazily, only when actually routed to an output, not eagerly at `Open()`
+time.** Eagerly constructing a `MediaInputSource` for every discovered sidecar (each one a real
+network connection) is what made opening a multi-dub video slow, on top of the freeze above.
+`MediaSession`'s constructor now only opens the primary; each `AudioSidecarSource` is tracked as
+pending (`_pendingSidecars`, keyed by a reserved `SourceId`; `_pendingSidecarStreamIds` maps the
+catalog's global stream id to that reserved id) until `SetAudioRoutes` actually resolves a route
+to it. `BuildAudioCatalog` synthesizes a catalog entry for each pending sidecar straight from its
+already-known `Language`/`Title` — no network call needed just to list a track that yt-dlp
+already described; `Codec` reads `"Unknown"` (the same placeholder `AudioScanner` already uses
+for absent metadata) until the sidecar is actually opened. `SetAudioRoutes` falls back to
+`TryOpenPendingSidecar` when a routed stream isn't already in `_audioStreamLocations`: opens the
+`MediaInputSource` for real, scans it for its (assumed single) audio stream, and — since this can
+happen minutes into playback, not just at `Open()` time — seeks it to the current position first
+(same `SeekLookbackSeconds` margin a real `Seek()` backs off by) so its demux doesn't have to
+decode from the file's start up to wherever the session already is. That seek's small pre-target
+margin is trimmed by setting `_pendingSeekTargetSeconds` to the current time after the routes
+loop, deliberately reusing `SessionLoop`'s existing `ConsumePendingSeekTarget`/`DiscardBefore`
+catch-up path rather than inventing a second one — harmless to run across every pipeline, not
+just the new one. Because a lazily-opened source's `SourceId` no longer necessarily matches its
+position in `_sources` (sidecars can be opened in any order, whenever their route is first
+assigned), `SetAudioRoutes` resolves a source by `_sources.First(s => s.SourceId ==
+location.SourceId)` rather than indexing `_sources[location.SourceId]` — the one place that
+indexing assumption existed.
+
+**That same `_sources[id]`-as-index assumption had a second, initially-missed occurrence in
+`Seek()`**, which crashed for real: routing a *non-first* reserved sidecar (e.g. a video's second
+auto-dub track) without ever routing the first caused `_sources.Add` to append it at a list
+position that no longer matched its reserved `SourceId`, and `Seek()`'s per-pipeline
+`_sources[pipeline.SourceId]` then threw `ArgumentOutOfRangeException` on the very next seek.
+Fixed the same way as `SetAudioRoutes` above (`_sources.First(s => s.SourceId ==
+pipeline.SourceId)`); `LazySidecarOrderingTests` (its own non-shared session, not
+`MultiSourceSessionFixture`, so the routing order is fully controlled) reproduces this exactly by
+routing only the second sidecar — confirmed by temporarily reverting the fix and watching the test
+fail with the identical stack trace before re-applying it.
+
+**`SetAudioRoutes` is now guarded by `_seekSync`, the same lock `Seek()` uses.** Before the
+UI-freeze fix, every call to `SetAudioRoutes` ran synchronously on the UI thread, which serialized
+overlapping calls for free — a real one, since `OptionsWindow`'s `RouteStreamSelector` fires
+`SelectionChanged` once per existing route every time its container is (re)realized (window open,
+or any `RefreshRows()` call), not just on a genuine user pick. Once `OMP.Ui` started backgrounding
+that call via `Task.Run` (see the UI-freeze fix above), those redundant calls could run
+concurrently and race on `_audioPipelines`/`_sources`, surfacing as several seconds of audio
+silence (concurrent tear-down/rebuild) where the redundant call used to be an imperceptible
+same-thread no-op. `OptionsWindow.OnRouteStreamChanged` now also skips when
+`SelectionChangedEventArgs.RemovedItems` is empty — the tell that this firing is an initial
+selection sync rather than an actual change away from a prior selection — which removes the
+redundant reapplication at its source rather than just making it safe to repeat.
+
+**`MediaInputSource.InterruptCallback` checks its captured `CancellationToken` before the deadline,
+specifically so `Dispose()` doesn't block on a call that's already blocked in native code.**
+`Dispose()`'s `DemuxWorker.Join()` waits for the demux thread to exit its loop, which — if that
+thread is currently inside a blocked native call (e.g. a stalled `av_read_frame`) — can only happen
+once the interrupt callback fires. Without this check, that could take up to the full remaining
+`InterruptTimeoutMs`, even though the caller (`MediaSession.Dispose`) had already cancelled before
+calling `Join()`. The token is captured once in the constructor into a plain `CancellationToken`
+field, not re-read from a `CancellationTokenSource.Token` getter that could throw
+`ObjectDisposedException` post-disposal (see the Threading section's token-capture lesson).
+
+**`YtDlpFormatSelector.SelectAudioSidecars` sorts by descending `language_preference`** (yt-dlp's
+own field: `10` on the genuine original track, `-1` on every auto-dub, confirmed against real
+YouTube JSON) so the original track always sorts first and becomes the default route via
+`AudioStreams[0]` — previously this depended on the `formats` array's own iteration order, which
+could land on a dub by chance. `AudioRouteMatcher` (see above) now also normalizes both sides of a
+language comparison to a 2-letter ISO code before comparing (`CultureInfo
+.GetCultureInfo(...).TwoLetterISOLanguageName` for a BCP-47 tag like `en-US`; a reverse-lookup
+table built once from every neutral culture's own `ThreeLetterISOLanguageName` for a local file's
+3-letter ISO-639-2 tag like `eng` — deliberately not a hardcoded mapping table) — without this, a
+persisted audio-track preference saved against one kind of source (local file vs. web) silently
+failed to match the "same" language reported by the other.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`

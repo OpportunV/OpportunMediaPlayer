@@ -73,8 +73,9 @@ internal sealed class YtDlpResolver(IUserSettingsService settings, ILogger<YtDlp
 
         using var document = JsonDocument.Parse(stdout);
 
-        return YtDlpFormatSelector.SelectPlayableFormat(document) is { } format
-            ? YtDlpResolveResult.Success(pageUrl, format.Url, format.Title)
+        return YtDlpFormatSelector.SelectMediaSources(document) is { } selection
+            ? YtDlpResolveResult.Success(
+                pageUrl, selection.Url, selection.Title, selection.AudioSidecars, selection.Headers)
             : YtDlpResolveResult.Failed(pageUrl, Strings.OpenUrl_NoPlayableFormatError);
     }
 
