@@ -129,21 +129,9 @@ internal static class YtDlpSubtitleSelector
     {
         var url = format.GetProperty("url").GetString()!;
         var name = format.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
-        var title = string.Format(titleFormat, name ?? DescribeLanguage(language));
+        var title = string.Format(titleFormat, name ?? LanguageDisplay.NativeName(language));
 
         return new SubtitleSidecarSource(url, language, title);
-    }
-
-    private static string DescribeLanguage(string languageCode)
-    {
-        try
-        {
-            return CultureInfo.GetCultureInfo(languageCode).NativeName;
-        }
-        catch (CultureNotFoundException)
-        {
-            return languageCode;
-        }
     }
 
     private static string? GetQueryParam(string url, string paramName)

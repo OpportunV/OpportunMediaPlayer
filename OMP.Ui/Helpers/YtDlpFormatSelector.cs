@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using OMP.Lib.Session;
@@ -113,19 +112,7 @@ internal static class YtDlpFormatSelector
             return note;
         }
 
-        if (languageCode is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            return CultureInfo.GetCultureInfo(languageCode).NativeName;
-        }
-        catch (CultureNotFoundException)
-        {
-            return languageCode;
-        }
+        return languageCode is null ? null : LanguageDisplay.NativeName(languageCode);
     }
 
     private static IReadOnlyDictionary<string, string>? ExtractHeaders(JsonElement format)
