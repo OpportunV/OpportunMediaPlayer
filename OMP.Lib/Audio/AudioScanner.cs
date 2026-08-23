@@ -1,6 +1,6 @@
-using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using OMP.Lib.Interop;
 
 namespace OMP.Lib.Audio;
 
@@ -20,8 +20,8 @@ internal sealed unsafe class AudioScanner(ILoggerFactory loggerFactory)
                 var audioStream = new AudioStream(
                     i,
                     ffmpeg.avcodec_get_name(stream->codecpar->codec_id),
-                    GetMetadata(stream, "title"),
-                    GetMetadata(stream, "language"));
+                    StreamMetadata.Read(stream, "title", _logger),
+                    StreamMetadata.Read(stream, "language", _logger));
 
                 audioStreams.Add(audioStream);
                 _logger.LogDebug(
@@ -43,17 +43,5 @@ internal sealed unsafe class AudioScanner(ILoggerFactory loggerFactory)
         }
 
         return audioStreams;
-    }
-
-    private string GetMetadata(AVStream* stream, string key)
-    {
-        var tag = ffmpeg.av_dict_get(stream->metadata, key, null, 0);
-        if (tag == null)
-        {
-            _logger.LogTrace("Stream {StreamIndex} has no '{Key}' metadata tag.", stream->index, key);
-            return "Unknown";
-        }
-
-        return Marshal.PtrToStringUTF8((IntPtr)tag->value) ?? "Unknown";
     }
 }

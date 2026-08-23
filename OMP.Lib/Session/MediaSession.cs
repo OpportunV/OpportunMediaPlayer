@@ -694,7 +694,12 @@ internal sealed unsafe class MediaSession : IMediaSession
         {
             var globalId = nextId++;
             _pendingSidecarStreamIds[globalId] = sourceId;
-            result.Add(new AudioStream(globalId, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown"));
+            result.Add(
+                new AudioStream(
+                    globalId,
+                    StreamMetadata.Unknown,
+                    sidecar.Title ?? StreamMetadata.Unknown,
+                    sidecar.Language ?? StreamMetadata.Unknown));
         }
 
         return result;
@@ -726,7 +731,12 @@ internal sealed unsafe class MediaSession : IMediaSession
             var globalId = nextId++;
             _pendingSubtitleSidecarStreamIds[globalId] = sourceId;
             _subtitleStreamCatalog.Add(
-                new SubtitleStream(globalId, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown", IsTextBased: true));
+                new SubtitleStream(
+                    globalId,
+                    StreamMetadata.Unknown,
+                    sidecar.Title ?? StreamMetadata.Unknown,
+                    sidecar.Language ?? StreamMetadata.Unknown,
+                    IsTextBased: true));
         }
     }
 
