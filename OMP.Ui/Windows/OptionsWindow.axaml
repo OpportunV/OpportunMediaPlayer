@@ -178,7 +178,8 @@
                                                Text="{Binding OutputLabel}"
                                                MaxWidth="260"
                                                VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding OutputLabel}" />
 
                                     <ComboBox Grid.Column="1"
                                               Name="RouteStreamSelector"
@@ -188,7 +189,8 @@
                                               MaxWidth="260"
                                               Margin="10,0"
                                               VerticalAlignment="Center"
-                                              HorizontalAlignment="Stretch">
+                                              HorizontalAlignment="Stretch"
+                                              ToolTip.Tip="{Binding SelectedStreamOption.Label}">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate x:DataType="models:AudioStreamOption">
                                                 <TextBlock Text="{Binding Label}"
@@ -386,8 +388,13 @@
                            Margin="0,0,0,14" />
 
                 <Grid Grid.Row="1"
-                      ColumnDefinitions="*,28,*,28"
                       Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="28" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0"
                                Classes="column-header"
                                Text="{x:Static loc:Strings.Options_TrackHeader}" />
@@ -406,13 +413,19 @@
                         <DataTemplate x:DataType="models:SubtitleRouteRow">
 
                             <StackPanel>
-                                <Grid ColumnDefinitions="*,28,*,28"
-                                      Margin="0,9">
+                                <Grid Margin="0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="300" />
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="300" />
+                                        <ColumnDefinition Width="28" />
+                                    </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0"
                                                Text="{Binding StreamLabel}"
                                                VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding StreamLabel}" />
 
                                     <TextBlock Grid.Column="1"
                                                Classes="hint"
@@ -423,7 +436,8 @@
                                     <TextBlock Grid.Column="2"
                                                Text="{Binding ZoneLabel}"
                                                VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding ZoneLabel}" />
 
                                     <Button Grid.Column="3"
                                             Name="DeleteSubtitleRouteButton"
@@ -447,8 +461,13 @@
                 </ItemsControl>
 
                 <Grid Grid.Row="4"
-                      ColumnDefinitions="*,28,*,28"
                       Margin="0,9">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="28" />
+                    </Grid.ColumnDefinitions>
                     <ComboBox Grid.Column="0"
                               Name="SubtitleStreamSelector"
                               BorderBrush="{DynamicResource AccentLineBrush}"
