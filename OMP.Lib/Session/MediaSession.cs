@@ -950,7 +950,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             {
                 if (pipeline.SourceId == source.SourceId && pipeline.StreamIndex == streamIndex)
                 {
-                    DispatchClonedPacket(packet, generation, pipeline.TryEnqueuePacket);
+                    DispatchClonedPacket(packet, generation, source.SourceId, pipeline.TryEnqueuePacket);
                 }
             }
 
@@ -959,12 +959,13 @@ internal sealed unsafe class MediaSession : IMediaSession
                 DispatchClonedPacket(
                     packet,
                     generation,
+                    source.SourceId,
                     packetRef => _videoChannel.Writer.TryWriteBlocking(packetRef, cancellationToken));
             }
 
             if (_subtitlePipelines.Any(pipeline => pipeline.SourceId == source.SourceId && pipeline.StreamIndex == streamIndex))
             {
-                DispatchClonedPacket(packet, generation, _subtitleChannel.Writer.TryWrite);
+                DispatchClonedPacket(packet, generation, source.SourceId, _subtitleChannel.Writer.TryWrite);
             }
 
             ffmpeg.av_packet_unref(packet);
@@ -1038,11 +1039,11 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
-    private static void DispatchClonedPacket(AVPacket* packet, int generation, Func<PacketRef, bool> tryWrite)
+    private static void DispatchClonedPacket(AVPacket* packet, int generation, int sourceId, Func<PacketRef, bool> tryWrite)
     {
         var cloned = ffmpeg.av_packet_alloc();
         ffmpeg.av_packet_ref(cloned, packet);
-        var packetRef = new PacketRef(cloned, generation);
+        var packetRef = new PacketRef(cloned, generation, sourceId);
         if (!tryWrite(packetRef))
         {
             ffmpeg.av_packet_free(&cloned);
@@ -1100,7 +1101,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             {
                 foreach (var pipeline in _subtitlePipelines)
                 {
-                    if (pipeline.StreamIndex == packet->stream_index)
+                    if (pipeline.SourceId == packetRef.SourceId && pipeline.StreamIndex == packet->stream_index)
                     {
                         pipeline.Enqueue(packet);
                     }

@@ -66,6 +66,7 @@ public sealed partial class MainWindow : Window
     private int _sessionGeneration;
     private string? _resolvedTitleOverride;
     private readonly DispatcherTimer _uiTimer = new();
+    private readonly Action<IMediaSessionRegistry> _onSessionChanged;
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
     private readonly IMainWindowHotkeyService _hotkeyService;
@@ -139,7 +140,8 @@ public sealed partial class MainWindow : Window
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
-        _mediaSessionRegistry.SessionChanged += registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
+        _onSessionChanged = registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
+        _mediaSessionRegistry.SessionChanged += _onSessionChanged;
 
         if (_mediaSessionRegistry.Current is not null)
         {
@@ -164,6 +166,8 @@ public sealed partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _mediaSessionRegistry.SessionChanged -= _onSessionChanged;
+        _uiTimer.Stop();
         _mediaSessionRegistry.Close();
         _settings.Save();
         _fullscreenController.Dispose();
