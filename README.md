@@ -47,7 +47,13 @@ playing at the same time.
 - **Playback speed control** — 0.5x–2x, YouTube-style presets, pitch-preserving (speeding up or
   slowing down doesn't change pitch).
 - **Subtitles with positionable zones** — assign subtitle tracks to on-screen zones you define
-  and style.
+  and style. Load an external subtitle file onto an already-open video from Options, on top of
+  whatever the file/URL itself provides.
+- **Open URL playback via [yt-dlp](https://github.com/yt-dlp/yt-dlp)** — paste a page URL
+  (File → Open URL...) and OMP resolves and streams it. When a video exposes multiple audio dubs
+  or caption tracks, they show up as ordinary routable audio/subtitle tracks, same as a local
+  file's — including auto-generated captions, in the original language and (when different) the
+  app's own UI language.
 - **Light / dark / system theme**, applied consistently across the main window, popups, and
   dialogs.
 - **In-app keyboard shortcut reference** (Help → Keyboard Shortcuts).
@@ -83,6 +89,10 @@ Help → Keyboard Shortcuts inside the app.
   bundled; install it yourself first via Homebrew: `brew install ffmpeg@7`. Try it and report back
   via [Issues](https://github.com/OpportunV/OpportunMediaPlayer/issues), good or bad.
 - Ships self-contained (bundles its own .NET 10 runtime) — no separate .NET install needed.
+- URL playback is optional and needs [yt-dlp](https://github.com/yt-dlp/yt-dlp) installed
+  separately (`winget install yt-dlp.yt-dlp` / `brew install yt-dlp` / `pip install -U yt-dlp`) —
+  OMP looks for it on your `PATH` by default, or you can point it at a specific executable from
+  Options. Not required for local files.
 
 ## Limitations
 
@@ -112,9 +122,17 @@ on OMP for a given file:
   position/movement, karaoke, and animation override tags are ignored. Embedded container fonts
   are not used.
 
+**URL playback**
+- OMP automatically picks the best format yt-dlp reports for a URL: a combined video+audio
+  stream when one exists, otherwise separate video and audio-only streams routed together,
+  falling back to audio-only if that's all a page offers. If yt-dlp can't find any playable
+  video- or audio-bearing format for the page at all, opening it fails with an error up front.
+- A URL's extra audio dubs and caption tracks are only fetched once you actually select them, not
+  when the URL first opens — keeps opening fast, but switching to one of them has a short delay
+  while it connects.
+
 **General**
-- Local files only — no network streams or URLs.
-- One file open at a time — no playlist or queue.
+- One file (or URL) open at a time — no playlist or queue.
 - No chapter markers.
 - No DRM/encrypted content support.
 
@@ -149,6 +167,13 @@ Unit tests (pure logic only, instant, no native dependencies):
 
 ```bash
 dotnet test OMP.Lib.Tests/OMP.Lib.Tests.csproj
+```
+
+UI tests (`OMP.Ui.Tests`) — pure logic plus real headless Avalonia control/window behavior via
+`Avalonia.Headless`, no display or native FFmpeg libs needed:
+
+```bash
+dotnet test OMP.Ui.Tests/OMP.Ui.Tests.csproj
 ```
 
 Integration tests (opens real files from `test-fixtures/` through the real engine — needs a

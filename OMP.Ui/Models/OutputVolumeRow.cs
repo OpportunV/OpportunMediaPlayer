@@ -11,7 +11,22 @@ internal sealed class OutputVolumeRow(AudioOutput output, double volume, bool mu
 
     public string OutputLabel { get; } = output.FriendlyName;
 
-    public bool Muted { get; set; } = muted;
+    public bool IsLast { get; set; }
+
+    public bool Muted
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Muted)));
+        }
+    } = muted;
 
     public double Volume
     {

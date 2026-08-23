@@ -42,8 +42,8 @@ internal sealed unsafe class VideoPipeline : IDisposable
 
     private const int FrameBufferPoolSize = BufferedFrameCount * 2;
 
-    public VideoPipeline(AVFormatContext* formatContext, int streamIndex, CancellationToken cancellationToken,
-        ILoggerFactory loggerFactory)
+    public VideoPipeline(AVFormatContext* formatContext, int streamIndex, ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
     {
         StreamIndex = streamIndex;
         _cancellationToken = cancellationToken;

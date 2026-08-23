@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -30,9 +31,15 @@ internal sealed partial class VolumeFlyoutView : UserControl
     {
         _rows.Clear();
 
-        foreach (var (output, volume, muted) in outputs)
+        var rows = outputs.Select(o => new OutputVolumeRow(o.Output, o.Volume, o.Muted)).ToList();
+        if (rows.Count > 0)
         {
-            _rows.Add(new OutputVolumeRow(output, volume, muted));
+            rows[^1].IsLast = true;
+        }
+
+        foreach (var row in rows)
+        {
+            _rows.Add(row);
         }
     }
 

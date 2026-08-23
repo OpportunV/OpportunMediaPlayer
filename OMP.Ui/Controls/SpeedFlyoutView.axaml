@@ -1,32 +1,36 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
              x:Class="OMP.Ui.Controls.SpeedFlyoutView">
 
-    <StackPanel Width="400"
+    <UserControl.Styles>
+        <Style Selector="ToggleButton.seg">
+            <Setter Property="BorderBrush" Value="{DynamicResource FlyoutRuleBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Width="360"
                 Margin="14"
                 Spacing="12">
 
-        <TextBlock Text="Playback speed"
-                   FontWeight="Bold"
-                   HorizontalAlignment="Center" />
+        <TextBlock Text="{x:Static loc:Strings.MainWindow_PlaybackSpeedHeader}"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Opacity="0.7" />
 
-        <Grid Name="PresetsPanel"
-              ColumnSpacing="6" />
+        <Border Classes="seg-group"
+                BorderBrush="{DynamicResource FlyoutForegroundBrush}"
+                Opacity="1">
+            <UniformGrid Name="PresetsPanel"
+                         Rows="1" />
+        </Border>
 
-        <TextBlock Name="SpeedValueLabel"
-                   Text="1x"
-                   FontFamily="Consolas"
-                   FontWeight="Bold"
-                   FontSize="16"
-                   HorizontalAlignment="Center" />
-
-        <Grid ColumnDefinitions="Auto,200,Auto"
-              ColumnSpacing="8"
-              HorizontalAlignment="Center">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+              ColumnSpacing="9">
 
             <Button Grid.Column="0"
                     Name="DecreaseButton"
-                    Classes="icon-button-sm">
+                    Classes="icon-button-sm ghost">
                 <Viewbox Width="14" Height="14">
                     <Canvas Width="24" Height="24">
                         <Path Data="{StaticResource MinusIconGeometry}"
@@ -45,7 +49,7 @@
 
             <Button Grid.Column="2"
                     Name="IncreaseButton"
-                    Classes="icon-button-sm">
+                    Classes="icon-button-sm ghost">
                 <Viewbox Width="14" Height="14">
                     <Canvas Width="24" Height="24">
                         <Path Data="{StaticResource PlusIconGeometry}"
@@ -55,6 +59,14 @@
                     </Canvas>
                 </Viewbox>
             </Button>
+
+            <TextBlock Grid.Column="3"
+                       Name="SpeedValueLabel"
+                       FontFamily="Consolas"
+                       FontSize="12"
+                       Width="46"
+                       TextAlignment="Right"
+                       VerticalAlignment="Center" />
         </Grid>
     </StackPanel>
 </UserControl>

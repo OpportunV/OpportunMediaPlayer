@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using OMP.Ui.Helpers;
 
 namespace OMP.Ui.Services;
 
@@ -39,32 +40,8 @@ internal sealed class VideoRenderSurface(Image imageControl) : IDisposable
         FrameSize = new PixelSize(width, height);
     }
 
-    public Rect GetVideoContentRect(Size containerSize)
-    {
-        if (FrameSize is not { } frameSize || containerSize.Width <= 0 || containerSize.Height <= 0)
-        {
-            return default;
-        }
-
-        var videoRatio = (double)frameSize.Width / frameSize.Height;
-        var containerRatio = containerSize.Width / containerSize.Height;
-
-        double width, height;
-        if (videoRatio > containerRatio)
-        {
-            width = containerSize.Width;
-            height = containerSize.Width / videoRatio;
-        }
-        else
-        {
-            height = containerSize.Height;
-            width = containerSize.Height * videoRatio;
-        }
-
-        var x = (containerSize.Width - width) / 2;
-        var y = (containerSize.Height - height) / 2;
-        return new Rect(x, y, width, height);
-    }
+    public Rect GetVideoContentRect(Size containerSize) =>
+        FrameSize is { } frameSize ? VideoLetterbox.ComputeContentRect(frameSize, containerSize) : default;
 
     public void Reset()
     {

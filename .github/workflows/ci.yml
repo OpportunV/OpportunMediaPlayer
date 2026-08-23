@@ -31,6 +31,9 @@ jobs:
       - name: Build
         run: dotnet build OMP.Ui/OMP.Ui.csproj -c Release
 
+      - name: Test OMP.Ui
+        run: dotnet test OMP.Ui.Tests/OMP.Ui.Tests.csproj -c Release
+
       - name: Test
         run: dotnet test OMP.Lib.Tests/OMP.Lib.Tests.csproj -c Release
 

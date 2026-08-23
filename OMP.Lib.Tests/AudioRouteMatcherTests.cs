@@ -107,6 +107,32 @@ public class AudioRouteMatcherTests
     }
 
     [Fact]
+    public void Match_ThreeLetterLanguageAgainstBcp47_MatchesAcrossLocalAndWebSourceTagging()
+    {
+        var streams = new[] { new AudioStream(0, "aac", "Unknown", "eng") };
+        var outputs = new[] { new AudioOutput(1, "Speakers") };
+        var preferred = new[] { new PreferredAudioTrack("Speakers", "Unknown", "en-US") };
+
+        var routes = AudioRouteMatcher.Match(streams, outputs, preferred);
+
+        var route = Assert.Single(routes);
+        Assert.Equal("eng", route.Stream.Language);
+    }
+
+    [Fact]
+    public void Match_Bcp47LanguageAgainstThreeLetterPreference_MatchesAcrossLocalAndWebSourceTagging()
+    {
+        var streams = new[] { new AudioStream(0, "aac", "Unknown", "fr-FR") };
+        var outputs = new[] { new AudioOutput(1, "Speakers") };
+        var preferred = new[] { new PreferredAudioTrack("Speakers", "Unknown", "fra") };
+
+        var routes = AudioRouteMatcher.Match(streams, outputs, preferred);
+
+        var route = Assert.Single(routes);
+        Assert.Equal("fr-FR", route.Stream.Language);
+    }
+
+    [Fact]
     public void Match_SavedOutputNoLongerPresent_IsSkipped()
     {
         var streams = new[] { new AudioStream(0, "aac", "Main", "eng") };

@@ -2,34 +2,39 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:OMP.Ui.Localization"
         x:Class="OMP.Ui.Windows.OpenFileErrorWindow"
-        Width="420"
+        Width="440"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         Title="{x:Static loc:Strings.OpenFileError_Title}">
 
-    <StackPanel Margin="24"
-                Spacing="10">
+    <StackPanel Margin="22"
+                Spacing="14">
 
         <TextBlock Name="HeadingText"
                    Text="{x:Static loc:Strings.OpenFileError_Heading}"
-                   FontSize="15"
-                   FontWeight="Bold"
+                   FontSize="14"
+                   FontWeight="SemiBold"
                    TextWrapping="Wrap" />
 
-        <TextBlock Text="{x:Static loc:Strings.OpenFileError_TechnicalDetailLabel}"
-                   Opacity="0.7"
-                   Margin="0,10,0,0" />
-
-        <TextBlock Name="ReasonText"
-                   TextWrapping="Wrap"
-                   Opacity="0.7"
-                   FontFamily="Consolas" />
+        <Border BorderBrush="{DynamicResource SettingsRuleBrush}"
+                BorderThickness="2,0,0,0"
+                Padding="11,2,0,2">
+            <StackPanel Spacing="3">
+                <TextBlock Name="TechnicalDetailLabel"
+                           Classes="hint"
+                           FontSize="11"
+                           Text="{x:Static loc:Strings.OpenFileError_TechnicalDetailLabel}" />
+                <TextBlock Name="ReasonText"
+                           Classes="mono"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
 
         <Button Name="CloseButton"
+                Classes="default"
                 Content="{x:Static loc:Strings.Common_Close}"
-                HorizontalAlignment="Right"
-                Margin="0,10,0,0" />
+                HorizontalAlignment="Right" />
 
     </StackPanel>
 </Window>

@@ -6,16 +6,39 @@ different audio tracks from one file to different audio output devices simultane
 - `OMP.Lib` — the playback engine. No UI framework dependency. Stays that way.
 - `OMP.Ui` — Avalonia UI, DI composition root, hosts `OMP.Lib` via `IMediaSessionRegistry`.
 - `OMP.Lib.Tests` — xUnit. Covers pure/extracted logic only (see Testing below).
+- `OMP.Ui.Tests` — xUnit + `Avalonia.Headless`. Covers pure/extracted UI logic plus real headless
+  control/window behavior (see UI Testing below).
 
 `OMP.Ui`'s folder layout is folder-matches-namespace, same convention as `Models`/`Settings`/
-`Input`/`Extensions`/`Localization`: `Windows/` (namespace `OMP.Ui.Windows`) holds every dialog
-window except `MainWindow` itself (`AboutWindow`, `OptionsWindow`, `HotkeysWindow`, etc. —
+`Input`/`Extensions`/`Helpers`/`Localization`: `Windows/` (namespace `OMP.Ui.Windows`) holds every
+dialog window except `MainWindow` itself (`AboutWindow`, `OptionsWindow`, `HotkeysWindow`, etc. —
 `MainWindow` stays at root as the app shell, alongside `App`/`Program`). `Services/` (namespace
-`OMP.Ui.Services`) holds non-control helper/service classes (`MainWindowCommands`,
-`FullscreenController`, `WindowFactory`, `VideoRenderSurface`, `SubtitleOverlayRenderer`).
+`OMP.Ui.Services`) holds non-control classes with real identity/state/lifecycle
+(`MainWindowCommands`, `FullscreenController`, `WindowFactory`, `VideoRenderSurface`,
+`SubtitleOverlayRenderer`) — constructed instances a window owns and disposes, not stateless math.
 `Controls/` is reserved for genuine Avalonia `UserControl`s only (`SpeedFlyoutView`,
 `VolumeFlyoutView`) — it used to also hold the `Services/` classes, which is why "is this a real
 control or a plain helper" is the test to apply before adding something new to either folder.
+
+`Extensions/` (namespace `OMP.Ui.Extensions`) vs `Helpers/` (namespace `OMP.Ui.Helpers`) is a
+second, narrower distinction, settled while building out `OMP.Ui.Tests`: a class belongs in
+`Extensions/`, written with C# 13's `extension(...)` block syntax, only when its receiver type is
+already domain-specific (`AudioStream`, `AudioOutput`, `SubtitleZone`, `TimeSpan`, ...) *and* the
+operation only needs the receiver's own data — `TimeFormat.Format()` on any `TimeSpan`,
+`OutputVolumeExt`'s methods on `AudioOutput`/`AudioRoute` lists, `UserSettingsServiceExt` on
+`IUserSettingsService`. A method whose receiver is a bare primitive/generic (`double`, `string`,
+`T`) or that needs a whole second, unrelated parameter to mean anything goes in `Helpers/` instead,
+as a plain static method — extending `double` with a speed-specific `.Format()`
+(`PlaybackSpeedFormat`) or `string` with `.IsSupportedMediaFile(...)` (`MediaFileType`) would let
+any unrelated call site compile while silently doing the wrong thing, since nothing about a bare
+`double`/`string` says "this specifically means speed" or "this specifically means a media path".
+`OptionsSelector.AvailableOptions<T, TKey>` is `Helpers/` for the same reason — extending every
+`IEnumerable<T>` in the codebase with an "available options" concept that only makes sense for one
+specific screen. `VideoLetterbox` and `SubtitleZoneGeometry` are `Helpers/` too: pure, stateless
+coordinate math has no identity or lifecycle, so `Services/` was the wrong home even though nothing
+technically stopped them living there. Not enforced by an analyzer (a StyleCop/Roslyn rule for one
+project-specific naming convention isn't worth building) — apply this by hand, same as the
+member-ordering convention above.
 
 ## Member ordering
 
@@ -173,16 +196,33 @@ through it would tear down devices on every tick.
 
 ## Playback speed
 
-`MediaSession.SetSpeed` does a **narrow flush**, deliberately less than `Seek`: no seek-generation
-bump, no packet-channel drain, no `av_seek_frame`, no video flush, no session Pause/Play. The
-demuxer is already reading from the right place — only the already-decoded PCM sitting in each
-`AudioPipeline` needs discarding and re-decoding at the new rate, or it would keep playing at the
-old speed for up to `BufferDurationSeconds`. That flush loop runs under `_seekSync` (not a new
-lock): `AudioPipeline.Flush()` drains the pipeline's single-reader `_decodedPcmChannel`, and
-`PumpToOutput` on the presentation thread reads that same channel every iteration. `SetSpeed` is
-called from the UI thread, so without serializing against a concurrent `Seek()` the two could touch
-the channel's reader side from two threads at once — the channel opts into single-reader fast paths
-and isn't safe for that. This mirrors (and doesn't widen) a race that already exists around `Seek`.
+`MediaSession.SetSpeed` calls `Seek(CurrentTime)` — a real, full reseek (seek-generation bump,
+packet-channel drain, `av_seek_frame`, video flush, session Pause/Play), not a lighter path. A
+**narrow flush** (skip the `av_seek_frame`, just discard+re-decode each `AudioPipeline`'s buffered
+PCM at the new rate) looks like the obviously-cheaper design and was tried — it's wrong, confirmed
+by testing, not a style preference. The demuxer routinely reads *ahead* of actual playback position
+(`ThrottleDemuxAhead`/`MaxDemuxLookaheadSeconds` keep a lookahead margin of pre-fetched packets) —
+narrow-flush clears each pipeline's decoded/buffered PCM and its packet channel, but never touches
+the demuxer's read position, so the next packets handed to audio are whatever was already
+pre-fetched, several seconds ahead of where playback actually is. `PumpToOutput` correctly refuses
+to play a decoded chunk whose timestamp is that far ahead of the clock (`chunk.TimeSeconds >
+delayedTargetSeconds + PumpWindowSeconds` → withheld, not played) and just sits silent until the
+clock — ticking at the new speed, unaffected since video/clock were never flushed — walks forward
+to catch up to that already-fetched content. Confirmed directly via real playback: video keeps
+running instantly on a speed change, audio goes silent for several seconds. The full `Seek` avoids
+this because `av_seek_frame` physically re-positions the demuxer to the target, which erases that
+read-ahead margin as a side effect — there is currently no cheaper way to get that same
+re-synchronization. (This becomes relevant again once a session can have multiple independent
+demuxed sources — each `av_seek_frame` becomes its own network round-trip for a web source's
+sidecar audio track — but that's unsolved future work, not a reason to reintroduce narrow-flush
+today; don't re-attempt it without also fixing `PumpToOutput`'s ahead-of-target handling.)
+
+That reseek runs under `_seekSync` (not a new lock): `AudioPipeline.Flush()` drains the pipeline's
+single-reader `_decodedPcmChannel`, and `PumpToOutput` on the presentation thread reads that same
+channel every iteration. `SetSpeed` is called from the UI thread, so without serializing against a
+concurrent `Seek()` the two could touch the channel's reader side from two threads at once — the
+channel opts into single-reader fast paths and isn't safe for that. This mirrors (and doesn't
+widen) a race that already exists around `Seek`.
 
 `PlaybackSpeedPresets` (the YouTube-style preset list) and `PlaybackSpeedLimits` both live in
 `OMP.Lib`, not `OMP.Ui`: they're the engine's own declared set of supported rates, not host
@@ -259,6 +299,290 @@ correction) when `_videoPipeline is null`; a video session always passes an anch
 disables the correction outright and trusts raw PTS as ground truth for where a seek landed —
 consistent with `ThrottleDemuxAhead`'s own fix above.
 
+**A session can now be built from multiple independent input sources** — one primary (video,
+optionally with its own audio) plus zero or more audio-only sidecar sources (`OMP.Lib/Session
+/MediaInputSource.cs`), the shape a web source needs when yt-dlp exposes separate per-language
+audio URLs instead of one muxed file. Local-file `Open` is unchanged — it's just the trivial
+"one primary source, zero sidecars" case of the same `MediaSession` constructor, not a parallel
+code path. Each `MediaInputSource` owns its own `AVFormatContext*`, its own `FormatSync` lock, its
+own demux thread, and its own `EndOfStreamTracker` — session EOF is now the AND of every source's
+tracker, combined with the existing `HasPendingPlayableContent()` tolerance. The mp3/wav/aac
+PTS-baseline-anchor policy above generalizes to a per-source `IsSourceAudioOnly` check (true for
+every sidecar unconditionally, and for the primary exactly when `_videoPipeline is null` — the
+same expression as before, just asked once per source instead of once for the whole session) with
+no new policy invented; each `MediaInputSource` keeps its own PTS-baseline-offset dictionary keyed
+by *local* stream index, which is what actually fixes the id-collision bug a naive single shared
+dictionary would have had (every sidecar's own stream 0 would otherwise collide as one key).
+`Seek()` now loops over every source, seeking each independently and best-effort — one sidecar
+failing to seek is logged and does not abort the others, matching the same "don't let one bad
+source take down the rest" philosophy as the `AudioPipeline` construction try/catch in
+`SetAudioRoutes`. A known, deliberately-accepted consequence: `SetSpeed` still calls
+`Seek(CurrentTime)` (see Playback speed above), so a speed change on a session with N sidecars now
+does N independent `av_seek_frame` calls — real cost for a web source, not yet solved, flagged
+rather than hidden.
+
+`AudioStream.Id`/`SubtitleStream.Id` are session-assigned surrogate ids, not raw FFmpeg stream
+indices, precisely because a raw index is only unique *within one `AVFormatContext`* — two
+different sidecar sources each reporting their own stream 0 would otherwise be indistinguishable.
+`MediaSession.BuildAudioCatalog` remaps every source's locally-scanned streams to a global id and
+records `(SourceId, LocalStreamIndex)` in `_audioStreamLocations`, consulted by `SetAudioRoutes`
+before constructing an `AudioPipeline`. `AudioScanner`/`SubtitleScanner` themselves are unchanged —
+still a correct, reusable "scan one context" unit. `AudioRouteMatcher` (persisted-preference
+restore) needed zero changes, since it already matched by Title+Language, never by `Id`. A bare
+sidecar CDN URL carries no container metadata worth trusting, so `AudioSidecarSource.Language`/
+`Title` (supplied by the caller, who already has them from wherever the URL was resolved) are
+preferred over whatever the scanner finds, rather than trusting an almost-certainly-absent tag.
+
+**Every blocking native FFmpeg call is now abortable via `AVFormatContext.interrupt_callback`**,
+confirmed to be fully bound in `FFmpeg.AutoGen` with no new P/Invoke needed. Real-world testing
+against a multi-dub YouTube video surfaced a session that could hang forever: a web source's
+`avformat_open_input`/`av_seek_frame`/`av_read_frame` had no configured timeout anywhere, so a
+single stalled connection blocked the calling thread indefinitely. `MediaInputSource` now
+allocates its `AVFormatContext` up front (`avformat_alloc_context`) specifically so
+`interrupt_callback` can be set *before* the abortable open, arms a per-call deadline
+(`ArmInterruptDeadline`, 15s, a first guess flagged for tuning) before every blocking call, and
+distinguishes "timed out and was aborted" from a genuine failure in its logging
+(`ConsumeInterruptFired`) — both `MediaSession.Seek`/`DemuxLoop` and `MediaInputSource`'s own
+constructor branch on this. No new error-handling paths were needed: an aborted call already
+returns/throws through a path that existed before this fix (open failure → existing dialog;
+seek failure → existing per-source warning-and-continue; read failure → existing
+`EndOfStreamTracker.MarkEndOfStream()`).
+
+**None of `OMP.Ui`'s calls into a session may run on the UI thread once a session can be
+network-backed.** `IMediaSessionRegistry.Open`/`IMediaSession.Step`/`Seek`/`SetSpeed`/
+`SetAudioRoutes` were previously called fully synchronously from the UI thread — invisible for
+local files, but a real freeze for a network session even with the interrupt fix above (the UI
+is still blocked for however long the call legitimately takes). `MainWindowCommands`' affected
+public methods (`StepBack`/`StepForward`/`SetSpeed`/`IncreaseSpeed`/`DecreaseSpeed`/`ResetSpeed`/
+`TogglePlayPause`) are thin fire-and-forget wrappers (`public void StepBack() => _ =
+StepBackAsync();`) around internal `async Task` siblings that do the real work inside
+`Task.Run(...)` — deliberately *not* widening `IMainWindowCommands` itself to `Task`-returning,
+which would ripple into every hotkey/button call site for a problem that only affects these
+methods. Tests call the internal async methods directly (`InternalsVisibleTo` already covers
+`OMP.Ui.Tests`) rather than racing a fire-and-forget `void` call against an immediate assertion.
+`MainWindow.TryOpenSessionSilentlyAsync` backgrounds `_mediaSessionRegistry.Open` the same way,
+returning `Exception?` (null = success) rather than a tuple or a new named type for one piece of
+information. Once `Open` can run off the UI thread, `SessionChanged` can fire from a non-UI
+thread too — `OnSessionChanged` touches Avalonia controls directly, so the subscription itself
+is wrapped in `Dispatcher.UIThread.Post` rather than requiring every raiser to already be on the
+right thread. `RestoreAudioRoutes` and `OptionsWindow.ApplyAndPersistRoutes` both background
+their `SetAudioRoutes` call the same way, for the reason below.
+
+**One thing this did *not* need: an explicit re-marshal back to the UI thread after the
+backgrounded work.** The first version of `MainWindowCommands.ApplySpeedAsync` wrapped its
+post-`Task.Run` UI callback in `Dispatcher.UIThread.Post`, reasoning (wrongly) that the
+continuation after `await Task.Run(...)` might resume on a thread-pool thread. In production it
+doesn't need to: `await`'s default `ConfigureAwait(true)` captures and resumes on whatever
+`SynchronizationContext` was current when the `await` was reached, which is Avalonia's
+UI-thread context when called from the UI thread — so the line after `await Task.Run(...)`
+already runs back on the UI thread with no extra step. The `Dispatcher.UIThread.Post` was worse
+than redundant: in a plain `[Fact]` unit test (no Avalonia app running, no dispatcher loop
+pumping), the posted callback was queued but never executed, so the test's awaited assertion
+read a value that was never actually set — confirmed by three tests failing with the expected
+value read back as `null`/default until the `Post` was removed.
+
+**Sidecars now open lazily, only when actually routed to an output, not eagerly at `Open()`
+time.** Eagerly constructing a `MediaInputSource` for every discovered sidecar (each one a real
+network connection) is what made opening a multi-dub video slow, on top of the freeze above.
+`MediaSession`'s constructor now only opens the primary; each `AudioSidecarSource` is tracked as
+pending (`_pendingSidecars`, keyed by a reserved `SourceId`; `_pendingSidecarStreamIds` maps the
+catalog's global stream id to that reserved id) until `SetAudioRoutes` actually resolves a route
+to it. `BuildAudioCatalog` synthesizes a catalog entry for each pending sidecar straight from its
+already-known `Language`/`Title` — no network call needed just to list a track that yt-dlp
+already described; `Codec` reads `"Unknown"` (the same placeholder `AudioScanner` already uses
+for absent metadata) until the sidecar is actually opened. `SetAudioRoutes` falls back to
+`TryOpenPendingSidecar` when a routed stream isn't already in `_audioStreamLocations`: opens the
+`MediaInputSource` for real, scans it for its (assumed single) audio stream, and — since this can
+happen minutes into playback, not just at `Open()` time — seeks it to the current position first
+(same `SeekLookbackSeconds` margin a real `Seek()` backs off by) so its demux doesn't have to
+decode from the file's start up to wherever the session already is. That seek's small pre-target
+margin is trimmed by setting `_pendingSeekTargetSeconds` to the current time after the routes
+loop, deliberately reusing `SessionLoop`'s existing `ConsumePendingSeekTarget`/`DiscardBefore`
+catch-up path rather than inventing a second one — harmless to run across every pipeline, not
+just the new one. Because a lazily-opened source's `SourceId` no longer necessarily matches its
+position in `_sources` (sidecars can be opened in any order, whenever their route is first
+assigned), `SetAudioRoutes` resolves a source by `_sources.First(s => s.SourceId ==
+location.SourceId)` rather than indexing `_sources[location.SourceId]` — the one place that
+indexing assumption existed.
+
+**That same `_sources[id]`-as-index assumption had a second, initially-missed occurrence in
+`Seek()`**, which crashed for real: routing a *non-first* reserved sidecar (e.g. a video's second
+auto-dub track) without ever routing the first caused `_sources.Add` to append it at a list
+position that no longer matched its reserved `SourceId`, and `Seek()`'s per-pipeline
+`_sources[pipeline.SourceId]` then threw `ArgumentOutOfRangeException` on the very next seek.
+Fixed the same way as `SetAudioRoutes` above (`_sources.First(s => s.SourceId ==
+pipeline.SourceId)`); `LazySidecarOrderingTests` (its own non-shared session, not
+`MultiSourceSessionFixture`, so the routing order is fully controlled) reproduces this exactly by
+routing only the second sidecar — confirmed by temporarily reverting the fix and watching the test
+fail with the identical stack trace before re-applying it.
+
+**`SetAudioRoutes` is now guarded by `_seekSync`, the same lock `Seek()` uses.** Before the
+UI-freeze fix, every call to `SetAudioRoutes` ran synchronously on the UI thread, which serialized
+overlapping calls for free — a real one, since `OptionsWindow`'s `RouteStreamSelector` fires
+`SelectionChanged` once per existing route every time its container is (re)realized (window open,
+or any `RefreshRows()` call), not just on a genuine user pick. Once `OMP.Ui` started backgrounding
+that call via `Task.Run` (see the UI-freeze fix above), those redundant calls could run
+concurrently and race on `_audioPipelines`/`_sources`, surfacing as several seconds of audio
+silence (concurrent tear-down/rebuild) where the redundant call used to be an imperceptible
+same-thread no-op. `OptionsWindow.OnRouteStreamChanged` now also skips when
+`SelectionChangedEventArgs.RemovedItems` is empty — the tell that this firing is an initial
+selection sync rather than an actual change away from a prior selection — which removes the
+redundant reapplication at its source rather than just making it safe to repeat.
+
+**`MediaInputSource.InterruptCallback` checks its captured `CancellationToken` before the deadline,
+specifically so `Dispose()` doesn't block on a call that's already blocked in native code.**
+`Dispose()`'s `DemuxWorker.Join()` waits for the demux thread to exit its loop, which — if that
+thread is currently inside a blocked native call (e.g. a stalled `av_read_frame`) — can only happen
+once the interrupt callback fires. Without this check, that could take up to the full remaining
+`InterruptTimeoutMs`, even though the caller (`MediaSession.Dispose`) had already cancelled before
+calling `Join()`. The token is captured once in the constructor into a plain `CancellationToken`
+field, not re-read from a `CancellationTokenSource.Token` getter that could throw
+`ObjectDisposedException` post-disposal (see the Threading section's token-capture lesson).
+
+**`YtDlpFormatSelector.SelectAudioSidecars` sorts by descending `language_preference`** (yt-dlp's
+own field: `10` on the genuine original track, `-1` on every auto-dub, confirmed against real
+YouTube JSON) so the original track always sorts first and becomes the default route via
+`AudioStreams[0]` — previously this depended on the `formats` array's own iteration order, which
+could land on a dub by chance. `AudioRouteMatcher` (see above) now also normalizes both sides of a
+language comparison to a 2-letter ISO code before comparing (`CultureInfo
+.GetCultureInfo(...).TwoLetterISOLanguageName` for a BCP-47 tag like `en-US`; a reverse-lookup
+table built once from every neutral culture's own `ThreeLetterISOLanguageName` for a local file's
+3-letter ISO-639-2 tag like `eng` — deliberately not a hardcoded mapping table) — without this, a
+persisted audio-track preference saved against one kind of source (local file vs. web) silently
+failed to match the "same" language reported by the other.
+
+**Subtitles are now generalized to the same multi-source architecture as audio.** Before this,
+`MediaSession.SubtitleStreams` was scanned once, at construction, from the primary source only,
+and `SetSubtitleRoutes` always built its `SubtitlePipeline` against `PrimarySource`. The
+generalization turned out cheap: `SubtitlePipeline`'s `SourceId` constructor parameter and
+`DemuxLoop`'s per-source subtitle-dispatch filter (`pipeline.SourceId == source.SourceId`) already
+existed, built defensively during the original audio multi-source work and simply unused for
+subtitles until now. `SubtitleStreams` is now a mutable-backed read-only view
+(`_subtitleStreamCatalog.AsReadOnly()`, mirroring `AudioRoutes`) so it can grow after construction.
+`BuildSubtitleCatalog`/`_subtitleStreamLocations`/`_pendingSubtitleSidecars`/
+`_pendingSubtitleSidecarStreamIds` directly parallel their audio equivalents, and
+`TryOpenPendingSubtitleSidecar` parallels `TryOpenPendingSidecar` (open, scan, seek to the current
+position with the same lookback margin, start its demux worker). A `SubtitleSidecarSource.Url`
+works equally for a real network URL (a future web-source caption track) and a bare local file path
+(`AddSubtitleSidecar`, below) — `MediaInputSource`'s `avformat_open_input` already treats both
+identically, the same as it does for the primary source via `MediaOpenRequest.ForFile`.
+
+`IMediaSession.AddSubtitleSidecar(SubtitleSidecarSource)` is a second entry point alongside the
+lazy pending-sidecar path, for attaching a subtitle to an *already-running* session (a local file
+picked mid-playback). Unlike a pending sidecar, it opens immediately — a single local file open is
+cheap, there's no lazy-loading benefit to defer it — and appends straight into
+`_subtitleStreamCatalog`, returning the new `SubtitleStream` (not a tuple, matching this codebase's
+convention) or throwing on failure, mirroring `MediaInputSource`'s own throw-on-open-failure
+convention so `OMP.Ui` can catch and show its existing error-dialog pattern.
+
+Generalizing surfaced two real, pre-existing gaps the single-source design had never had to handle,
+both now fixed:
+- `GetSeekReferenceStreamIndex` fell back only to a source's own *audio* pipeline for its seek
+  reference stream — a subtitle-only sidecar (no audio pipeline of its own, e.g. a standalone
+  `.srt`) had no reference stream at all, so `Seek()` silently skipped re-seeking it entirely and
+  its demux position would drift out of sync with the rest of the session after any seek. It now
+  falls back to a matching subtitle pipeline's `StreamIndex` when no audio pipeline claims that
+  source.
+- `Seek()` only flushed `_subtitlePipelines` when the *primary* source was among the ones that
+  actually seeked, since subtitles had only ever come from the primary. Now gated per-pipeline on
+  whether that specific pipeline's own `SourceId` was seeked, the same way audio sidecar pipelines
+  already are — otherwise a subtitle sidecar's pipeline would keep serving cues from its pre-seek
+  position after a seek that only touched the sidecar's own source.
+
+`SetSubtitleRoutes`'s pre-existing pipeline-reuse optimization (keep an existing `SubtitlePipeline`
+alive across a route update if the same stream+zone combination is still requested, rather than
+always tearing down and rebuilding every pipeline like `SetAudioRoutes` does) is preserved — the
+comparison just now matches on the resolved `(SourceId, LocalStreamIndex)` pair instead of directly
+comparing the catalog's global `Stream.Id` to `SubtitlePipeline.StreamIndex`, since those two
+numbers are no longer the same thing once multi-source remapping exists.
+
+Test fixture: `test-fixtures/subtitle/sample.srt` is hand-authored (three short placeholder caption
+lines timed against the existing 12-second video clip), not sourced from any external work —
+unlike the video/audio fixtures, no license/attribution applies, recorded as such in
+`test-fixtures/CREDITS.md`.
+
+**`OMP.Ui/Helpers/YtDlpSubtitleSelector.cs` parses yt-dlp's `subtitles` (real, human-provided) and
+`automatic_captions` (auto-generated) JSON fields**, kept as its own file rather than folded into
+`YtDlpFormatSelector` (which stays focused on AV format selection). Confirmed against two real
+yt-dlp dumps, not guessed: both fields are an object keyed by language code, each value a list of
+`{url, ext, name, ...}` entries (one per container format — only `vtt`/`srt` are usable, FFmpeg
+can't parse YouTube's own `srv1`/`srv2`/`srv3`/`json3`/`ttml` timed-text formats directly; `vtt` is
+preferred when both are present, no functional difference — `SubtitlePipeline`'s rect extraction
+already normalizes through the same `AVSubtitleType.SUBTITLE_ASS` path regardless of source codec).
+
+A real video can report 150+ `automatic_captions` languages, nearly all of them YouTube
+auto-translating the one original-language transcript rather than independent recognitions (each
+translated entry's `timedtext` URL carries a `tlang` query param differing from its `lang`).
+Exposing all of them would flood the picker with near-duplicate options, so only two are ever
+surfaced: the original (non-translated) track, labeled "(auto-generated)", plus — only if
+`_settings.Current.Language` differs from the original and a matching translation exists — one
+translated into the app's own UI language, labeled "(auto-generated, translated)". A translated
+entry's `Language` is the translation's *target*, not the `lang` query param it was translated
+from — caught via a failing unit test before shipping (a French translation was otherwise
+mislabeled `en`, since `lang` is always the source language the translation started from).
+
+A yt-dlp `subtitles`/`automatic_captions` dictionary key is not reliably a clean language code —
+confirmed for real: a genuine community-provided caption track can be keyed like
+`en-US-<opaque-id>` when YouTube has multiple named tracks for one language (disambiguated by that
+track's own `name` field, e.g. "English (United States) - Captions"), so `subtitles` entries always
+derive `Language`/`Title` from each entry's own `lang` query param and `name` field, never the
+dictionary key. `automatic_captions` keys, by contrast, are always a plain, reliable language code
+(YouTube never needs the same disambiguation there) — confirmed useful as a fallback for a real
+edge case found via a live/DVR video's real dump: its auto-generated caption entries are delivered
+as an HLS playlist URL with none of the usual `lang`/`name` query params a normal video's
+`timedtext` URL carries, so `BuildAutomaticCaptionSidecar` falls back to the dictionary key
+(`CultureInfo.GetCultureInfo(key).NativeName` when there's no `name` either) rather than leaving
+that entry unlabeled.
+
+`YtDlpResolveResult`/`MediaOpenRequest` thread `SubtitleSidecars` through the same way
+`AudioSidecars` already does, going through the *lazy* pending-sidecar path (not
+`AddSubtitleSidecar`, which is reserved for the eager, attach-to-a-running-session local-file case)
+since a video can expose several caption languages at once and eagerly opening all of them would
+reintroduce the exact "slow open" problem the lazy-audio-sidecar fix already solved.
+
+**A lazy sidecar's pending registration is only retired once its open has genuinely succeeded** —
+`TryOpenPendingSidecar` (audio) and `TryOpenPendingSubtitleSidecar` (subtitle) both used to remove
+the pending entry unconditionally, before attempting the open, so a failed attempt (a translated
+auto-caption's `timedtext` URL that didn't resolve, a not-yet-existent local file, a transient
+network issue) permanently and silently lost the ability to ever route that stream again for the
+rest of the session — confirmed for real: routing a Russian auto-translated caption failed
+silently, and the entry then behaved as if it no longer existed on any later attempt. Both methods
+now defer removing the pending entry until after the open, scan, and seek have all succeeded;
+retrying (e.g. re-selecting the same stream in Options) now genuinely retries the open rather than
+immediately failing via a already-empty pending lookup. Covered by
+`SetSubtitleRoutes_RetryAfterFailedSidecarOpen_SucceedsOnceTheSourceBecomesAvailable`, which points
+a pending sidecar at a file that doesn't exist yet, confirms the first routing attempt fails
+cleanly, creates the file, and confirms a second attempt at the *same* stream id then succeeds —
+confirmed to actually catch the regression by temporarily reverting the fix and watching it fail
+with an empty `SubtitleRoutes` collection.
+
+**`MediaSession.SetSubtitleRoutes` returns `IReadOnlyList<SubtitleRoute>`** (the routes that
+actually got applied) instead of `void`. A route can fail to resolve (an unreachable sidecar,
+confirmed for real by a YouTube `timedtext` request returning HTTP 429 for a translated
+auto-caption) without throwing — the failure is logged and the route is silently dropped from
+`_subtitleRoutes`. Previously `OMP.Ui` had no way to notice this: `OptionsWindow` added the row to
+its own `_subtitleRows` optimistically and never found out the engine had actually rejected it, so
+a failed route just sat there doing nothing with zero on-screen indication (confirmed by a user
+report - "nothing happens"). `OptionsWindow.ReconcileSubtitleRoutes` now compares the returned set
+against `_subtitleRows` after every `SetSubtitleRoutes` call (backgrounded, so this runs via
+`Dispatcher.UIThread.Post` from the worker thread - not the `await`-resumes-on-the-calling-context
+case, since there's no `await` here to resume from), removes any row that didn't actually apply,
+and shows `SubtitleRouteErrorText` (same inline red-text pattern `OpenUrlWindow` already uses for a
+failed resolve, rather than a modal dialog) with a generic "temporarily unavailable, try again"
+message - deliberately generic, not the raw exception text, since the expected failure mode here is
+an external, transient condition (a rate limit), not something the user needs the technical detail
+for.
+
+**`_loggedLandingGenerationBySource` is a `ConcurrentDictionary`, not a plain `Dictionary`** — it's
+written from every source's own demux thread (`LogLandingPositionOnce`, called from `DemuxLoop`),
+so any session with 2+ sources (any sidecar, audio or subtitle) has genuinely concurrent writers.
+A plain `Dictionary` isn't safe for concurrent mutation even across different keys - its internal
+bucket array can corrupt under concurrent writes, confirmed via a real crash surfaced by
+`SubtitleSidecarTests` (an unhandled exception on a background demux thread, intermittent - passed
+most runs, then reliably reproduced once a test routed two sidecar-backed sources in quick
+succession). Same fix shape as `MediaInputSource.Dispose`'s cancellation-aware interrupt check
+earlier in this file: found by real multi-source testing, not by inspection alone.
+
 ## Threading
 
 Playback worker threads (demux/audio/video/render) are identified by `PipelineWorkerRole`
@@ -266,6 +590,12 @@ Playback worker threads (demux/audio/video/render) are identified by `PipelineWo
 identity and doubles as a tag for future structured logging. Don't reach for empty
 subclass-per-role types to get "stronger" identity than an enum already provides; that's
 inheritance used for labeling, not behavior, and is the pattern to avoid here.
+
+A session with sidecar sources runs N demux threads, not one — `PipelineWorker.Start` takes an
+optional `threadName` override (defaulting to `role.ToString()` when omitted, so every other call
+site is unaffected) so each source's demux thread gets a distinct `Thread.Name` (`"Demux-0"`,
+`"Demux-1"`, ...) instead of N threads all named identically, which would otherwise make a
+debugger/thread-dump session ambiguous about which thread belongs to which source.
 
 `PlaybackClock` locks its state with a plain `Lock`/short critical section (field reads/writes,
 no I/O, no blocking, no nested locks) — that's the correct, unremarkable use of a lock, not a
@@ -413,6 +743,42 @@ hardcoded inside a *nested* `ControlTemplate` that Fluent's outer `Slider` templ
 per-instance resource override never reaches it, so shrinking that padding would need a full
 custom `Slider` template, not a resource override.
 
+**`SliderHorizontalThumbWidth`/`Height` must never both be `0` at the same time as overriding
+`SliderHorizontalHeight`** — confirmed by rendering to a real `RenderTargetBitmap` in a headless
+test (see below), not guessed: with both thumb dimensions at `0` *and* a smaller
+`SliderHorizontalHeight` present, the whole track — not just the thumb — renders with zero visual
+height and the slider is completely invisible, even though `Slider.Bounds` still reports a normal,
+non-zero size (the collapse happens deeper, in the `Track`/`RepeatButton` arrange pass, not at the
+outer control). `SliderHorizontalThumbWidth="0"` alone (no `SliderHorizontalHeight` override) is
+fine and is what actually makes a thumb invisible — a thumb has no width to draw a circle in.
+`ProgressSlider`'s fix: `SliderHorizontalThumbWidth="0"` stays, but `SliderHorizontalThumbHeight`
+is set to match the track height (currently `3`, not `0`) purely to keep that arrange pass
+non-degenerate — the thumb is still invisible (zero width), this has no visible effect beyond
+preventing the collapse.
+
+Every other `Slider` in the app (main-window volume, `Options` audio routing rows, both flyouts —
+anywhere the thumb stays visible) gets its knob size from **app-level** (not per-instance)
+overrides in `App.axaml`: `SliderHorizontalThumbWidth`/`Height` = `14`, `SliderHorizontalHeight` =
+`24`, `SliderThumbCornerRadius` = `7`, plus `SliderThumbBackground`/`SliderTrackValueFill` = the
+accent color and a themed `SliderTrackFill` for the unfilled portion. `DynamicResource` lookups
+fall through app-level resources exactly like any other ancestor scope, so this cascades to every
+slider that doesn't declare its own `<Slider.Resources>` — `ProgressSlider`'s per-instance override
+still wins locally over this app-level default, the same way instance styles always beat inherited
+ones. One shared set of tokens instead of duplicating thumb-size XAML at every call site.
+
+**Rendering an `AvaloniaFact` test to a real bitmap needs both `UseSkia()` and
+`UseHeadlessDrawing = false`** on the shared `TestAppBuilder` (`OMP.Ui.Tests/TestAppBuilder.cs`) —
+confirmed by testing: the default headless setup (`UseHeadlessDrawing` true, no explicit Skia
+platform) *measures and arranges* controls correctly but never actually rasterizes anything, so
+`RenderTargetBitmap.Render(window)` + `.Save(path)` silently produces nothing to look at (no
+exception either). With both flags set, a `[AvaloniaFact]` test can `window.Show()`,
+`Dispatcher.UIThread.RunJobs()`, render to a `RenderTargetBitmap`, and save a real PNG — this is
+how the thumb-collapse bug above was actually found and confirmed, not guessed from reading XAML.
+Verified this doesn't regress the existing Tier 1/2 suite (133 tests, ~500ms either way). Use this
+technique for any future "is this actually visible / what does this actually look like" question
+about a control template — it's far faster than reasoning about nested `ControlTemplate` XAML by
+eye, and it's the only way that actually catches a rendering collapse like this one.
+
 `OptionsWindow`'s Audio tab enforces that an *output* can only carry one active route at a time
 (`UpdateOutputSelector` excludes already-used outputs — you can't send two different tracks to one
 physical speaker), but deliberately does **not** apply the same exclusivity to *streams*: the same
@@ -521,5 +887,89 @@ only real, automated verification the macOS `FFmpegLibraryLocator`/`ffmpeg@7` pa
 signal on real (if ephemeral) macOS hardware, which is otherwise unavailable for this project.
 
 Avalonia-side classes (`FullscreenController`, `VideoRenderSurface`, `WindowFactory`) are written
-with plain constructor dependencies so Avalonia-headless tests can be added later, but that test
-host isn't wired up yet.
+with plain constructor dependencies specifically so they're constructible with hand-written fakes
+in `OMP.Ui.Tests` — see UI Testing below, which is now wired up.
+
+## UI Testing
+
+`OMP.Ui.Tests` splits into two tiers, the same "pure vs needs the real thing" split as
+`OMP.Lib.Tests` vs `OMP.Lib.IntegrationTests`, just within one project since neither tier needs
+native FFmpeg libs or a real display:
+
+- **Tier 1** — plain `[Fact]`/`[Theory]`, no Avalonia runtime at all. Everything in `Extensions/`,
+  `Helpers/`, `Input/`, the logic-bearing `Models/` (manual `INotifyPropertyChanged` classes),
+  `Settings/` (`SubtitleZone`, `UserSettings` defaults, `UserSettingsJsonContext` round-trip), and
+  `Services/MainWindowCommands` all land here — none of it touches a live `Window`/`Control`.
+- **Tier 2** — `[AvaloniaFact]` (from `Avalonia.Headless.XUnit`), real control/window instances,
+  no real display. Currently covers `Controls/SpeedFlyoutView`, `Controls/VolumeFlyoutView`, and
+  `Services/FullscreenController`. `Windows/OptionsWindow` (now thin after extracting
+  `OptionsSelector`), the other `Windows/*` dialogs, `SubtitleZoneEditorWindow`,
+  `SubtitleOverlayRenderer`, and `MainWindow` itself are backlog, not yet covered.
+
+**Deliberately excluded** — `SingleInstanceCoordinator`, `Services/FFmpegLibraryLocator`, and
+`UserSettingsService` all hit hardcoded real OS paths (`Environment.SpecialFolder.ApplicationData`,
+Homebrew prefixes) with no injection seam; testing them meaningfully needs a path-injection seam
+first, which hasn't been added. `App.axaml.cs`/`Program.cs` are pure DI wiring, not tested directly.
+
+**Mocking: `Moq`, with one deliberate exception.** `Moq` covers interfaces that are naturally
+stateless/interaction-based (`IUserSettingsService`, `IWindowFactory`, `IMainWindowHotkeyService`).
+`IMediaSession`/`IMediaSessionRegistry` get hand-written fakes instead
+(`TestDoubles/FakeMediaSession.cs`, `FakeMediaSessionRegistry.cs`), because every `IMediaSession`
+property is get-only and `Services/MainWindowCommands` relies on state coherence across calls
+(`ApplySpeed` calls `session.SetSpeed(speed)` then immediately reads `session.Speed` back). Moq's
+`SetupProperty`/`SetupAllProperties` need a *settable* property to auto-back a value, which
+get-only interface members don't have — faithfully mocking this would mean a
+`.Setup(s => s.SetSpeed(...)).Callback<double>(v => mock.Setup(s => s.Speed).Returns(v))` per
+mutator/property pair, which is more code and more fragile (easy to add a new command and forget
+the matching callback) than the ~90-line hand-written fake with ordinary auto-properties.
+
+**`TestAppBuilder.cs` must set `App.Services` before any `[AvaloniaFact]` test runs, or every
+single one fails identically.** Confirmed by testing, not assumed: `Avalonia.Headless.XUnit`'s
+`HeadlessUnitTestSession` runs the *full* `AppBuilder.SetupUnsafe()` path, which calls both
+`Initialize()` (loads `App.axaml`'s styles/resources — needed for any window/control's
+`StaticResource` lookups to resolve) **and** `OnFrameworkInitializationCompleted()` — not just
+`Initialize()` the way a naive reading of "headless test host" suggests. Since `App
+.OnFrameworkInitializationCompleted` does `Services!.GetRequiredService<IUserSettingsService>()`,
+an unset `Services` throws `ArgumentNullException` out of `AppBuilder.SetupUnsafe()` before any
+test body runs, and every `[AvaloniaFact]` test in the assembly fails with the same opaque
+stack trace. `TestAppBuilder` configures the **real** `App` type (needed for `App.axaml`'s
+resources to load at all) with `.UseHeadless(...)`, then uses `.AfterSetup(builder => ((App)
+builder.Instance!).Services = ...)` — the same hook `Program.cs` uses — to hand it a minimal
+`IServiceProvider` stub that only resolves `IUserSettingsService`. `ApplicationLifetime` is not a
+`IClassicDesktopStyleApplicationLifetime` under the headless unit-test session, so the
+`desktop.MainWindow = Services!.GetRequiredService<MainWindow>()` branch never runs and the stub
+doesn't need to resolve `MainWindow`.
+
+**XAML-named fields are `internal` by default**, confirmed by reflecting on the compiled `OMP.dll`
+rather than guessed — combined with `OMP.Ui/AssemblyInfo.cs`'s `[assembly:
+InternalsVisibleTo("OMP.Ui.Tests")]`, this means a test can reach e.g. `speedFlyoutView.SpeedSlider`
+or `speedFlyoutView.SpeedValueLabel` directly, with no visual-tree traversal needed, for any control
+named directly in a `UserControl`/`Window`'s own XAML. Controls realized inside an `ItemsControl`
+`DataTemplate` (e.g. `VolumeFlyoutView`'s per-row `RowVolumeSlider`) aren't fields on the outer
+class at all — those still need `Avalonia.VisualTree`'s `GetVisualDescendants()`, matched by
+`.Name`, after the container has actually been realized (see next point).
+
+**Raise real routed pointer events directly on the control that subscribed the handler, rather than
+simulating pixel-accurate mouse coordinates, when the test only cares about event sequencing.**
+`control.RaiseEvent(new PointerPressedEventArgs(control, pointer, control, new Point(0, 0), 0, new
+PointerPointProperties(), KeyModifiers.None, 1))` (with `pointer = new Avalonia.Input.Pointer(0,
+PointerType.Mouse, isPrimary: true)`) reaches a `Tunnel`-registered handler even without the control
+being attached to a shown `Window` — `RaiseEvent`'s route walks the `Parent` chain that already
+exists once a control is added to its parent's `Children` via `InitializeComponent()`, regardless of
+whether that subtree is ever shown. This is what the `SpeedFlyoutView`/`VolumeFlyoutView` drag-vs-
+commit tests do, and it sidesteps needing a real layout pass or coordinate math entirely for tests
+that don't need it. **`PointerCaptureLostEventArgs`'s 2-arg constructor is `[Obsolete]` in
+`Avalonia` 11.3.11** ("might be removed in 12.0") — the stable replacement, and what a genuine
+pointer release does under the hood, is `pointer.Capture(control); pointer.Capture(null);`, which
+raises the real event through `IPointer` instead of hand-building the args.
+
+**`TopLevel.LayoutManager` is not public** (confirmed via reflection — non-public getter), so a
+test that needs to flush a pending layout pass (e.g. realizing an `ItemsControl`'s `DataTemplate`
+containers after `SetOutputs(...)`, or picking up a `Height` change made after `Window.Show()`) can't
+call `window.LayoutManager.ExecuteLayoutPass()` directly. Use `Avalonia.Threading.Dispatcher
+.UIThread.RunJobs()` instead — it flushes the dispatcher queue, including the layout pass Avalonia
+schedules at Render priority, and is what `FullscreenControllerTests`/`VolumeFlyoutViewTests` use.
+
+`dotnet test OMP.Ui.Tests/OMP.Ui.Tests.csproj` needs no `-r <rid>` flag, unlike `OMP.Lib
+.IntegrationTests` — nothing in either tier constructs a real `MediaSession` or loads native FFmpeg,
+so there's no RID-dependent native content to resolve.

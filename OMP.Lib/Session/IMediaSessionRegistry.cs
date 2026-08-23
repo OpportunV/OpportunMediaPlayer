@@ -8,5 +8,7 @@ public interface IMediaSessionRegistry
 
     public void Open(string filePath);
 
+    public void Open(MediaOpenRequest request);
+
     public void Close();
 }

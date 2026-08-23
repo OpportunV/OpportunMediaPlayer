@@ -15,18 +15,21 @@
 
   <data name="MainWindow_FileMenu" xml:space="preserve"><value>File</value></data>
   <data name="MainWindow_OpenMenuItem" xml:space="preserve"><value>Open...</value></data>
+  <data name="MainWindow_OpenUrlMenuItem" xml:space="preserve"><value>Open URL...</value></data>
   <data name="MainWindow_OptionsMenuItem" xml:space="preserve"><value>Options...</value></data>
   <data name="MainWindow_ExitMenuItem" xml:space="preserve"><value>Exit</value></data>
   <data name="MainWindow_HelpMenu" xml:space="preserve"><value>Help</value></data>
   <data name="MainWindow_HotkeysMenuItem" xml:space="preserve"><value>Keyboard Shortcuts...</value></data>
   <data name="MainWindow_AboutMenuItem" xml:space="preserve"><value>About...</value></data>
   <data name="MainWindow_SpeedButtonTooltip" xml:space="preserve"><value>Playback speed</value></data>
+  <data name="MainWindow_PlaybackSpeedHeader" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MainWindow_SubtitlesButtonTooltip" xml:space="preserve"><value>Toggle subtitles</value></data>
   <data name="MainWindow_OutputVolumesButtonTooltip" xml:space="preserve"><value>Output volumes</value></data>
   <data name="MainWindow_OutputVolumesHeader" xml:space="preserve"><value>Output volumes</value></data>
   <data name="MainWindow_OpenFileDialogTitle" xml:space="preserve"><value>Open media file</value></data>
   <data name="MainWindow_OpenFileTypeFilterName" xml:space="preserve"><value>Media Files</value></data>
   <data name="MainWindow_NoVideoLabel" xml:space="preserve"><value>No video</value></data>
+  <data name="MainWindow_OpeningLabel" xml:space="preserve"><value>Opening...</value></data>
   <data name="MainWindow_EmptyStateLabel" xml:space="preserve"><value>Open a file, or drag and drop it here</value></data>
   <data name="MainWindow_EmptyStateLabelNoDragDrop" xml:space="preserve"><value>Open a file</value></data>
 
@@ -36,37 +39,63 @@
   <data name="Options_SubtitlesTab" xml:space="preserve"><value>Subtitles</value></data>
   <data name="Options_SubtitleZonesTab" xml:space="preserve"><value>Subtitle Zones</value></data>
   <data name="Options_ThemeLabel" xml:space="preserve"><value>Theme:</value></data>
+  <data name="Options_ThemeHint" xml:space="preserve"><value>Applies immediately</value></data>
   <data name="Options_MuteOutputTooltip" xml:space="preserve"><value>Mute this output</value></data>
   <data name="Options_DelayMsTooltip" xml:space="preserve"><value>Manual audio delay for this output, in milliseconds (negative plays earlier)</value></data>
   <data name="Options_StreamHeader" xml:space="preserve"><value>Stream</value></data>
   <data name="Options_OutputHeader" xml:space="preserve"><value>Output</value></data>
   <data name="Options_VolumeHeader" xml:space="preserve"><value>Volume</value></data>
   <data name="Options_DelayMsHeader" xml:space="preserve"><value>Delay (ms)</value></data>
+  <data name="Options_SelectOutputPlaceholder" xml:space="preserve"><value>Select output</value></data>
+  <data name="Options_SelectStreamPlaceholder" xml:space="preserve"><value>Select stream</value></data>
   <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed.</value></data>
+  <data name="Options_TrackHeader" xml:space="preserve"><value>Track</value></data>
+  <data name="Options_ZoneHeader" xml:space="preserve"><value>Zone</value></data>
+  <data name="Options_SelectTrackPlaceholder" xml:space="preserve"><value>Select track</value></data>
+  <data name="Options_SelectZonePlaceholder" xml:space="preserve"><value>Select zone</value></data>
+  <data name="Options_LoadSubtitleFileButton" xml:space="preserve"><value>Load Subtitle File...</value></data>
+  <data name="Options_LoadSubtitleFileTitle" xml:space="preserve"><value>Select subtitle file</value></data>
+  <data name="Options_SubtitleFileTypeFilterName" xml:space="preserve"><value>Subtitles</value></data>
+  <data name="Options_SubtitleRouteError" xml:space="preserve"><value>Could not load this subtitle track. It may be temporarily unavailable - try again in a moment.</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. The first two zones are default and can't be removed.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>
   <data name="Options_ResetZoneTooltip" xml:space="preserve"><value>Restore this zone's default position, size and style</value></data>
   <data name="Options_AddZoneButton" xml:space="preserve"><value>New Zone</value></data>
   <data name="Options_LanguageLabel" xml:space="preserve"><value>Language:</value></data>
+  <data name="Options_LanguageHint" xml:space="preserve"><value>Restart to apply everywhere</value></data>
   <data name="Options_LanguageRestartButton" xml:space="preserve"><value>Restart Now</value></data>
+  <data name="Options_YtDlpPathLabel" xml:space="preserve"><value>yt-dlp path:</value></data>
+  <data name="Options_YtDlpPathHint" xml:space="preserve"><value>Leave empty to use the copy on your PATH.</value></data>
+  <data name="Options_YtDlpPathWatermarkShort" xml:space="preserve"><value>yt-dlp</value></data>
+  <data name="Options_YtDlpPathResetButton" xml:space="preserve"><value>Reset</value></data>
+  <data name="Options_YtDlpPathResetTooltip" xml:space="preserve"><value>Use the default yt-dlp lookup (PATH)</value></data>
+  <data name="Options_YtDlpPathBrowseButton" xml:space="preserve"><value>Browse...</value></data>
+  <data name="Options_YtDlpPathBrowseTitle" xml:space="preserve"><value>Select yt-dlp executable</value></data>
+  <data name="Options_YtDlpPathFileTypeFilterName" xml:space="preserve"><value>yt-dlp</value></data>
 
   <data name="ThemeMode_Light" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeMode_Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Common_SystemDefault" xml:space="preserve"><value>System (follow OS)</value></data>
 
   <data name="Hotkeys_Title" xml:space="preserve"><value>Keyboard Shortcuts</value></data>
+  <data name="Hotkeys_GroupPlayback" xml:space="preserve"><value>Playback</value></data>
+  <data name="Hotkeys_GroupAudio" xml:space="preserve"><value>Audio</value></data>
+  <data name="Hotkeys_GroupView" xml:space="preserve"><value>View</value></data>
   <data name="Hotkeys_PlayPause" xml:space="preserve"><value>Play / pause</value></data>
   <data name="Hotkeys_StepBack" xml:space="preserve"><value>Step back</value></data>
   <data name="Hotkeys_StepForward" xml:space="preserve"><value>Step forward</value></data>
+  <data name="Hotkeys_StepBackForward" xml:space="preserve"><value>Step back / forward</value></data>
   <data name="Hotkeys_ToggleFullscreen" xml:space="preserve"><value>Toggle fullscreen</value></data>
   <data name="Hotkeys_ToggleSubtitles" xml:space="preserve"><value>Toggle subtitles</value></data>
   <data name="Hotkeys_ToggleMute" xml:space="preserve"><value>Toggle mute</value></data>
   <data name="Hotkeys_ExitFullscreen" xml:space="preserve"><value>Exit fullscreen</value></data>
   <data name="Hotkeys_DecreaseSpeed" xml:space="preserve"><value>Decrease playback speed</value></data>
   <data name="Hotkeys_IncreaseSpeed" xml:space="preserve"><value>Increase playback speed</value></data>
+  <data name="Hotkeys_SpeedDownUp" xml:space="preserve"><value>Decrease / increase speed</value></data>
   <data name="Hotkeys_IncreaseVolume" xml:space="preserve"><value>Increase volume</value></data>
   <data name="Hotkeys_DecreaseVolume" xml:space="preserve"><value>Decrease volume</value></data>
+  <data name="Hotkeys_VolumeDownUp" xml:space="preserve"><value>Decrease / increase volume</value></data>
 
   <data name="About_Title" xml:space="preserve"><value>About</value></data>
   <data name="About_LicenseText" xml:space="preserve"><value>Licensed under PolyForm Noncommercial 1.0.0</value></data>
@@ -93,11 +122,39 @@ sudo apt install libjack-jackd2-0</value>
 brew install ffmpeg@7</value>
   </data>
   <data name="OpenFileError_TechnicalDetailLabel" xml:space="preserve"><value>Technical detail:</value></data>
+  <data name="OpenFileError_SubtitleHeading" xml:space="preserve"><value>Could not load this subtitle file. It may be corrupted or in an unsupported format.</value></data>
+  <data name="OpenFileError_YtDlpNotFoundWindowsHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it, then try again:
+
+winget install yt-dlp.yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundMacHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it, then try again:
+
+brew install yt-dlp</value>
+  </data>
+  <data name="OpenFileError_YtDlpNotFoundLinuxHeading" xml:space="preserve">
+    <value>yt-dlp wasn't found. Install it via your distro's package manager, then try again, or:
+
+pip install -U yt-dlp</value>
+  </data>
+
+  <data name="OpenUrl_Title" xml:space="preserve"><value>Open URL</value></data>
+  <data name="OpenUrl_Label" xml:space="preserve"><value>Enter a web page URL to play:</value></data>
+  <data name="OpenUrl_Watermark" xml:space="preserve"><value>https://...</value></data>
+  <data name="OpenUrl_ResolvingLabel" xml:space="preserve"><value>Resolving...</value></data>
+  <data name="OpenUrl_InvalidUrlError" xml:space="preserve"><value>Enter a valid http:// or https:// URL.</value></data>
+  <data name="OpenUrl_OkButton" xml:space="preserve"><value>Open</value></data>
+  <data name="OpenUrl_CancelButton" xml:space="preserve"><value>Cancel</value></data>
+  <data name="OpenUrl_TimeoutError" xml:space="preserve"><value>yt-dlp took too long to respond.</value></data>
+  <data name="OpenUrl_GenericResolveError" xml:space="preserve"><value>yt-dlp could not process this URL.</value></data>
+  <data name="OpenUrl_NoPlayableFormatError" xml:space="preserve"><value>This page has no single combined audio+video stream that OMP can currently play.</value></data>
 
   <data name="SubtitleZoneEditor_NewTitle" xml:space="preserve"><value>New Subtitle Zone</value></data>
   <data name="SubtitleZoneEditor_EditTitleFormat" xml:space="preserve"><value>Edit Subtitle Zone - {0}</value></data>
   <data name="SubtitleZoneEditor_ScreenLabel" xml:space="preserve"><value>Screen:</value></data>
   <data name="SubtitleZoneEditor_VideoLabel" xml:space="preserve"><value>Video:</value></data>
+  <data name="SubtitleZoneEditor_DragHint" xml:space="preserve"><value>drag to place &#183; drag corner to size</value></data>
   <data name="SubtitleZoneEditor_NameWatermark" xml:space="preserve"><value>Zone name</value></data>
   <data name="SubtitleZoneEditor_NameHint" xml:space="preserve"><value>Just for you to tell zones apart - not shown on screen.</value></data>
   <data name="SubtitleZoneEditor_FontLabel" xml:space="preserve"><value>Font:</value></data>

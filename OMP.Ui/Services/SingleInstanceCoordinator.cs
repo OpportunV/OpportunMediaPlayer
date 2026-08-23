@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Avalonia.Threading;
 using Serilog;
@@ -35,9 +36,8 @@ public sealed class SingleInstanceCoordinator : IDisposable
         {
             Directory.CreateDirectory(directory);
 
-            var lockStream = TryAcquireLock(lockFilePath);
 
-            if (lockStream is not null)
+            if (TryAcquireLock(lockFilePath, out var lockStream))
             {
                 DeleteRequestFile(requestFilePath);
                 return new SingleInstanceCoordinator(lockStream, requestFilePath, handedOff: false);
@@ -88,15 +88,17 @@ public sealed class SingleInstanceCoordinator : IDisposable
         _lockStream?.Dispose();
     }
 
-    private static FileStream? TryAcquireLock(string lockFilePath)
+    private static bool TryAcquireLock(string lockFilePath, [MaybeNullWhen(false)] out FileStream lockStream)
     {
         try
         {
-            return new FileStream(lockFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            lockStream = new FileStream(lockFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return true;
         }
         catch (IOException)
         {
-            return null;
+            lockStream = null;
+            return false;
         }
     }
 

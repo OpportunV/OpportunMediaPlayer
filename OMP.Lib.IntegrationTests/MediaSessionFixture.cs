@@ -5,7 +5,7 @@ namespace OMP.Lib.IntegrationTests;
 
 public sealed class MediaSessionFixture : IDisposable
 {
-    public MediaSessionRegistry Registry { get; }
+    public IMediaSessionRegistry Registry { get; }
 
     public MediaSessionFixture()
     {

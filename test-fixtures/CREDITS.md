@@ -26,6 +26,12 @@ apply to every derived file.
 - **Derivation**: 20-second clip (00:00:03–00:00:23), re-encoded per target format. No
   attribution required (CC0), credited here anyway for traceability.
 
+## Subtitle (`subtitle/sample.srt`)
+
+- **Source**: hand-authored for these tests — three short, original placeholder caption lines
+  timed against `video/sample.mp4`'s ~12-second duration. Not derived from any external work, so
+  no license/attribution applies.
+
 ## Regenerating
 
 Both derivations were done with ffmpeg from the original downloads; re-running them from the

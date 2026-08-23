@@ -4,9 +4,12 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
@@ -23,9 +26,14 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         new("1:1", 1.0)
     ];
 
+    private readonly List<HorizontalAlignmentOption> _horizontalAlignOptions;
+    private readonly List<VerticalAlignmentOption> _verticalAlignOptions;
+
     private SubtitleZone _zone = new();
     private bool _isDraggingZone;
     private bool _isResizingZone;
+    private bool _isUpdatingHorizontalAlign;
+    private bool _isUpdatingVerticalAlign;
     private Point _dragStartPointerPosition;
     private double _dragStartLeft;
     private double _dragStartTop;
@@ -60,14 +68,18 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         VideoAspectRatioSelector.ItemsSource = _aspectRatios;
         VideoAspectRatioSelector.SelectedIndex = 0;
 
-        HorizontalAlignSelector.ItemsSource = new[]
+        _horizontalAlignOptions = new[]
         {
             HorizontalAlignment.Left, HorizontalAlignment.Center, HorizontalAlignment.Right
         }.Select(value => new HorizontalAlignmentOption(value, value.ToDisplayLabel())).ToList();
-        VerticalAlignSelector.ItemsSource = new[]
+        HorizontalAlignSelector.ItemsSource = _horizontalAlignOptions;
+
+        _verticalAlignOptions = new[]
         {
             VerticalAlignment.Top, VerticalAlignment.Center, VerticalAlignment.Bottom
         }.Select(value => new VerticalAlignmentOption(value, value.ToDisplayLabel())).ToList();
+        VerticalAlignSelector.ItemsSource = _verticalAlignOptions;
+
         FontFamilySelector.ItemsSource = FontManager.Current.SystemFonts
             .Select(f => f.Name)
             .Distinct()
@@ -85,6 +97,7 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         FontSizeSlider.ValueChanged += (_, e) =>
         {
             _zone.FontSizeRatio = e.NewValue / 100;
+            FontSizeValueText.Text = $"{e.NewValue:0.#}%";
             UpdateSampleTextStyle();
         };
         FontColorPicker.ColorChanged += (_, e) =>
@@ -100,16 +113,7 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         BackgroundOpacitySlider.ValueChanged += (_, e) =>
         {
             _zone.BackgroundOpacity = e.NewValue / 100;
-            UpdateSampleTextStyle();
-        };
-        HorizontalAlignSelector.SelectionChanged += (_, _) =>
-        {
-            _zone.HorizontalAlignment = ((HorizontalAlignmentOption)HorizontalAlignSelector.SelectedItem!).Value;
-            UpdateSampleTextStyle();
-        };
-        VerticalAlignSelector.SelectionChanged += (_, _) =>
-        {
-            _zone.VerticalAlignment = ((VerticalAlignmentOption)VerticalAlignSelector.SelectedItem!).Value;
+            BackgroundOpacityValueText.Text = $"{e.NewValue:0}%";
             UpdateSampleTextStyle();
         };
 
@@ -128,15 +132,21 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         NameTextBox.Text = zone.Name;
         FontFamilySelector.SelectedItem = zone.FontFamily;
         FontSizeSlider.Value = zone.FontSizeRatio * 100;
+        FontSizeValueText.Text = $"{FontSizeSlider.Value:0.#}%";
         FontColorPicker.Color = Color.Parse(zone.FontColor);
         BackgroundColorPicker.Color = Color.Parse(zone.BackgroundColor);
         BackgroundOpacitySlider.Value = zone.BackgroundOpacity * 100;
-        HorizontalAlignSelector.SelectedItem = HorizontalAlignSelector.Items
-            .Cast<HorizontalAlignmentOption>()
-            .First(option => option.Value == zone.HorizontalAlignment);
-        VerticalAlignSelector.SelectedItem = VerticalAlignSelector.Items
-            .Cast<VerticalAlignmentOption>()
-            .First(option => option.Value == zone.VerticalAlignment);
+        BackgroundOpacityValueText.Text = $"{BackgroundOpacitySlider.Value:0}%";
+
+        foreach (var option in _horizontalAlignOptions)
+        {
+            option.IsSelected = option.Value == zone.HorizontalAlignment;
+        }
+
+        foreach (var option in _verticalAlignOptions)
+        {
+            option.IsSelected = option.Value == zone.VerticalAlignment;
+        }
 
         RebuildCanvas();
     }
@@ -159,19 +169,18 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             }
 
             var position = e.GetPosition(PreviewCanvas);
-            var newLeft = Math.Clamp(
+            var newPosition = SubtitleZoneGeometry.ClampPosition(
                 _dragStartLeft + (position.X - _dragStartPointerPosition.X),
-                0,
-                CanvasWidth - ZoneBorder.Width);
-            var newTop = Math.Clamp(
                 _dragStartTop + (position.Y - _dragStartPointerPosition.Y),
-                0,
-                PreviewCanvas.Height - ZoneBorder.Height);
+                ZoneBorder.Width,
+                ZoneBorder.Height,
+                CanvasWidth,
+                PreviewCanvas.Height);
 
-            Canvas.SetLeft(ZoneBorder, newLeft);
-            Canvas.SetTop(ZoneBorder, newTop);
-            _zone.X = newLeft / CanvasWidth;
-            _zone.Y = newTop / PreviewCanvas.Height;
+            Canvas.SetLeft(ZoneBorder, newPosition.X);
+            Canvas.SetTop(ZoneBorder, newPosition.Y);
+            _zone.X = newPosition.X / CanvasWidth;
+            _zone.Y = newPosition.Y / PreviewCanvas.Height;
             UpdateResizeHandlePosition();
         };
         ZoneBorder.PointerReleased += (_, e) =>
@@ -202,19 +211,19 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             var position = e.GetPosition(PreviewCanvas);
             var left = Canvas.GetLeft(ZoneBorder);
             var top = Canvas.GetTop(ZoneBorder);
-            var newWidth = Math.Clamp(
+            var newSize = SubtitleZoneGeometry.ClampSize(
                 _dragStartWidth + (position.X - _dragStartPointerPosition.X),
-                MinZoneSizePx,
-                CanvasWidth - left);
-            var newHeight = Math.Clamp(
                 _dragStartHeight + (position.Y - _dragStartPointerPosition.Y),
                 MinZoneSizePx,
-                PreviewCanvas.Height - top);
+                left,
+                top,
+                CanvasWidth,
+                PreviewCanvas.Height);
 
-            ZoneBorder.Width = newWidth;
-            ZoneBorder.Height = newHeight;
-            _zone.Width = newWidth / CanvasWidth;
-            _zone.Height = newHeight / PreviewCanvas.Height;
+            ZoneBorder.Width = newSize.Width;
+            ZoneBorder.Height = newSize.Height;
+            _zone.Width = newSize.Width / CanvasWidth;
+            _zone.Height = newSize.Height / PreviewCanvas.Height;
             UpdateResizeHandlePosition();
         };
         ResizeHandle.PointerReleased += (_, e) =>
@@ -222,6 +231,60 @@ public sealed partial class SubtitleZoneEditorWindow : Window
             _isResizingZone = false;
             e.Pointer.Capture(null);
         };
+    }
+
+    private void OnHorizontalAlignChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingHorizontalAlign ||
+            sender is not ToggleButton { DataContext: HorizontalAlignmentOption option } button)
+        {
+            return;
+        }
+
+        if (button.IsChecked != true)
+        {
+            _isUpdatingHorizontalAlign = true;
+            button.IsChecked = true;
+            _isUpdatingHorizontalAlign = false;
+            return;
+        }
+
+        _isUpdatingHorizontalAlign = true;
+        foreach (var other in _horizontalAlignOptions.Where(o => !ReferenceEquals(o, option)))
+        {
+            other.IsSelected = false;
+        }
+        _isUpdatingHorizontalAlign = false;
+
+        _zone.HorizontalAlignment = option.Value;
+        UpdateSampleTextStyle();
+    }
+
+    private void OnVerticalAlignChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingVerticalAlign ||
+            sender is not ToggleButton { DataContext: VerticalAlignmentOption option } button)
+        {
+            return;
+        }
+
+        if (button.IsChecked != true)
+        {
+            _isUpdatingVerticalAlign = true;
+            button.IsChecked = true;
+            _isUpdatingVerticalAlign = false;
+            return;
+        }
+
+        _isUpdatingVerticalAlign = true;
+        foreach (var other in _verticalAlignOptions.Where(o => !ReferenceEquals(o, option)))
+        {
+            other.IsSelected = false;
+        }
+        _isUpdatingVerticalAlign = false;
+
+        _zone.VerticalAlignment = option.Value;
+        UpdateSampleTextStyle();
     }
 
     private void RebuildCanvas()

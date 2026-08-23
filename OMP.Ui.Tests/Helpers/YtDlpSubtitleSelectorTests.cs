@@ -1,0 +1,112 @@
+using System.Text.Json;
+using OMP.Ui.Helpers;
+
+namespace OMP.Ui.Tests.Helpers;
+
+public class YtDlpSubtitleSelectorTests
+{
+    [Fact]
+    public void SelectSubtitleSidecars_RealSubtitlesTrack_UsesNameAndUrlLangIgnoringCompositeKey()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "subtitles": {
+                    "en-US-cvfXDfbeED0": [
+                        { "ext": "json3", "url": "https://example.com/timedtext?lang=en-US&fmt=json3", "name": "English (United States) - Captions" },
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en-US&fmt=vtt", "name": "English (United States) - Captions" },
+                        { "ext": "srt", "url": "https://example.com/timedtext?lang=en-US&fmt=srt", "name": "English (United States) - Captions" }
+                    ]
+                }
+            }
+            """);
+
+        var sidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, appLanguageCode: null);
+
+        var sidecar = Assert.Single(sidecars);
+        Assert.Equal("https://example.com/timedtext?lang=en-US&fmt=vtt", sidecar.Url);
+        Assert.Equal("en-US", sidecar.Language);
+        Assert.Equal("English (United States) - Captions", sidecar.Title);
+    }
+
+    [Fact]
+    public void SelectSubtitleSidecars_AutomaticCaptions_OnlyOriginalWhenAppLanguageHasNoTranslation()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "automatic_captions": {
+                    "en": [
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en&kind=asr&fmt=vtt", "name": "English" }
+                    ],
+                    "de": [
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en&tlang=de&kind=asr&fmt=vtt", "name": "German" }
+                    ]
+                }
+            }
+            """);
+
+        var sidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, appLanguageCode: "fr");
+
+        var sidecar = Assert.Single(sidecars);
+        Assert.Equal("en", sidecar.Language);
+        Assert.Equal("English (auto-generated)", sidecar.Title);
+    }
+
+    [Fact]
+    public void SelectSubtitleSidecars_AutomaticCaptions_IncludesTranslationMatchingAppLanguage()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "automatic_captions": {
+                    "en": [
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en&kind=asr&fmt=vtt", "name": "English" }
+                    ],
+                    "de": [
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en&tlang=de&kind=asr&fmt=vtt", "name": "German" }
+                    ],
+                    "fr": [
+                        { "ext": "vtt", "url": "https://example.com/timedtext?lang=en&tlang=fr&kind=asr&fmt=vtt", "name": "French" }
+                    ]
+                }
+            }
+            """);
+
+        var sidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, appLanguageCode: "fr");
+
+        Assert.Equal(2, sidecars.Count);
+        Assert.Contains(sidecars, s => s.Title == "English (auto-generated)");
+        Assert.Contains(sidecars, s => s.Title == "French (auto-generated, translated)" && s.Language == "fr");
+    }
+
+    [Fact]
+    public void SelectSubtitleSidecars_OnlyNonVttSrtFormatsAvailable_TrackIsSkipped()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+                "subtitles": {
+                    "en": [
+                        { "ext": "json3", "url": "https://example.com/timedtext?lang=en&fmt=json3", "name": "English" },
+                        { "ext": "ttml", "url": "https://example.com/timedtext?lang=en&fmt=ttml", "name": "English" }
+                    ]
+                }
+            }
+            """);
+
+        var sidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, appLanguageCode: null);
+
+        Assert.Empty(sidecars);
+    }
+
+    [Fact]
+    public void SelectSubtitleSidecars_NoSubtitleFieldsAtAll_ReturnsEmpty()
+    {
+        using var document = JsonDocument.Parse("{ \"title\": \"No captions here\" }");
+
+        var sidecars = YtDlpSubtitleSelector.SelectSubtitleSidecars(document, appLanguageCode: null);
+
+        Assert.Empty(sidecars);
+    }
+}

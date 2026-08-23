@@ -14,6 +14,8 @@ internal sealed unsafe class AudioPipeline : IDisposable
 {
     public int StreamIndex { get; }
 
+    public int SourceId { get; }
+
     public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
 
     public int DiagPacketQueueCount => _packetChannel.Reader.Count;
@@ -94,15 +96,16 @@ internal sealed unsafe class AudioPipeline : IDisposable
     private const double BufferHighWaterMarkRatio = 0.9;
     private const int PumpIntervalMs = 5;
 
-    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, AudioOutput audioOutput,
-        CancellationToken cancellationToken, int bufferDurationSeconds, int packetChannelCapacity,
-        Func<int> getSeekGeneration, Func<double> getClockSeconds, ILoggerFactory loggerFactory)
+    public AudioPipeline(AVFormatContext* formatContext, int streamIndex, int sourceId, AudioOutput audioOutput,
+        int bufferDurationSeconds, int packetChannelCapacity, Func<int> getSeekGeneration,
+        Func<double> getClockSeconds, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         _pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _getSeekGeneration = getSeekGeneration;
         _getClockSeconds = getClockSeconds;
         _logger = loggerFactory.CreateLogger<AudioPipeline>();
         StreamIndex = streamIndex;
+        SourceId = sourceId;
 
         _packetChannelCapacity = packetChannelCapacity;
         _packetChannel = Channel.CreateBounded<PacketRef>(

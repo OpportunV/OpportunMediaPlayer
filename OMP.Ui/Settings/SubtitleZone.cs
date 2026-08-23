@@ -37,6 +37,8 @@ public sealed class SubtitleZone
 
     public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Bottom;
 
+    public string Summary => $"{FontFamily} · {FontSizeRatio * 100:0.#}% · {HorizontalAlignment}/{VerticalAlignment}";
+
     public const string BuiltInTopId = "built-in-top";
     public const string BuiltInBottomId = "built-in-bottom";
 
