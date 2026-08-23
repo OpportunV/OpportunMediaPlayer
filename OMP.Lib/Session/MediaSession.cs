@@ -5,6 +5,7 @@ using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
+using OMP.Lib.Diagnostics;
 using OMP.Lib.Extensions;
 using OMP.Lib.Interop;
 using OMP.Lib.Subtitle;
@@ -26,9 +27,9 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<AudioRoute> AudioRoutes => _audioRoutes.AsReadOnly();
 
-    public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _outputVolumes.AsReadOnly();
+    public IReadOnlyDictionary<int, OutputVolumeState> OutputVolumes => _mixer.Volumes;
 
-    public IReadOnlyDictionary<int, double> OutputDelays => _outputDelays.AsReadOnly();
+    public IReadOnlyDictionary<int, double> OutputDelays => _mixer.Delays;
 
     public IReadOnlyList<AudioStream> AudioStreams { get; }
 
@@ -44,9 +45,9 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public string FilePath { get; }
 
-    public bool IsMuted { get; private set; }
+    public bool IsMuted => _mixer.IsMuted;
 
-    public double MasterVolume { get; private set; } = 1.0;
+    public double MasterVolume => _mixer.MasterVolume;
 
     public double Speed => _clock.Speed;
 
@@ -61,9 +62,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
 
-    private string? _lastLoopErrorMessage;
-    private readonly Stopwatch _loopErrorStopwatch = Stopwatch.StartNew();
-    private int _suppressedLoopErrors;
+    private readonly LoopErrorLog _loopErrorLog;
 
     private readonly List<MediaInputSource> _sources = [];
     private readonly ConcurrentDictionary<int, int> _loggedLandingGenerationBySource = [];
@@ -82,8 +81,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly Dictionary<int, SubtitleSidecarSource> _pendingSubtitleSidecars = [];
     private readonly Dictionary<int, int> _pendingSubtitleSidecarStreamIds = [];
 
-    private readonly Dictionary<int, OutputVolumeState> _outputVolumes = [];
-    private readonly Dictionary<int, double> _outputDelays = [];
+    private readonly AudioOutputMixer _mixer = new();
     private readonly int _audioBufferDurationSeconds;
     private readonly int _audioPacketChannelCapacity;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -111,6 +109,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private int _seekGeneration;
     private int _diagVideoGenerationMismatchCount;
     private int _nextSourceId = 1;
+    private int _nextSubtitleStreamId;
 
     private const double MaxFrameLagSeconds = 0.05;
     private const double EarlyFrameWaitThresholdSeconds = 0.03;
@@ -127,6 +126,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MediaSession>();
+        _loopErrorLog = new LoopErrorLog(_logger, "Presentation loop iteration failed.", LoopErrorLogIntervalMs);
 
         FFmpegEnvironment.EnsureInitialized(_logger, nativeLibraryOptions.FFmpegLibraryDirectory);
 
@@ -425,7 +425,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             _sources.Add(source);
             source.DemuxWorker.Start(worker => DemuxLoop(source, worker), $"{PipelineWorkerRole.Demux}-{source.SourceId}");
 
-            var globalId = _subtitleStreamCatalog.Count;
+            var globalId = _nextSubtitleStreamId++;
             _subtitleStreamLocations[globalId] = (sourceId, localStream.Id);
 
             var catalogEntry = localStream with
@@ -461,33 +461,32 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public void SetMasterVolume(double volume)
     {
-        MasterVolume = Math.Clamp(volume, AudioVolumeLimits.Min, AudioVolumeLimits.Max);
+        _mixer.SetMasterVolume(volume);
         ApplyVolumeToPipelines();
     }
 
     public void SetMasterMuted(bool muted)
     {
-        IsMuted = muted;
+        _mixer.SetMasterMuted(muted);
         _logger.LogInformation("Master mute {State}.", muted ? "on" : "off");
         ApplyVolumeToPipelines();
     }
 
     public void SetOutputVolume(int outputId, double volume)
     {
-        _outputVolumes[outputId] = GetOutputVolumeState(outputId)
-            with { Volume = Math.Clamp(volume, AudioVolumeLimits.Min, AudioVolumeLimits.Max) };
+        _mixer.SetOutputVolume(outputId, volume);
         ApplyVolumeToPipelines();
     }
 
     public void SetOutputMuted(int outputId, bool muted)
     {
-        _outputVolumes[outputId] = GetOutputVolumeState(outputId) with { Muted = muted };
+        _mixer.SetOutputMuted(outputId, muted);
         ApplyVolumeToPipelines();
     }
 
     public void SetOutputDelay(int outputId, double delaySeconds)
     {
-        _outputDelays[outputId] = Math.Clamp(delaySeconds, AudioDelayLimits.Min, AudioDelayLimits.Max);
+        _mixer.SetOutputDelay(outputId, delaySeconds);
         ApplyDelayToPipelines();
     }
 
@@ -708,13 +707,12 @@ internal sealed unsafe class MediaSession : IMediaSession
     private void BuildSubtitleCatalog()
     {
         var scanner = new SubtitleScanner(_loggerFactory);
-        var nextId = 0;
 
         foreach (var source in _sources)
         {
             foreach (var local in scanner.GetSubtitleStreams(source.FormatContext))
             {
-                var globalId = nextId++;
+                var globalId = _nextSubtitleStreamId++;
                 _subtitleStreamLocations[globalId] = (source.SourceId, local.Id);
                 _subtitleStreamCatalog.Add(
                     local with
@@ -728,7 +726,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         foreach (var (sourceId, sidecar) in _pendingSubtitleSidecars)
         {
-            var globalId = nextId++;
+            var globalId = _nextSubtitleStreamId++;
             _pendingSubtitleSidecarStreamIds[globalId] = sourceId;
             _subtitleStreamCatalog.Add(
                 new SubtitleStream(
@@ -777,13 +775,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             return false;
         }
 
-        var seekTargetSeconds = Math.Max(0, CurrentTime.TotalSeconds - SeekLookbackSeconds);
-        lock (source.FormatSync)
-        {
-            source.TrySeek(seekTargetSeconds, localStream.Id, isAudioOnly: true, out _, out _);
-        }
-
-        source.ResetPtsBaseline(seekTargetSeconds);
+        SeekNewSidecarToCurrentPosition(source, localStream.Id);
         _sources.Add(source);
         source.DemuxWorker.Start(worker => DemuxLoop(source, worker), $"{PipelineWorkerRole.Demux}-{source.SourceId}");
 
@@ -853,15 +845,21 @@ internal sealed unsafe class MediaSession : IMediaSession
             return false;
         }
 
+        SeekNewSidecarToCurrentPosition(source, scannedStream.Id);
+        localStream = scannedStream;
+        return true;
+    }
+
+    private void SeekNewSidecarToCurrentPosition(MediaInputSource source, int localStreamIndex)
+    {
         var seekTargetSeconds = Math.Max(0, CurrentTime.TotalSeconds - SeekLookbackSeconds);
+
         lock (source.FormatSync)
         {
-            source.TrySeek(seekTargetSeconds, scannedStream.Id, isAudioOnly: true, out _, out _);
+            source.TrySeek(seekTargetSeconds, localStreamIndex, isAudioOnly: true, out _, out _);
         }
 
         source.ResetPtsBaseline(seekTargetSeconds);
-        localStream = scannedStream;
-        return true;
     }
 
     private bool IsSourceAudioOnly(MediaInputSource source) => !(source.IsPrimary && _videoPipeline is not null);
@@ -1188,7 +1186,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             }
             catch (Exception ex)
             {
-                LogLoopError(ex);
+                _loopErrorLog.Report(ex);
                 Thread.Yield();
             }
         }
@@ -1218,7 +1216,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             }
             catch (Exception ex)
             {
-                LogLoopError(ex);
+                _loopErrorLog.Report(ex);
             }
 
             Thread.Yield();
@@ -1263,32 +1261,6 @@ internal sealed unsafe class MediaSession : IMediaSession
         PlaybackEnded?.Invoke();
     }
 
-    private void LogLoopError(Exception ex)
-    {
-        if (ex.Message != _lastLoopErrorMessage)
-        {
-            _lastLoopErrorMessage = ex.Message;
-            _suppressedLoopErrors = 0;
-            _loopErrorStopwatch.Restart();
-            _logger.LogError(ex, "Presentation loop iteration failed.");
-            return;
-        }
-
-        _suppressedLoopErrors++;
-
-        if (_loopErrorStopwatch.ElapsedMilliseconds < LoopErrorLogIntervalMs)
-        {
-            return;
-        }
-
-        _logger.LogError(
-            ex,
-            "Presentation loop iteration failed ({SuppressedCount} identical failure(s) suppressed).",
-            _suppressedLoopErrors);
-        _suppressedLoopErrors = 0;
-        _loopErrorStopwatch.Restart();
-    }
-
     private void LogSyncDiagnosticsIfDue(double clockSeconds)
     {
         var hasAnythingToReport = _audioPipelines.Count > 0 || _videoPipeline is not null;
@@ -1302,19 +1274,11 @@ internal sealed unsafe class MediaSession : IMediaSession
         var parts = new string[_audioPipelines.Count];
         for (var i = 0; i < _audioPipelines.Count; i++)
         {
-            var outputSeconds = _audioPipelines[i].OutputTimeSeconds;
             var outputId = i < _audioRoutes.Count ? _audioRoutes[i].Output.Id : -1;
-            var expectedSeconds = clockSeconds - GetOutputDelaySeconds(outputId) * Speed;
-            var driftMs = (outputSeconds - expectedSeconds) * 1000;
             var friendlyName = i < _audioRoutes.Count ? _audioRoutes[i].Output.FriendlyName : "?";
-            var p = _audioPipelines[i];
-            parts[i] = string.Create(
-                CultureInfo.InvariantCulture,
-                $"{friendlyName}={outputSeconds:F3}s(drift={driftMs:F0}ms,pktQ={p.DiagPacketQueueCount}," +
-                $"pktDrop={p.DiagPacketDropCount},pcmQ={p.DiagDecodedQueueCount},total={p.DiagTotalChunksDecoded}," +
-                $"skipBefore={p.DiagSkipBeforeSeconds:F3},cur={p.DiagCurrentTimeSeconds:F3}," +
-                $"ptsBaseline={p.DiagPtsBaselineOffsetSeconds:F3}," +
-                $"buf={p.DiagBufferedBytes}/{p.DiagBufferLength},front={p.DiagFrontChunkSeconds:F3})");
+            var expectedSeconds = clockSeconds - _mixer.GetDelaySeconds(outputId) * Speed;
+
+            parts[i] = _audioPipelines[i].DescribeDiagnostics(friendlyName, expectedSeconds);
         }
 
         var videoPart = _videoPipeline is null
@@ -1335,7 +1299,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     {
         for (var i = 0; i < _audioPipelines.Count && i < _audioRoutes.Count; i++)
         {
-            _audioPipelines[i].SetAmplitude(GetEffectiveAmplitude(_audioRoutes[i].Output.Id));
+            _audioPipelines[i].SetAmplitude(_mixer.GetEffectiveAmplitude(_audioRoutes[i].Output.Id));
         }
     }
 
@@ -1343,29 +1307,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     {
         for (var i = 0; i < _audioPipelines.Count && i < _audioRoutes.Count; i++)
         {
-            _audioPipelines[i].SetDelay(GetOutputDelaySeconds(_audioRoutes[i].Output.Id));
+            _audioPipelines[i].SetDelay(_mixer.GetDelaySeconds(_audioRoutes[i].Output.Id));
         }
-    }
-
-    private double GetOutputDelaySeconds(int outputId) => _outputDelays.GetValueOrDefault(outputId, 0);
-
-    private float GetEffectiveAmplitude(int outputId)
-    {
-        var state = GetOutputVolumeState(outputId);
-
-        if (IsMuted || state.Muted)
-        {
-            return 0f;
-        }
-
-        return (float)(AudioGainProcessor.ToAmplitude(MasterVolume) * AudioGainProcessor.ToAmplitude(state.Volume));
-    }
-
-    private OutputVolumeState GetOutputVolumeState(int outputId)
-    {
-        return _outputVolumes.TryGetValue(outputId, out var state)
-            ? state
-            : new OutputVolumeState(1.0, false);
     }
 
     private void ClearAudioPipelines()
