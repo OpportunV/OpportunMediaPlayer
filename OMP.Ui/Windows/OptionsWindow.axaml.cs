@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -43,6 +41,7 @@ public sealed partial class OptionsWindow : Window
     private readonly IUserSettingsService _settings;
     private readonly IWindowFactory _windowFactory;
     private readonly ILogger<OptionsWindow> _logger;
+    private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly ObservableCollection<AudioRouteRow> _audioRouteRows = [];
     private readonly ObservableCollection<SubtitleZone> _subtitleZones = [];
     private readonly ObservableCollection<SubtitleRouteRow> _subtitleRows = [];
@@ -52,7 +51,8 @@ public sealed partial class OptionsWindow : Window
     private readonly List<SubtitleStreamOption> _subtitleStreamOptions = [];
 
     public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings,
-        IWindowFactory windowFactory, ILogger<OptionsWindow> logger)
+        IWindowFactory windowFactory, ILogger<OptionsWindow> logger,
+        SingleInstanceCoordinator singleInstanceCoordinator)
     {
         InitializeComponent();
 
@@ -60,6 +60,7 @@ public sealed partial class OptionsWindow : Window
         _settings = settings;
         _windowFactory = windowFactory;
         _logger = logger;
+        _singleInstanceCoordinator = singleInstanceCoordinator;
 
         var session = _mediaSessionRegistry.Current;
         _streamOptions.AddRange((session?.AudioStreams ?? []).Select(stream => new AudioStreamOption(stream)));
@@ -157,19 +158,9 @@ public sealed partial class OptionsWindow : Window
         _settings.Save();
     }
 
-    private void OnYtDlpPathChanged(object? sender, RoutedEventArgs e)
-    {
-        var text = YtDlpPathTextBox.Text?.Trim();
-        _settings.Current.YtDlpPath = string.IsNullOrEmpty(text) ? null : text;
-        _settings.Save();
-    }
+    private void OnYtDlpPathChanged(object? sender, RoutedEventArgs e) => SetYtDlpPath(YtDlpPathTextBox.Text);
 
-    private void OnResetYtDlpPath(object? sender, RoutedEventArgs e)
-    {
-        YtDlpPathTextBox.Text = string.Empty;
-        _settings.Current.YtDlpPath = null;
-        _settings.Save();
-    }
+    private void OnResetYtDlpPath(object? sender, RoutedEventArgs e) => SetYtDlpPath(null);
 
     private async void OnBrowseYtDlpPath(object? sender, RoutedEventArgs e)
     {
@@ -193,32 +184,21 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
-        YtDlpPathTextBox.Text = path;
-        _settings.Current.YtDlpPath = path;
+        SetYtDlpPath(path);
+    }
+
+    private void SetYtDlpPath(string? path)
+    {
+        var trimmed = path?.Trim();
+        var normalized = string.IsNullOrEmpty(trimmed) ? null : trimmed;
+
+        YtDlpPathTextBox.Text = normalized ?? string.Empty;
+        _settings.Current.YtDlpPath = normalized;
         _settings.Save();
     }
 
-    private void OnRestartNowClick(object? sender, RoutedEventArgs e)
-    {
-        var exePath = Environment.GetEnvironmentVariable("APPIMAGE") ?? Environment.ProcessPath;
-
-        if (exePath is not null)
-        {
-            var startInfo = new ProcessStartInfo(exePath);
-
-            if (_mediaSessionRegistry.Current?.FilePath is { } filePath)
-            {
-                startInfo.ArgumentList.Add(filePath);
-            }
-
-            Process.Start(startInfo);
-        }
-
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
-        {
-            lifetime.Shutdown();
-        }
-    }
+    private void OnRestartNowClick(object? sender, RoutedEventArgs e) =>
+        ApplicationRestart.Restart(_mediaSessionRegistry.Current?.FilePath, _singleInstanceCoordinator);
 
     private void OnDraftOutputChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -561,32 +541,13 @@ public sealed partial class OptionsWindow : Window
         SubtitleRouteErrorText.IsVisible = true;
     }
 
-    private void UpdateSubtitleStreamSelector()
-    {
-        var availableStreams = OptionsSelector.AvailableOptions(
-            _subtitleStreamOptions, _subtitleRows.Select(row => row.Stream.Id), o => o.Stream.Id);
+    private void UpdateSubtitleStreamSelector() =>
+        OptionsSelector.Rebind(
+            SubtitleStreamSelector, _subtitleStreamOptions, _subtitleRows.Select(row => row.Stream.Id), o => o.Stream.Id);
 
-        SubtitleStreamSelector.ItemsSource = availableStreams;
-
-        if (SubtitleStreamSelector.SelectedItem is SubtitleStreamOption selected &&
-            !availableStreams.Contains(selected))
-        {
-            SubtitleStreamSelector.SelectedItem = null;
-        }
-    }
-
-    private void UpdateSubtitleZoneSelector()
-    {
-        var availableZones = OptionsSelector.AvailableOptions(
-            _subtitleZones, _subtitleRows.Select(row => row.Zone.Id), z => z.Id);
-
-        SubtitleZoneSelector.ItemsSource = availableZones;
-
-        if (SubtitleZoneSelector.SelectedItem is SubtitleZone selected && !availableZones.Contains(selected))
-        {
-            SubtitleZoneSelector.SelectedItem = null;
-        }
-    }
+    private void UpdateSubtitleZoneSelector() =>
+        OptionsSelector.Rebind(
+            SubtitleZoneSelector, _subtitleZones, _subtitleRows.Select(row => row.Zone.Id), z => z.Id);
 
     private void ApplyAndPersistRoutes()
     {
@@ -630,18 +591,9 @@ public sealed partial class OptionsWindow : Window
         _settings.Save();
     }
 
-    private void UpdateOutputSelector()
-    {
-        var availableOutputs = OptionsSelector.AvailableOptions(
-            _outputs, _audioRouteRows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
-
-        OutputSelector.ItemsSource = availableOutputs;
-
-        if (OutputSelector.SelectedItem is AudioOutput selected && !availableOutputs.Contains(selected))
-        {
-            OutputSelector.SelectedItem = null;
-        }
-    }
+    private void UpdateOutputSelector() =>
+        OptionsSelector.Rebind(
+            OutputSelector, _outputs, _audioRouteRows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
 
     private void UpdateRowStreamOptions()
     {
@@ -654,18 +606,10 @@ public sealed partial class OptionsWindow : Window
     private void RefreshRows()
     {
         var canDelete = _audioRouteRows.Count > 1;
-        var snapshot = _audioRouteRows.ToList();
 
-        foreach (var row in snapshot)
+        foreach (var row in _audioRouteRows)
         {
             row.CanDelete = canDelete;
-        }
-
-        _audioRouteRows.Clear();
-
-        foreach (var row in snapshot)
-        {
-            _audioRouteRows.Add(row);
         }
     }
 }
