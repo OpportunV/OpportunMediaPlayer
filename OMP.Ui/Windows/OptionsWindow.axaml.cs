@@ -2,18 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Services;
@@ -23,9 +29,20 @@ namespace OMP.Ui.Windows;
 
 public sealed partial class OptionsWindow : Window
 {
+    private static readonly FilePickerFileType _ytDlpFileTypeFilter = new(Strings.Options_YtDlpPathFileTypeFilterName)
+    {
+        Patterns = OperatingSystem.IsWindows() ? ["*.exe"] : ["*"]
+    };
+
+    private static readonly FilePickerFileType _subtitleFileTypeFilter = new(Strings.Options_SubtitleFileTypeFilterName)
+    {
+        Patterns = ["*.srt", "*.vtt", "*.ass", "*.ssa", "*.sub"]
+    };
+
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IUserSettingsService _settings;
     private readonly IWindowFactory _windowFactory;
+    private readonly ILogger<OptionsWindow> _logger;
     private readonly ObservableCollection<AudioRouteRow> _audioRouteRows = [];
     private readonly ObservableCollection<SubtitleZone> _subtitleZones = [];
     private readonly ObservableCollection<SubtitleRouteRow> _subtitleRows = [];
@@ -35,13 +52,14 @@ public sealed partial class OptionsWindow : Window
     private readonly List<SubtitleStreamOption> _subtitleStreamOptions = [];
 
     public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings,
-        IWindowFactory windowFactory)
+        IWindowFactory windowFactory, ILogger<OptionsWindow> logger)
     {
         InitializeComponent();
 
         _mediaSessionRegistry = mediaSessionRegistry;
         _settings = settings;
         _windowFactory = windowFactory;
+        _logger = logger;
 
         var session = _mediaSessionRegistry.Current;
         _streamOptions.AddRange((session?.AudioStreams ?? []).Select(stream => new AudioStreamOption(stream)));
@@ -90,14 +108,16 @@ public sealed partial class OptionsWindow : Window
         LanguageSelector.SelectedItem = languageOptions
             .FirstOrDefault(option => option.CultureCode == _settings.Current.Language) ?? languageOptions[0];
 
+        YtDlpPathTextBox.Text = _settings.Current.YtDlpPath ?? string.Empty;
+
         RoutesList.ItemsSource = _audioRouteRows;
         StreamSelector.ItemsSource = _streamOptions;
         ZonesList.ItemsSource = _subtitleZones;
         SubtitleRoutesList.ItemsSource = _subtitleRows;
 
-        AddRouteButton.Click += OnAddRouteButton;
+        ClearDraftRouteButton.Click += OnClearDraftRoute;
         AddZoneButton.Click += OnAddZone;
-        AddSubtitleRouteButton.Click += OnAddSubtitleRoute;
+        ClearDraftSubtitleRouteButton.Click += OnClearDraftSubtitleRoute;
         UpdateOutputSelector();
         UpdateRowStreamOptions();
         UpdateSubtitleStreamSelector();
@@ -137,6 +157,47 @@ public sealed partial class OptionsWindow : Window
         _settings.Save();
     }
 
+    private void OnYtDlpPathChanged(object? sender, RoutedEventArgs e)
+    {
+        var text = YtDlpPathTextBox.Text?.Trim();
+        _settings.Current.YtDlpPath = string.IsNullOrEmpty(text) ? null : text;
+        _settings.Save();
+    }
+
+    private void OnResetYtDlpPath(object? sender, RoutedEventArgs e)
+    {
+        YtDlpPathTextBox.Text = string.Empty;
+        _settings.Current.YtDlpPath = null;
+        _settings.Save();
+    }
+
+    private async void OnBrowseYtDlpPath(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(
+            new FilePickerOpenOptions
+            {
+                Title = Strings.Options_YtDlpPathBrowseTitle,
+                AllowMultiple = false,
+                FileTypeFilter = [_ytDlpFileTypeFilter]
+            });
+
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+
+        if (path == null)
+        {
+            return;
+        }
+
+        YtDlpPathTextBox.Text = path;
+        _settings.Current.YtDlpPath = path;
+        _settings.Save();
+    }
+
     private void OnRestartNowClick(object? sender, RoutedEventArgs e)
     {
         var exePath = Environment.GetEnvironmentVariable("APPIMAGE") ?? Environment.ProcessPath;
@@ -159,10 +220,32 @@ public sealed partial class OptionsWindow : Window
         }
     }
 
-    private void OnAddRouteButton(object? sender, RoutedEventArgs e)
+    private void OnDraftOutputChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (StreamSelector.SelectedItem is not AudioStreamOption streamOption ||
-            OutputSelector.SelectedItem is not AudioOutput output)
+        if (OutputSelector.SelectedItem is not AudioOutput)
+        {
+            StreamSelector.IsEnabled = false;
+            StreamSelector.SelectedItem = null;
+            return;
+        }
+
+        StreamSelector.IsEnabled = true;
+        if (_streamOptions.Count == 1)
+        {
+            StreamSelector.SelectedIndex = 0;
+        }
+
+        TryCommitDraftRoute();
+    }
+
+    private void OnDraftStreamChanged(object? sender, SelectionChangedEventArgs e) => TryCommitDraftRoute();
+
+    private void OnClearDraftRoute(object? sender, RoutedEventArgs e) => OutputSelector.SelectedItem = null;
+
+    private void TryCommitDraftRoute()
+    {
+        if (OutputSelector.SelectedItem is not AudioOutput output ||
+            StreamSelector.SelectedItem is not AudioStreamOption streamOption)
         {
             return;
         }
@@ -172,10 +255,12 @@ public sealed partial class OptionsWindow : Window
 
         _audioRouteRows.Add(
             new AudioRouteRow(new AudioRoute(streamOption.Stream, output), volume: 100, muted: false, savedDelayMs));
-        UpdateOutputSelector();
         UpdateRowStreamOptions();
         RefreshRows();
         ApplyAndPersistRoutes();
+
+        UpdateOutputSelector();
+        OutputSelector.Focus();
     }
 
     private void OnDeleteRoute(object? sender, RoutedEventArgs e)
@@ -194,7 +279,7 @@ public sealed partial class OptionsWindow : Window
 
     private void OnRouteStreamChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (((Control)sender!).DataContext is not AudioRouteRow)
+        if (((Control)sender!).DataContext is not AudioRouteRow || e.RemovedItems.Count == 0)
         {
             return;
         }
@@ -331,7 +416,31 @@ public sealed partial class OptionsWindow : Window
         ApplySubtitleRoutes();
     }
 
-    private void OnAddSubtitleRoute(object? sender, RoutedEventArgs e)
+    private void OnDraftSubtitleStreamChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true })
+        {
+            SubtitleZoneSelector.IsEnabled = false;
+            SubtitleZoneSelector.SelectedItem = null;
+            return;
+        }
+
+        SubtitleZoneSelector.IsEnabled = true;
+        if (SubtitleZoneSelector.Items.Count == 1)
+        {
+            SubtitleZoneSelector.SelectedIndex = 0;
+        }
+
+        TryCommitDraftSubtitleRoute();
+    }
+
+    private void OnDraftSubtitleZoneChanged(object? sender, SelectionChangedEventArgs e) =>
+        TryCommitDraftSubtitleRoute();
+
+    private void OnClearDraftSubtitleRoute(object? sender, RoutedEventArgs e) =>
+        SubtitleStreamSelector.SelectedItem = null;
+
+    private void TryCommitDraftSubtitleRoute()
     {
         if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true } streamOption ||
             SubtitleZoneSelector.SelectedItem is not SubtitleZone zone)
@@ -339,10 +448,13 @@ public sealed partial class OptionsWindow : Window
             return;
         }
 
+        SubtitleRouteErrorText.IsVisible = false;
         _subtitleRows.Add(new SubtitleRouteRow(streamOption.Stream, zone));
+        ApplySubtitleRoutes();
+
         UpdateSubtitleStreamSelector();
         UpdateSubtitleZoneSelector();
-        ApplySubtitleRoutes();
+        SubtitleStreamSelector.Focus();
     }
 
     private void OnDeleteSubtitleRoute(object? sender, RoutedEventArgs e)
@@ -358,19 +470,101 @@ public sealed partial class OptionsWindow : Window
         ApplySubtitleRoutes();
     }
 
+    private async void OnLoadSubtitleFile(object? sender, RoutedEventArgs e)
+    {
+        var session = _mediaSessionRegistry.Current;
+        if (session is null)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(
+            new FilePickerOpenOptions
+            {
+                Title = Strings.Options_LoadSubtitleFileTitle,
+                AllowMultiple = false,
+                FileTypeFilter = [_subtitleFileTypeFilter]
+            });
+
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var sidecar = new SubtitleSidecarSource(path, Title: Path.GetFileNameWithoutExtension(path));
+            var added = await Task.Run(() => session.AddSubtitleSidecar(sidecar));
+
+            _subtitleStreamOptions.Add(new SubtitleStreamOption(added));
+            UpdateSubtitleStreamSelector();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not load subtitle file {Path}.", path);
+
+            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
+            errorWindow.Load(Strings.OpenFileError_SubtitleHeading, ex.Message);
+            await errorWindow.ShowDialog(this);
+        }
+    }
+
     private void ApplySubtitleRoutes()
     {
-        _mediaSessionRegistry.Current?.SetSubtitleRoutes(
-            _subtitleRows.Select(row => new SubtitleRoute(row.Stream, row.Zone.Id)));
+        var session = _mediaSessionRegistry.Current;
+        if (session is null)
+        {
+            return;
+        }
+
+        var routes = _subtitleRows.Select(row => new SubtitleRoute(row.Stream, row.Zone.Id)).ToList();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var applied = session.SetSubtitleRoutes(routes);
+                Dispatcher.UIThread.Post(() => ReconcileSubtitleRoutes(applied));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Applying subtitle routes failed.");
+            }
+        });
+    }
+
+    private void ReconcileSubtitleRoutes(IReadOnlyList<SubtitleRoute> applied)
+    {
+        var failedRows = _subtitleRows
+            .Where(row => !applied.Any(r => r.Stream.Id == row.Stream.Id && r.ZoneId == row.Zone.Id))
+            .ToList();
+
+        if (failedRows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var row in failedRows)
+        {
+            _subtitleRows.Remove(row);
+        }
+
+        UpdateSubtitleStreamSelector();
+        UpdateSubtitleZoneSelector();
+
+        SubtitleRouteErrorText.Text = Strings.Options_SubtitleRouteError;
+        SubtitleRouteErrorText.IsVisible = true;
     }
 
     private void UpdateSubtitleStreamSelector()
     {
-        var usedStreamIds = _subtitleRows.Select(row => row.Stream.Id).ToHashSet();
-
-        var availableStreams = _subtitleStreamOptions
-            .Where(o => !usedStreamIds.Contains(o.Stream.Id))
-            .ToList();
+        var availableStreams = OptionsSelector.AvailableOptions(
+            _subtitleStreamOptions, _subtitleRows.Select(row => row.Stream.Id), o => o.Stream.Id);
 
         SubtitleStreamSelector.ItemsSource = availableStreams;
 
@@ -383,11 +577,8 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateSubtitleZoneSelector()
     {
-        var usedZoneIds = _subtitleRows.Select(row => row.Zone.Id).ToHashSet();
-
-        var availableZones = _subtitleZones
-            .Where(z => !usedZoneIds.Contains(z.Id))
-            .ToList();
+        var availableZones = OptionsSelector.AvailableOptions(
+            _subtitleZones, _subtitleRows.Select(row => row.Zone.Id), z => z.Id);
 
         SubtitleZoneSelector.ItemsSource = availableZones;
 
@@ -399,7 +590,22 @@ public sealed partial class OptionsWindow : Window
 
     private void ApplyAndPersistRoutes()
     {
-        _mediaSessionRegistry.Current?.SetAudioRoutes(_audioRouteRows.Select(row => row.Route));
+        var session = _mediaSessionRegistry.Current;
+        if (session != null)
+        {
+            var routes = _audioRouteRows.Select(row => row.Route).ToList();
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    session.SetAudioRoutes(routes);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Applying audio routes failed.");
+                }
+            });
+        }
 
         _settings.Current.PreferredAudioTracks = _audioRouteRows
             .Select(row => new PreferredAudioTrackSetting
@@ -426,11 +632,8 @@ public sealed partial class OptionsWindow : Window
 
     private void UpdateOutputSelector()
     {
-        var usedOutputs = _audioRouteRows.Select(row => row.Route.Output.FriendlyName).ToHashSet();
-
-        var availableOutputs = _outputs
-            .Where(o => !usedOutputs.Contains(o.FriendlyName))
-            .ToList();
+        var availableOutputs = OptionsSelector.AvailableOptions(
+            _outputs, _audioRouteRows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
 
         OutputSelector.ItemsSource = availableOutputs;
 

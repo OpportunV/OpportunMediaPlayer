@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:OMP.Ui.Localization"
+        x:Class="OMP.Ui.Windows.OpenUrlWindow"
+        Width="440"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="{x:Static loc:Strings.OpenUrl_Title}">
+
+    <StackPanel Margin="22"
+                Spacing="12">
+
+        <TextBlock Text="{x:Static loc:Strings.OpenUrl_Label}"
+                   TextWrapping="Wrap" />
+
+        <TextBox Name="UrlTextBox"
+                 FontFamily="Consolas"
+                 BorderBrush="{DynamicResource AccentLineBrush}"
+                 Watermark="{x:Static loc:Strings.OpenUrl_Watermark}" />
+
+        <TextBlock Name="ErrorText"
+                   Foreground="IndianRed"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   IsVisible="False" />
+
+        <StackPanel Name="BusyPanel"
+                    Orientation="Horizontal"
+                    Spacing="10"
+                    IsVisible="False">
+
+            <ProgressBar IsIndeterminate="True"
+                         Width="20"
+                         Height="20" />
+
+            <TextBlock Classes="hint"
+                       Text="{x:Static loc:Strings.OpenUrl_ResolvingLabel}"
+                       VerticalAlignment="Center" />
+
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right"
+                    Margin="0,4,0,0">
+            <Button Name="CancelButton"
+                    Classes="link"
+                    Foreground="{DynamicResource SettingsHintBrush}"
+                    Padding="12,6"
+                    Content="{x:Static loc:Strings.OpenUrl_CancelButton}" />
+            <Button Name="OkButton"
+                    Classes="primary-outline"
+                    Padding="14,5"
+                    Content="{x:Static loc:Strings.OpenUrl_OkButton}" />
+        </StackPanel>
+
+    </StackPanel>
+</Window>

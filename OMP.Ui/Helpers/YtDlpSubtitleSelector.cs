@@ -1,0 +1,186 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text.Json;
+using OMP.Lib.Subtitle;
+
+namespace OMP.Ui.Helpers;
+
+internal static class YtDlpSubtitleSelector
+{
+    public static IReadOnlyList<SubtitleSidecarSource> SelectSubtitleSidecars(JsonDocument document, string? appLanguageCode)
+    {
+        var root = document.RootElement;
+        var result = new List<SubtitleSidecarSource>();
+
+        if (root.TryGetProperty("subtitles", out var subtitles) && subtitles.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var track in subtitles.EnumerateObject())
+            {
+                if (TryPickTrackFormat(track.Value, out var format))
+                {
+                    result.Add(BuildSidecar(format));
+                }
+            }
+        }
+
+        if (root.TryGetProperty("automatic_captions", out var automaticCaptions) &&
+            automaticCaptions.ValueKind == JsonValueKind.Object)
+        {
+            result.AddRange(SelectAutomaticCaptions(automaticCaptions, appLanguageCode));
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<SubtitleSidecarSource> SelectAutomaticCaptions(JsonElement automaticCaptions, string? appLanguageCode)
+    {
+        var appLanguage = NormalizeToTwoLetter(appLanguageCode);
+
+        (JsonElement Format, string Language)? original = null;
+        (JsonElement Format, string Language)? translated = null;
+
+        foreach (var track in automaticCaptions.EnumerateObject())
+        {
+            if (!TryPickTrackFormat(track.Value, out var format))
+            {
+                continue;
+            }
+
+            var url = format.GetProperty("url").GetString()!;
+            var targetLanguage = GetQueryParam(url, "tlang");
+
+            if (string.IsNullOrEmpty(targetLanguage))
+            {
+                original ??= (format, track.Name);
+                continue;
+            }
+
+            if (translated is null &&
+                appLanguage is not null &&
+                NormalizeToTwoLetter(targetLanguage) is { } normalizedTarget &&
+                normalizedTarget.Equals(appLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                translated = (format, targetLanguage);
+            }
+        }
+
+        if (original is { } o)
+        {
+            yield return BuildAutomaticCaptionSidecar(o.Format, o.Language, " (auto-generated)");
+        }
+
+        if (translated is { } t)
+        {
+            yield return BuildAutomaticCaptionSidecar(t.Format, t.Language, " (auto-generated, translated)");
+        }
+    }
+
+    private static bool TryPickTrackFormat(JsonElement formats, out JsonElement format)
+    {
+        JsonElement? vtt = null;
+        JsonElement? srt = null;
+
+        foreach (var candidate in formats.EnumerateArray())
+        {
+            if (!candidate.TryGetProperty("ext", out var extElement))
+            {
+                continue;
+            }
+
+            switch (extElement.GetString())
+            {
+                case "vtt":
+                    vtt ??= candidate;
+                    break;
+                case "srt":
+                    srt ??= candidate;
+                    break;
+            }
+        }
+
+        if (vtt is { } vttFormat)
+        {
+            format = vttFormat;
+            return true;
+        }
+
+        if (srt is { } srtFormat)
+        {
+            format = srtFormat;
+            return true;
+        }
+
+        format = default;
+        return false;
+    }
+
+    private static SubtitleSidecarSource BuildSidecar(JsonElement format)
+    {
+        var url = format.GetProperty("url").GetString()!;
+        var name = format.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+        var language = GetQueryParam(url, "lang");
+
+        return new SubtitleSidecarSource(url, language, name);
+    }
+
+    private static SubtitleSidecarSource BuildAutomaticCaptionSidecar(JsonElement format, string language, string titleSuffix)
+    {
+        var url = format.GetProperty("url").GetString()!;
+        var name = format.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+        var title = (name ?? DescribeLanguage(language)) + titleSuffix;
+
+        return new SubtitleSidecarSource(url, language, title);
+    }
+
+    private static string DescribeLanguage(string languageCode)
+    {
+        try
+        {
+            return CultureInfo.GetCultureInfo(languageCode).NativeName;
+        }
+        catch (CultureNotFoundException)
+        {
+            return languageCode;
+        }
+    }
+
+    private static string? GetQueryParam(string url, string paramName)
+    {
+        var queryStart = url.IndexOf('?');
+        if (queryStart < 0)
+        {
+            return null;
+        }
+
+        foreach (var pair in url[(queryStart + 1)..].Split('&'))
+        {
+            var separator = pair.IndexOf('=');
+            if (separator < 0 || !pair.AsSpan(0, separator).Equals(paramName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return Uri.UnescapeDataString(pair[(separator + 1)..]);
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeToTwoLetter(string? languageCode)
+    {
+        if (string.IsNullOrEmpty(languageCode))
+        {
+            return null;
+        }
+
+        try
+        {
+            return CultureInfo.GetCultureInfo(languageCode).TwoLetterISOLanguageName;
+        }
+        catch (CultureNotFoundException)
+        {
+            return languageCode;
+        }
+    }
+}

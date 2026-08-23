@@ -14,20 +14,25 @@ public sealed class MediaSessionRegistry(
 
     private readonly ILogger _logger = loggerFactory.CreateLogger<MediaSessionRegistry>();
 
-    public void Open(string filePath)
+    public void Open(string filePath) => Open(MediaOpenRequest.ForFile(filePath));
+
+    public void Open(MediaOpenRequest request)
     {
-        _logger.LogInformation("Opening {FilePath}.", filePath);
+        _logger.LogInformation(
+            "Opening {PrimarySource} with {SidecarCount} audio sidecar(s).",
+            request.PrimarySource,
+            request.AudioSidecars.Count);
 
         Current?.Dispose();
 
         try
         {
-            Current = new MediaSession(filePath, options, loggerFactory, nativeLibraryOptions);
+            Current = new MediaSession(request, options, loggerFactory, nativeLibraryOptions);
         }
         catch (Exception ex)
         {
             Current = null;
-            _logger.LogError(ex, "Failed to open {FilePath}.", filePath);
+            _logger.LogError(ex, "Failed to open {PrimarySource}.", request.PrimarySource);
             throw;
         }
 

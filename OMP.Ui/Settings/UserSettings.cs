@@ -16,6 +16,8 @@ public sealed class UserSettings
 
     public string? Language { get; set; }
 
+    public string? YtDlpPath { get; set; }
+
     public List<OutputVolumeSetting> OutputVolumes { get; set; } = [];
 
     public List<PreferredAudioTrackSetting> PreferredAudioTracks { get; set; } = [];

@@ -49,7 +49,9 @@ public interface IMediaSession : IDisposable
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes);
 
-    public void SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes);
+    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes);
+
+    public SubtitleStream AddSubtitleSidecar(SubtitleSidecarSource sidecar);
 
     public IReadOnlyList<SubtitleCue> GetActiveSubtitleCues();
 

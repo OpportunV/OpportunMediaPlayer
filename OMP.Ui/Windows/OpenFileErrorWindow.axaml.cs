@@ -15,5 +15,6 @@ public sealed partial class OpenFileErrorWindow : Window
     {
         HeadingText.Text = heading;
         ReasonText.Text = reason;
+        TechnicalDetailLabel.IsVisible = ReasonText.IsVisible = !string.IsNullOrEmpty(reason);
     }
 }

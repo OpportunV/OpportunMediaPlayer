@@ -55,6 +55,7 @@ internal static class Program
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
                     services.AddSingleton<IWindowFactory, WindowFactory>();
                     services.AddSingleton<IUserSettingsService, UserSettingsService>();
+                    services.AddSingleton<IYtDlpResolver, YtDlpResolver>();
 
                     services.AddTransient<MainWindow>();
                     services.AddTransient<OptionsWindow>();
@@ -63,6 +64,7 @@ internal static class Program
                     services.AddTransient<AboutWindow>();
                     services.AddTransient<AudioOutputWarningWindow>();
                     services.AddTransient<OpenFileErrorWindow>();
+                    services.AddTransient<OpenUrlWindow>();
                 })
                 .Build();
 

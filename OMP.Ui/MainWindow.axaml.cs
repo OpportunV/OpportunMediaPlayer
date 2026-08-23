@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
-using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Microsoft.Extensions.Logging;
 using OMP.Lib;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
@@ -16,6 +17,7 @@ using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
+using OMP.Ui.Helpers;
 using OMP.Ui.Input;
 using OMP.Ui.Localization;
 using OMP.Ui.Services;
@@ -59,14 +61,18 @@ public sealed partial class MainWindow : Window
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
+    private bool _isResolvingUrl;
     private int _lastKnownSubtitleRouteCount;
     private int _sessionGeneration;
+    private string? _resolvedTitleOverride;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
+    private readonly IYtDlpResolver _ytDlpResolver;
+    private readonly ILogger<MainWindow> _logger;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
@@ -81,6 +87,8 @@ public sealed partial class MainWindow : Window
         IMainWindowHotkeyService hotkeyService,
         IWindowFactory windowFactory,
         IUserSettingsService settings,
+        IYtDlpResolver ytDlpResolver,
+        ILogger<MainWindow> logger,
         SingleInstanceCoordinator singleInstanceCoordinator,
         NativeLibraryOptions nativeLibraryOptions,
         StartupOptions startupOptions)
@@ -90,6 +98,8 @@ public sealed partial class MainWindow : Window
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
         _settings = settings;
+        _ytDlpResolver = ytDlpResolver;
+        _logger = logger;
         _singleInstanceCoordinator = singleInstanceCoordinator;
         _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
@@ -129,7 +139,7 @@ public sealed partial class MainWindow : Window
         UpdatePlayPauseIcon();
         UpdateMuteIcon();
         _fullscreenController.UpdateVideoViewportMargin();
-        _mediaSessionRegistry.SessionChanged += OnSessionChanged;
+        _mediaSessionRegistry.SessionChanged += registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
 
         if (_mediaSessionRegistry.Current is not null)
         {
@@ -175,7 +185,14 @@ public sealed partial class MainWindow : Window
         _subtitleOverlayRenderer.Clear();
         IsPlaying = false;
         NoVideoIndicator.IsVisible = registry.Current is { HasVideo: false };
-        EmptyStateIndicator.IsVisible = registry.Current is null;
+        var isEmpty = registry.Current is null;
+        EmptyStateIndicator.IsVisible = isEmpty;
+
+        OutputVolumesButton.IsVisible = !isEmpty;
+        SpeedButton.IsVisible = !isEmpty;
+        SubtitlesButton.IsVisible = !isEmpty;
+        TransportGroup.Opacity = isEmpty ? 0.35 : 1;
+        TimelineRow.Opacity = isEmpty ? 0.35 : 1;
 
         _areSubtitlesEnabled = false;
         _lastKnownSubtitleRouteCount = 0;
@@ -247,15 +264,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var rows = session.AudioRoutes.Select(route =>
-        {
-            var state = session.OutputVolumes.TryGetValue(route.Output.Id, out var s)
-                ? s
-                : new OutputVolumeState(1.0, false);
-            return (route.Output, state.Volume * 100, state.Muted);
-        });
-
-        _volumeFlyoutView.SetOutputs(rows);
+        _volumeFlyoutView.SetOutputs(session.AudioRoutes.ToVolumeRows(session.OutputVolumes));
     }
 
     private void PersistOutputVolumeSetting(AudioOutput output)
@@ -337,7 +346,17 @@ public sealed partial class MainWindow : Window
 
         if (routes.Count > 0)
         {
-            session.SetAudioRoutes(routes);
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    session.SetAudioRoutes(routes);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Restoring persisted audio routes failed.");
+                }
+            });
         }
     }
 
@@ -347,18 +366,11 @@ public sealed partial class MainWindow : Window
         session.SetMasterMuted(_settings.Current.IsMuted);
         IsMuted = _settings.Current.IsMuted;
 
-        foreach (var saved in _settings.Current.OutputVolumes)
+        foreach (var (output, setting) in session.AudioOutputs.MatchSettings(_settings.Current.OutputVolumes))
         {
-            var output = session.AudioOutputs.FirstOrDefault(o => o.FriendlyName == saved.FriendlyName);
-
-            if (output is null)
-            {
-                continue;
-            }
-
-            session.SetOutputVolume(output.Id, saved.Volume);
-            session.SetOutputMuted(output.Id, saved.Muted);
-            session.SetOutputDelay(output.Id, saved.DelayMs / 1000.0);
+            session.SetOutputVolume(output.Id, setting.Volume);
+            session.SetOutputMuted(output.Id, setting.Muted);
+            session.SetOutputDelay(output.Id, setting.DelayMs / 1000.0);
         }
     }
 
@@ -382,7 +394,7 @@ public sealed partial class MainWindow : Window
                 ProgressSlider.Value = current;
             }
 
-            CurrentTimeLabel.Text = FormatTime(session.CurrentTime);
+            CurrentTimeLabel.Text = session.CurrentTime.Format();
 
             var subtitleRouteCount = session.SubtitleRoutes.Count;
             if (subtitleRouteCount > 0 && _lastKnownSubtitleRouteCount == 0)
@@ -447,16 +459,6 @@ public sealed partial class MainWindow : Window
         Dispatcher.UIThread.Post(() => IsPlaying = false);
     }
 
-    private static string FormatTime(TimeSpan time)
-    {
-        if (time.TotalHours >= 1)
-        {
-            return time.ToString(@"hh\:mm\:ss");
-        }
-
-        return time.ToString(@"mm\:ss");
-    }
-
     private void UpdatePlayPauseIcon()
     {
         PlayIcon.IsVisible = !IsPlaying;
@@ -475,6 +477,9 @@ public sealed partial class MainWindow : Window
         var openItem = new NativeMenuItem(Strings.MainWindow_OpenMenuItem);
         openItem.Click += async (_, _) => await OpenFile();
 
+        var openUrlItem = new NativeMenuItem(Strings.MainWindow_OpenUrlMenuItem);
+        openUrlItem.Click += async (_, _) => await OpenUrl();
+
         var optionsItem = new NativeMenuItem(Strings.MainWindow_OptionsMenuItem);
         optionsItem.Click += (_, _) => ShowOptionsWindow();
 
@@ -483,7 +488,7 @@ public sealed partial class MainWindow : Window
 
         var fileMenu = new NativeMenuItem(Strings.MainWindow_FileMenu)
         {
-            Menu = [openItem, optionsItem, new NativeMenuItemSeparator(), exitItem]
+            Menu = [openItem, openUrlItem, optionsItem, new NativeMenuItemSeparator(), exitItem]
         };
 
         var hotkeysItem = new NativeMenuItem(Strings.MainWindow_HotkeysMenuItem);
@@ -538,23 +543,120 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenPath(string path)
     {
-        try
-        {
-            _mediaSessionRegistry.Open(path);
-        }
-        catch (Exception ex)
-        {
-            var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
-                ? Strings.OpenFileError_FFmpegMacHeading
-                : Strings.OpenFileError_Heading;
+        _resolvedTitleOverride = null;
 
-            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-            errorWindow.Load(heading, ex.Message);
-            await errorWindow.ShowDialog(this);
+        if (await TryOpenSessionAsync(MediaOpenRequest.ForFile(path)))
+        {
+            UpdateSessionData();
+        }
+    }
+
+    private async Task OpenUrl()
+    {
+        if (_isResolvingUrl)
+        {
             return;
         }
 
-        UpdateSessionData();
+        _isResolvingUrl = true;
+
+        try
+        {
+            string? prefillUrl = null;
+
+            while (true)
+            {
+                var dialog = _windowFactory.Create<OpenUrlWindow>();
+                dialog.Load(prefillUrl);
+
+                var result = await dialog.ShowDialog<YtDlpResolveResult?>(this);
+
+                if (result is null)
+                {
+                    return;
+                }
+
+                _resolvedTitleOverride = result.Title;
+                var request = new MediaOpenRequest(result.Url!, result.AudioSidecars, result.Headers, result.SubtitleSidecars);
+
+                if (await OpenSessionAsync(request) is null)
+                {
+                    UpdateSessionData();
+                    return;
+                }
+
+                var retryResult = await _ytDlpResolver.ResolveAsync(result.PageUrl, CancellationToken.None);
+                var retryRequest = request;
+
+                if (retryResult.Status == YtDlpResolveStatus.Success)
+                {
+                    _resolvedTitleOverride = retryResult.Title;
+                    retryRequest = new MediaOpenRequest(
+                        retryResult.Url!, retryResult.AudioSidecars, retryResult.Headers, retryResult.SubtitleSidecars);
+                }
+
+                if (await TryOpenSessionAsync(retryRequest))
+                {
+                    UpdateSessionData();
+                    return;
+                }
+
+                prefillUrl = result.PageUrl;
+            }
+        }
+        finally
+        {
+            _isResolvingUrl = false;
+        }
+    }
+
+    private async Task<bool> TryOpenSessionAsync(MediaOpenRequest request)
+    {
+        var error = await OpenSessionAsync(request);
+        if (error is null)
+        {
+            return true;
+        }
+
+        var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
+            ? Strings.OpenFileError_FFmpegMacHeading
+            : Strings.OpenFileError_Heading;
+
+        await ShowError(heading, error.Message);
+        return false;
+    }
+
+    private async Task<Exception?> OpenSessionAsync(MediaOpenRequest request)
+    {
+        var isNetworkSource = UrlType.IsHttpUrl(request.PrimarySource);
+        if (isNetworkSource)
+        {
+            LoadingIndicator.IsVisible = true;
+        }
+
+        try
+        {
+            await Task.Run(() => _mediaSessionRegistry.Open(request));
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+        finally
+        {
+            if (isNetworkSource)
+            {
+                LoadingIndicator.IsVisible = false;
+            }
+        }
+    }
+
+    private async Task ShowError(string heading, string reason)
+    {
+        var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
+        errorWindow.Load(heading, reason);
+        await errorWindow.ShowDialog(this);
     }
 
     private void SetupDragDrop()
@@ -586,7 +688,7 @@ public sealed partial class MainWindow : Window
 
             var ratio = Math.Clamp(e.GetPosition(ProgressSlider).X / ProgressSlider.Bounds.Width, 0, 1);
             var hoveredTime = TimeSpan.FromSeconds(ratio * ProgressSlider.Maximum);
-            ToolTip.SetTip(ProgressSlider, FormatTime(hoveredTime));
+            ToolTip.SetTip(ProgressSlider, hoveredTime.Format());
         };
 
         ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
@@ -683,7 +785,7 @@ public sealed partial class MainWindow : Window
     {
         var path = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
 
-        if (path == null || !IsSupportedMediaFile(path))
+        if (path == null || !MediaFileType.IsSupportedMediaFile(path, _mediaFileTypeFilter.Patterns!))
         {
             return;
         }
@@ -692,18 +794,11 @@ public sealed partial class MainWindow : Window
         await OpenPath(path);
     }
 
-    private static bool IsSupportedMediaFile(string path)
-    {
-        var extension = Path.GetExtension(path);
-
-        return !string.IsNullOrEmpty(extension) && _mediaFileTypeFilter.Patterns!.Any(pattern =>
-            pattern.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void UpdateSessionData()
     {
-        Title = $"{_mediaSessionRegistry.Current!.FileName} | {AppInfo.DisplayName}";
-        DurationLabel.Text = FormatTime(_mediaSessionRegistry.Current!.Duration);
+        var displayName = _resolvedTitleOverride ?? _mediaSessionRegistry.Current!.FileName;
+        Title = $"{displayName} | {AppInfo.DisplayName}";
+        DurationLabel.Text = _mediaSessionRegistry.Current!.Duration.Format();
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
     }
 

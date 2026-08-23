@@ -8,6 +8,6 @@ public sealed partial class HotkeysWindow : Window
     public HotkeysWindow()
     {
         InitializeComponent();
-        HotkeysList.ItemsSource = HotkeyReference.Entries;
+        HotkeysList.ItemsSource = HotkeyReference.Groups;
     }
 }

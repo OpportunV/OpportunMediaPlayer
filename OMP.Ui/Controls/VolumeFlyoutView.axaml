@@ -4,60 +4,93 @@
              xmlns:loc="clr-namespace:OMP.Ui.Localization"
              x:Class="OMP.Ui.Controls.VolumeFlyoutView">
 
-    <StackPanel Width="320"
+    <StackPanel Width="360"
                 Margin="14"
-                Spacing="12">
+                Spacing="0">
 
         <TextBlock Text="{x:Static loc:Strings.MainWindow_OutputVolumesHeader}"
-                   FontWeight="Bold"
-                   HorizontalAlignment="Center" />
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Opacity="0.7"
+                   Margin="0,0,0,10" />
+
+        <Border Height="1"
+                Background="{DynamicResource FlyoutForegroundBrush}"
+                Opacity="0.12" />
 
         <ItemsControl Name="OutputsPanel">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="models:OutputVolumeRow">
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto"
-                          ColumnSpacing="8"
-                          Margin="0,4">
+                    <StackPanel>
+                        <StackPanel Margin="0,11"
+                                    Spacing="7">
 
-                        <ToggleButton Grid.Column="0"
-                                      Name="RowMuteButton"
-                                      Classes="icon-button-sm"
-                                      IsChecked="{Binding Muted, Mode=TwoWay}"
-                                      IsCheckedChanged="OnRowMuteChanged">
-                            <Viewbox Width="14" Height="14">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource SpeakerBodyGeometry}"
-                                          Fill="{Binding $parent[ToggleButton].Foreground}" />
-                                    <Path Data="{StaticResource SpeakerMutedXGeometry}"
-                                          Stroke="{Binding $parent[ToggleButton].Foreground}"
-                                          StrokeThickness="2"
-                                          StrokeLineCap="Round" />
-                                </Canvas>
-                            </Viewbox>
-                        </ToggleButton>
+                            <TextBlock Text="{Binding OutputLabel}"
+                                       FontSize="13"
+                                       TextTrimming="CharacterEllipsis" />
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding OutputLabel}"
-                                   MaxWidth="120"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis" />
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="9">
 
-                        <Slider Grid.Column="2"
-                                Name="RowVolumeSlider"
-                                Value="{Binding Volume, Mode=TwoWay}"
-                                ValueChanged="OnRowVolumeChanged"
-                                PointerCaptureLost="OnRowVolumeReleased"
-                                Minimum="{x:Static models:VolumeSliderRange.Min}"
-                                Maximum="{x:Static models:VolumeSliderRange.Max}"
-                                VerticalAlignment="Center" />
+                                <ToggleButton Grid.Column="0"
+                                              Name="RowMuteButton"
+                                              Classes="icon-button-sm ghost"
+                                              IsChecked="{Binding Muted, Mode=TwoWay}"
+                                              IsCheckedChanged="OnRowMuteChanged"
+                                              ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}">
+                                    <Grid Width="14" Height="14">
+                                        <Viewbox Width="14" Height="14"
+                                                 IsVisible="{Binding !Muted}">
+                                            <Canvas Width="24" Height="24">
+                                                <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                      Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                                <Path Data="{StaticResource SpeakerWavesGeometry}"
+                                                      Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                      StrokeThickness="2"
+                                                      StrokeLineCap="Round" />
+                                            </Canvas>
+                                        </Viewbox>
+                                        <Viewbox Width="14" Height="14"
+                                                 IsVisible="{Binding Muted}">
+                                            <Canvas Width="24" Height="24">
+                                                <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                      Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                                <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                                      Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                      StrokeThickness="2"
+                                                      StrokeLineCap="Round" />
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Grid>
+                                </ToggleButton>
 
-                        <TextBlock Grid.Column="3"
-                                   Text="{Binding Volume, StringFormat={}{0:0}%}"
-                                   Width="42"
-                                   FontFamily="Consolas"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                    </Grid>
+                                <Slider Grid.Column="1"
+                                        Name="RowVolumeSlider"
+                                        Value="{Binding Volume, Mode=TwoWay}"
+                                        ValueChanged="OnRowVolumeChanged"
+                                        PointerCaptureLost="OnRowVolumeReleased"
+                                        Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                        Maximum="{x:Static models:VolumeSliderRange.Max}"
+                                        Ticks="100"
+                                        TickPlacement="Outside"
+                                        VerticalAlignment="Center"
+                                        Opacity="{Binding Muted, Converter={x:Static models:BoolToDimOpacityConverter.Instance}}" />
+
+                                <TextBlock Grid.Column="2"
+                                           Classes="mono"
+                                           Text="{Binding Volume, StringFormat={}{0:0}%}"
+                                           Width="38"
+                                           TextAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Opacity="{Binding Muted, Converter={x:Static models:BoolToDimOpacityConverter.Instance}}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1"
+                                Background="{DynamicResource FlyoutForegroundBrush}"
+                                Opacity="0.12"
+                                IsVisible="{Binding !IsLast}" />
+                    </StackPanel>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
