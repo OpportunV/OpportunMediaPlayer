@@ -34,8 +34,7 @@
                     <ComboBox Grid.Column="1"
                               Name="ThemeSelector"
                               Width="200"
-                              VerticalAlignment="Center"
-                              SelectionChanged="OnThemeChanged">
+                              VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="models:ThemeModeOption">
                                 <TextBlock Text="{Binding Label}" />
@@ -57,7 +56,6 @@
                         <Button Name="RestartNowButton"
                                 Classes="link"
                                 Content="{x:Static loc:Strings.Options_LanguageRestartButton}"
-                                Click="OnRestartNowClick"
                                 HorizontalAlignment="Left"
                                 Margin="-2,0,0,0"
                                 IsVisible="False" />
@@ -65,8 +63,7 @@
                     <ComboBox Grid.Column="1"
                               Name="LanguageSelector"
                               Width="200"
-                              VerticalAlignment="Center"
-                              SelectionChanged="OnLanguageChanged">
+                              VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="models:LanguageOption">
                                 <TextBlock Text="{Binding Label}" />
@@ -87,21 +84,18 @@
                         <TextBox Grid.Column="0"
                                  Name="YtDlpPathTextBox"
                                  FontFamily="Consolas"
-                                 Watermark="{x:Static loc:Strings.Options_YtDlpPathWatermarkShort}"
-                                 LostFocus="OnYtDlpPathChanged" />
+                                 Watermark="{x:Static loc:Strings.Options_YtDlpPathWatermarkShort}" />
                         <Button Grid.Column="1"
                                 Name="BrowseYtDlpPathButton"
                                 Classes="default"
                                 VerticalAlignment="Center"
-                                Content="{x:Static loc:Strings.Options_YtDlpPathBrowseButton}"
-                                Click="OnBrowseYtDlpPath" />
+                                Content="{x:Static loc:Strings.Options_YtDlpPathBrowseButton}" />
                         <Button Grid.Column="2"
                                 Name="ResetYtDlpPathButton"
                                 Classes="link"
                                 VerticalAlignment="Center"
                                 Foreground="{DynamicResource SettingsHintBrush}"
                                 Content="{x:Static loc:Strings.Options_YtDlpPathResetButton}"
-                                Click="OnResetYtDlpPath"
                                 ToolTip.Tip="{x:Static loc:Strings.Options_YtDlpPathResetTooltip}" />
                     </Grid>
                 </StackPanel>
@@ -305,7 +299,6 @@
                               Name="OutputSelector"
                               BorderBrush="{DynamicResource AccentLineBrush}"
                               PlaceholderText="{x:Static loc:Strings.Options_SelectOutputPlaceholder}"
-                              SelectionChanged="OnDraftOutputChanged"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
@@ -320,7 +313,6 @@
                               Margin="10,0"
                               IsEnabled="False"
                               PlaceholderText="{x:Static loc:Strings.Options_SelectStreamPlaceholder}"
-                              SelectionChanged="OnDraftStreamChanged"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Center">
                         <ComboBox.ItemTemplate>
@@ -472,7 +464,6 @@
                               Name="SubtitleStreamSelector"
                               BorderBrush="{DynamicResource AccentLineBrush}"
                               PlaceholderText="{x:Static loc:Strings.Options_SelectTrackPlaceholder}"
-                              SelectionChanged="OnDraftSubtitleStreamChanged"
                               HorizontalAlignment="Stretch">
                         <ComboBox.Styles>
                             <Style Selector="ComboBoxItem"
@@ -499,7 +490,6 @@
                               Name="SubtitleZoneSelector"
                               IsEnabled="False"
                               PlaceholderText="{x:Static loc:Strings.Options_SelectZonePlaceholder}"
-                              SelectionChanged="OnDraftSubtitleZoneChanged"
                               HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="settings:SubtitleZone">
@@ -534,8 +524,7 @@
                         Name="LoadSubtitleFileButton"
                         Classes="default"
                         Margin="0,10,0,0"
-                        Content="{x:Static loc:Strings.Options_LoadSubtitleFileButton}"
-                        Click="OnLoadSubtitleFile" />
+                        Content="{x:Static loc:Strings.Options_LoadSubtitleFileButton}" />
             </Grid>
         </TabItem>
 

@@ -25,6 +25,16 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public IReadOnlyDictionary<int, double> OutputDelays { get; set; } = new Dictionary<int, double>();
 
+    public List<List<AudioRoute>> AppliedAudioRoutes { get; } = [];
+
+    public List<List<SubtitleRoute>> AppliedSubtitleRoutes { get; } = [];
+
+    public List<(int OutputId, double Volume)> OutputVolumeCalls { get; } = [];
+
+    public List<(int OutputId, bool Muted)> OutputMutedCalls { get; } = [];
+
+    public List<(int OutputId, double DelaySeconds)> OutputDelayCalls { get; } = [];
+
     public TimeSpan CurrentTime { get; set; }
 
     public TimeSpan Duration { get; set; }
@@ -59,9 +69,15 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes)
     {
+        AppliedAudioRoutes.Add(routes.ToList());
     }
 
-    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes) => routes.ToList();
+    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes)
+    {
+        var applied = routes.ToList();
+        AppliedSubtitleRoutes.Add(applied);
+        return applied;
+    }
 
     public SubtitleStream AddSubtitleSidecar(SubtitleSidecarSource sidecar) =>
         new(SubtitleStreams.Count, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown", IsTextBased: true);
@@ -82,17 +98,11 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public void SetMasterMuted(bool muted) => IsMuted = muted;
 
-    public void SetOutputVolume(int outputId, double volume)
-    {
-    }
+    public void SetOutputVolume(int outputId, double volume) => OutputVolumeCalls.Add((outputId, volume));
 
-    public void SetOutputMuted(int outputId, bool muted)
-    {
-    }
+    public void SetOutputMuted(int outputId, bool muted) => OutputMutedCalls.Add((outputId, muted));
 
-    public void SetOutputDelay(int outputId, double delaySeconds)
-    {
-    }
+    public void SetOutputDelay(int outputId, double delaySeconds) => OutputDelayCalls.Add((outputId, delaySeconds));
 
     public void RaiseVideoFrameReady(VideoFrame frame) => VideoFrameReady?.Invoke(frame);
 
