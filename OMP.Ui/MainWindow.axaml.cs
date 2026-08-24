@@ -2,7 +2,6 @@ using System;
 using System.Buffers;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -88,7 +87,11 @@ public sealed partial class MainWindow : Window
         _singleInstanceCoordinator = singleInstanceCoordinator;
         InitializeComponent();
         Title = AppInfo.DisplayName;
-        RestoreWindowGeometry();
+
+        // Not a field: nothing calls back into it after construction, and its subscriptions are to
+        // this window's own events, so it lives and dies with the window.
+        var windowGeometry = new WindowGeometryPersistence(this, settings, () => _fullscreenController!.IsFullscreen);
+        windowGeometry.Restore();
 
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
@@ -118,14 +121,9 @@ public sealed partial class MainWindow : Window
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
-        SetupVideoDoubleClick();
         SetupProgressSlider();
-        SetupWindowGeometryPersistence();
+        windowGeometry.StartPersisting();
         _singleInstanceCoordinator.StartWatchingForOpenRequests(HandleExternalOpenRequest);
-        OverlayControls.SizeChanged += (_, _) => _fullscreenController.UpdateVideoViewportMargin();
-        UpdatePlayPauseIcon();
-        UpdateMuteIcon();
-        _fullscreenController.UpdateVideoViewportMargin();
         _onSessionChanged = registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
         _mediaSessionRegistry.SessionChanged += _onSessionChanged;
 
@@ -504,10 +502,7 @@ public sealed partial class MainWindow : Window
         MuteButton.Click += (_, _) => _commands.ToggleMute();
         FullscreenButton.Click += (_, _) => _commands.ToggleFullscreen();
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
-    }
 
-    private void SetupVideoDoubleClick()
-    {
         VideoSurface.DoubleTapped += (_, _) => _commands.ToggleFullscreen();
     }
 
@@ -530,83 +525,6 @@ public sealed partial class MainWindow : Window
         {
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
             _isSeekingViaSlider = false;
-        };
-    }
-
-    private void RestoreWindowGeometry()
-    {
-        var window = _settings.Current.Window;
-
-        if (window is { Width: { } width, Height: { } height })
-        {
-            Width = width;
-            Height = height;
-        }
-
-        if (window is { Left: { } left, Top: { } top })
-        {
-            var position = new PixelPoint((int)left, (int)top);
-
-            if (IsPositionOnAnyScreen(position))
-            {
-                WindowStartupLocation = WindowStartupLocation.Manual;
-                Position = position;
-            }
-        }
-
-        if (window.IsMaximized)
-        {
-            WindowState = WindowState.Maximized;
-        }
-    }
-
-    private bool IsPositionOnAnyScreen(PixelPoint position)
-    {
-        try
-        {
-            return Screens.All.Count == 0 || Screens.All.Any(screen => screen.Bounds.Contains(position));
-        }
-        catch (Exception)
-        {
-            return true;
-        }
-    }
-
-    private void SetupWindowGeometryPersistence()
-    {
-        PositionChanged += (_, _) =>
-        {
-            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
-            {
-                return;
-            }
-
-            _settings.Current.Window.Left = Position.X;
-            _settings.Current.Window.Top = Position.Y;
-        };
-
-        Resized += (_, _) =>
-        {
-            if (WindowState != WindowState.Normal || _fullscreenController.IsFullscreen)
-            {
-                return;
-            }
-
-            _settings.Current.Window.Width = Width;
-            _settings.Current.Window.Height = Height;
-        };
-
-        PropertyChanged += (_, e) =>
-        {
-            if (_fullscreenController.IsFullscreen || e.Property != WindowStateProperty)
-            {
-                return;
-            }
-
-            if (WindowState is WindowState.Normal or WindowState.Maximized)
-            {
-                _settings.Current.Window.IsMaximized = WindowState == WindowState.Maximized;
-            }
         };
     }
 
