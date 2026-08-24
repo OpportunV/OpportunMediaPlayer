@@ -33,12 +33,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private bool _isSeekingViaSlider;
-    private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
-    private int _lastKnownSubtitleRouteCount;
     private int _sessionGeneration;
-    private readonly DispatcherTimer _uiTimer = new();
     private readonly Action<IMediaSessionRegistry> _onSessionChanged;
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IMainWindowCommands _commands;
@@ -50,6 +46,7 @@ public sealed partial class MainWindow : Window
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly VolumeBarPresenter _volumeBar;
+    private readonly PlaybackStatusTimer _playbackStatus;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
     private readonly MediaOpener _mediaOpener;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
@@ -106,10 +103,15 @@ public sealed partial class MainWindow : Window
         SetupButtons();
         SetupSpeed();
         _ = new OutputVolumeFlyoutPresenter(OutputVolumesButton, mediaSessionRegistry, settings);
-        SetupSubtitles();
-        SetupUiTimer();
+        _playbackStatus = new PlaybackStatusTimer(
+            mediaSessionRegistry,
+            ProgressSlider,
+            CurrentTimeLabel,
+            SubtitlesButton,
+            UpdateSubtitleOverlay,
+            _subtitleOverlayRenderer.Clear);
+        _playbackStatus.Start();
         SetupHotkeys();
-        SetupProgressSlider();
         windowGeometry.StartPersisting();
         _singleInstanceCoordinator.StartWatchingForOpenRequests(HandleExternalOpenRequest);
         _onSessionChanged = registry => Dispatcher.UIThread.Post(() => OnSessionChanged(registry));
@@ -139,7 +141,7 @@ public sealed partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _mediaSessionRegistry.SessionChanged -= _onSessionChanged;
-        _uiTimer.Stop();
+        _playbackStatus.Dispose();
         _mediaSessionRegistry.Close();
         _settings.Save();
         _fullscreenController.Dispose();
@@ -170,9 +172,7 @@ public sealed partial class MainWindow : Window
         TransportGroup.Opacity = isEmpty ? 0.35 : 1;
         TimelineRow.Opacity = isEmpty ? 0.35 : 1;
 
-        _areSubtitlesEnabled = false;
-        _lastKnownSubtitleRouteCount = 0;
-        SubtitlesButton.IsChecked = false;
+        _playbackStatus.ResetForNewSession();
 
         if (registry.Current is null)
         {
@@ -219,21 +219,6 @@ public sealed partial class MainWindow : Window
         _settings.Save();
     }
 
-    private void SetupSubtitles()
-    {
-        SubtitlesButton.IsChecked = _areSubtitlesEnabled;
-
-        SubtitlesButton.IsCheckedChanged += (_, _) =>
-        {
-            _areSubtitlesEnabled = SubtitlesButton.IsChecked == true;
-
-            if (!_areSubtitlesEnabled)
-            {
-                _subtitleOverlayRenderer.Clear();
-            }
-        };
-    }
-
     private void RestoreAudioRoutes(IMediaSession session)
     {
         var preferred = _settings.Current.PreferredAudioTracks;
@@ -262,46 +247,6 @@ public sealed partial class MainWindow : Window
                 }
             });
         }
-    }
-
-    private void SetupUiTimer()
-    {
-        _uiTimer.Interval = TimeSpan.FromMilliseconds(200);
-
-        _uiTimer.Tick += (_, _) =>
-        {
-            var session = _mediaSessionRegistry.Current;
-
-            if (session == null)
-            {
-                return;
-            }
-
-            var current = session.CurrentTime.TotalSeconds;
-
-            if (!_isSeekingViaSlider)
-            {
-                ProgressSlider.Value = current;
-            }
-
-            CurrentTimeLabel.Text = session.CurrentTime.Format();
-
-            var subtitleRouteCount = session.SubtitleRoutes.Count;
-            if (subtitleRouteCount > 0 && _lastKnownSubtitleRouteCount == 0)
-            {
-                _areSubtitlesEnabled = true;
-                SubtitlesButton.IsChecked = true;
-            }
-
-            _lastKnownSubtitleRouteCount = subtitleRouteCount;
-
-            if (_areSubtitlesEnabled)
-            {
-                UpdateSubtitleOverlay(session);
-            }
-        };
-
-        _uiTimer.Start();
     }
 
     private void UpdateSubtitleOverlay(IMediaSession session)
@@ -400,28 +345,6 @@ public sealed partial class MainWindow : Window
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
 
         VideoSurface.DoubleTapped += (_, _) => _commands.ToggleFullscreen();
-    }
-
-    private void SetupProgressSlider()
-    {
-        ProgressSlider.PointerMoved += (_, e) =>
-        {
-            if (_mediaSessionRegistry.Current == null || ProgressSlider.Bounds.Width <= 0)
-            {
-                return;
-            }
-
-            var ratio = Math.Clamp(e.GetPosition(ProgressSlider).X / ProgressSlider.Bounds.Width, 0, 1);
-            var hoveredTime = TimeSpan.FromSeconds(ratio * ProgressSlider.Maximum);
-            ToolTip.SetTip(ProgressSlider, hoveredTime.Format());
-        };
-
-        ProgressSlider.AddHandler(PointerPressedEvent, (_, _) => _isSeekingViaSlider = true, RoutingStrategies.Tunnel);
-        ProgressSlider.PointerCaptureLost += (_, _) =>
-        {
-            _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
-            _isSeekingViaSlider = false;
-        };
     }
 
     private void UpdateSessionData()
