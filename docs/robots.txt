@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://opportunv.github.io/OpportunMediaPlayer/sitemap.xml
