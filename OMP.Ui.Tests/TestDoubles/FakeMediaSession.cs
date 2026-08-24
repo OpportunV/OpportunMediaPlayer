@@ -8,6 +8,9 @@ namespace OMP.Ui.Tests.TestDoubles;
 
 internal sealed class FakeMediaSession : IMediaSession
 {
+    private const int WaitTimeoutMs = 5000;
+    private const int SettleMs = 150;
+
     public IReadOnlyList<AudioStream> AudioStreams { get; set; } = [];
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; set; } = [];
@@ -25,15 +28,37 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public IReadOnlyDictionary<int, double> OutputDelays { get; set; } = new Dictionary<int, double>();
 
-    public List<List<AudioRoute>> AppliedAudioRoutes { get; } = [];
+    public IReadOnlyList<List<AudioRoute>> AppliedAudioRoutes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _appliedAudioRoutes.ToList();
+            }
+        }
+    }
 
-    public List<List<SubtitleRoute>> AppliedSubtitleRoutes { get; } = [];
+    public IReadOnlyList<List<SubtitleRoute>> AppliedSubtitleRoutes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _appliedSubtitleRoutes.ToList();
+            }
+        }
+    }
 
     public List<(int OutputId, double Volume)> OutputVolumeCalls { get; } = [];
 
     public List<(int OutputId, bool Muted)> OutputMutedCalls { get; } = [];
 
     public List<(int OutputId, double DelaySeconds)> OutputDelayCalls { get; } = [];
+
+    private readonly object _sync = new();
+    private readonly List<List<AudioRoute>> _appliedAudioRoutes = [];
+    private readonly List<List<SubtitleRoute>> _appliedSubtitleRoutes = [];
 
     public TimeSpan CurrentTime { get; set; }
 
@@ -69,14 +94,51 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes)
     {
-        AppliedAudioRoutes.Add(routes.ToList());
+        var applied = routes.ToList();
+
+        lock (_sync)
+        {
+            _appliedAudioRoutes.Add(applied);
+            Monitor.PulseAll(_sync);
+        }
     }
 
     public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes)
     {
         var applied = routes.ToList();
-        AppliedSubtitleRoutes.Add(applied);
+
+        lock (_sync)
+        {
+            _appliedSubtitleRoutes.Add(applied);
+            Monitor.PulseAll(_sync);
+        }
+
         return applied;
+    }
+
+    public void WaitForAudioRoutes(int minCount) => WaitFor(() => _appliedAudioRoutes.Count >= minCount, "audio routes");
+
+    public void WaitForSubtitleRoutes(int minCount) =>
+        WaitFor(() => _appliedSubtitleRoutes.Count >= minCount, "subtitle routes");
+
+    public void SettleRouteApplications() => Thread.Sleep(SettleMs);
+
+    private void WaitFor(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(WaitTimeoutMs);
+
+        lock (_sync)
+        {
+            while (!condition())
+            {
+                var remaining = deadline - DateTime.UtcNow;
+
+                if (remaining <= TimeSpan.Zero || !Monitor.Wait(_sync, remaining))
+                {
+                    throw new TimeoutException($"Timed out waiting for {what} to be applied.");
+                }
+            }
+        }
     }
 
     public SubtitleStream AddSubtitleSidecar(SubtitleSidecarSource sidecar) =>

@@ -70,6 +70,7 @@ public class OptionsSubtitleSectionsTests
 
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
         h.ZoneSelector.SelectedItem = h.Zones.Zones[0];
+        h.Session.WaitForSubtitleRoutes(1);
 
         var applied = Assert.Single(h.Session.AppliedSubtitleRoutes);
         var route = Assert.Single(applied);
@@ -111,9 +112,11 @@ public class OptionsSubtitleSectionsTests
 
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
         h.ZoneSelector.SelectedItem = zone;
+        h.Session.WaitForSubtitleRoutes(1);
         Assert.Single(h.Rows);
 
         h.Zones.OnDeleteZone(new Button { DataContext = zone }, new RoutedEventArgs());
+        h.Session.WaitForSubtitleRoutes(2);
 
         Assert.Empty(h.Rows);
         Assert.Empty(h.Session.AppliedSubtitleRoutes.Last());
@@ -128,9 +131,11 @@ public class OptionsSubtitleSectionsTests
 
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
         h.ZoneSelector.SelectedItem = routedZone;
+        h.Session.WaitForSubtitleRoutes(1);
         var appliedBefore = h.Session.AppliedSubtitleRoutes.Count;
 
         h.Zones.OnDeleteZone(new Button { DataContext = otherZone }, new RoutedEventArgs());
+        h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
         Assert.Equal(appliedBefore, h.Session.AppliedSubtitleRoutes.Count);
@@ -145,8 +150,10 @@ public class OptionsSubtitleSectionsTests
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
         h.ZoneSelector.SelectedItem = zone;
 
+        h.Session.WaitForSubtitleRoutes(1);
         h.Routing.Dispose();
         h.Zones.OnDeleteZone(new Button { DataContext = zone }, new RoutedEventArgs());
+        h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
     }

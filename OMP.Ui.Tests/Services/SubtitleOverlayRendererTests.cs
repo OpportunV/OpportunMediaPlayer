@@ -13,6 +13,8 @@ namespace OMP.Ui.Tests.Services;
 
 public class SubtitleOverlayRendererTests
 {
+    private const double LayoutRoundingTolerancePx = 1;
+
     private static readonly Rect _videoRect = new(0, 0, 800, 450);
 
     [AvaloniaTheory]
@@ -35,18 +37,15 @@ public class SubtitleOverlayRendererTests
         var offset = text.Bounds.Y;
         var slack = container.Bounds.Height - text.Bounds.Height;
 
-        switch (alignment)
+        var expected = alignment switch
         {
-            case VerticalAlignment.Top:
-                Assert.Equal(0, offset, 1);
-                break;
-            case VerticalAlignment.Center:
-                Assert.Equal(slack / 2, offset, 1);
-                break;
-            case VerticalAlignment.Bottom:
-                Assert.Equal(slack, offset, 1);
-                break;
-        }
+            VerticalAlignment.Top => 0,
+            VerticalAlignment.Center => slack / 2,
+            VerticalAlignment.Bottom => slack,
+            _ => throw new ArgumentOutOfRangeException(nameof(alignment))
+        };
+
+        Assert.InRange(offset, expected - LayoutRoundingTolerancePx, expected + LayoutRoundingTolerancePx);
     }
 
     [AvaloniaFact]

@@ -31,6 +31,7 @@ public class OptionsAudioRoutingSectionTests
 
         h.OutputSelector.SelectedItem = _speakers;
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Session.WaitForAudioRoutes(1);
 
         var applied = Assert.Single(h.Session.AppliedAudioRoutes);
         var route = Assert.Single(applied);
@@ -88,6 +89,7 @@ public class OptionsAudioRoutingSectionTests
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
         h.OutputSelector.SelectedItem = _headset;
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Session.WaitForAudioRoutes(2);
 
         var applied = h.Session.AppliedAudioRoutes.Last();
         Assert.Equal(2, applied.Count);
@@ -100,8 +102,6 @@ public class OptionsAudioRoutingSectionTests
         var h = new Harness(withExistingRoute: true);
         var row = h.Rows.Single();
 
-        // Row sliders live in a DataTemplate, so the window forwards their events; subscribing the
-        // section handler to a real Slider raises the genuine args rather than hand-building them.
         var slider = new Slider { Minimum = 0, Maximum = 200, Value = 100, DataContext = row };
         slider.ValueChanged += h.Section.OnRouteVolumeChanged;
 
@@ -118,6 +118,7 @@ public class OptionsAudioRoutingSectionTests
         var row = h.Rows.Single();
 
         h.Section.OnDeleteRoute(new Button { DataContext = row }, new Avalonia.Interactivity.RoutedEventArgs());
+        h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
         Assert.Empty(h.Session.AppliedAudioRoutes);
