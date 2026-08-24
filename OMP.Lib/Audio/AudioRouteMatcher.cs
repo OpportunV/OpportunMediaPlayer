@@ -1,5 +1,6 @@
 using System.Globalization;
 using OMP.Lib.Audio.Output;
+using OMP.Lib.Interop;
 
 namespace OMP.Lib.Audio;
 
@@ -53,7 +54,7 @@ public static class AudioRouteMatcher
     }
 
     private static bool IsUnknown(string value) =>
-        value.Equals("Unknown", StringComparison.Ordinal) ||
+        value.Equals(StreamMetadata.Unknown, StringComparison.Ordinal) ||
         value.Equals(UnknownLanguageTag, StringComparison.OrdinalIgnoreCase);
 
     private static bool LanguagesMatch(string a, string b) =>

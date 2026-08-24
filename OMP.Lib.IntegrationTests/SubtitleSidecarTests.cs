@@ -188,6 +188,58 @@ public sealed class SubtitleSidecarTests
         }
     }
 
+    [Fact]
+    public void SetSubtitleRoutes_TwoSubtitleSidecars_EachZoneReceivesOnlyItsOwnSourcesCues()
+    {
+        var secondPath = Path.Combine(Path.GetTempPath(), $"omp-subtitle-second-{Guid.NewGuid():N}.srt");
+        File.WriteAllText(
+            secondPath,
+            """
+            1
+            00:00:00,500 --> 00:00:03,000
+            Alternate track caption.
+
+            2
+            00:00:04,000 --> 00:00:07,000
+            Alternate track, second caption.
+
+            """);
+
+        var registry = new MediaSessionRegistry(
+            new PlaybackTuningOptions(), NullLoggerFactory.Instance, NativeLibraryOptionsFactory.Create());
+
+        try
+        {
+            registry.Open(TestFixtures.VideoWithAudioMp4);
+            var session = registry.Current!;
+
+            var first = session.AddSubtitleSidecar(new SubtitleSidecarSource(TestFixtures.SubtitleSidecarSrt, Title: "First"));
+            var second = session.AddSubtitleSidecar(new SubtitleSidecarSource(secondPath, Title: "Second"));
+
+            session.SetSubtitleRoutes([new SubtitleRoute(first, "zone-a"), new SubtitleRoute(second, "zone-b")]);
+            Thread.Sleep(SettleMs);
+
+            session.Play();
+            Thread.Sleep(PlaybackSettleMs);
+
+            var cues = session.GetActiveSubtitleCues();
+
+            Assert.Contains(cues, c => c.ZoneId == "zone-a" && ContainsText(c, "First test caption"));
+            Assert.Contains(cues, c => c.ZoneId == "zone-b" && ContainsText(c, "Alternate track caption"));
+
+            Assert.DoesNotContain(cues, c => c.ZoneId == "zone-a" && ContainsText(c, "Alternate track"));
+            Assert.DoesNotContain(cues, c => c.ZoneId == "zone-b" && ContainsText(c, "First test caption"));
+        }
+        finally
+        {
+            registry.Close();
+            File.Delete(secondPath);
+        }
+    }
+
+    private static bool ContainsText(SubtitleCue cue, string text) =>
+        cue.Lines.Any(l => l.Runs.Any(r => r.Text.Contains(text)));
+
     private static IMediaSessionRegistry CreateRegistryWithSubtitleSidecarRequest()
     {
         var registry = new MediaSessionRegistry(

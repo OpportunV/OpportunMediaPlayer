@@ -82,11 +82,21 @@ public sealed class SingleInstanceCoordinator : IDisposable
         _watcher.EnableRaisingEvents = true;
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Gives up this process's claim to being the single instance, without waiting for shutdown.
+    /// Restarting must do this *before* spawning the replacement: the lock is held until this
+    /// instance's window closes, so a replacement launched first would find the lock still taken,
+    /// hand its request back to the process that is already going away, and exit without a window.
+    /// Safe to call more than once - <see cref="Dispose"/> repeats it.
+    /// </summary>
+    public void ReleaseLock()
     {
         _watcher?.Dispose();
+        _watcher = null;
         _lockStream?.Dispose();
     }
+
+    public void Dispose() => ReleaseLock();
 
     private static bool TryAcquireLock(string lockFilePath, [MaybeNullWhen(false)] out FileStream lockStream)
     {

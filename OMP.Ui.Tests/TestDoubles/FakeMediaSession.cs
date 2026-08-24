@@ -8,6 +8,9 @@ namespace OMP.Ui.Tests.TestDoubles;
 
 internal sealed class FakeMediaSession : IMediaSession
 {
+    private const int WaitTimeoutMs = 5000;
+    private const int SettleMs = 150;
+
     public IReadOnlyList<AudioStream> AudioStreams { get; set; } = [];
 
     public IReadOnlyList<AudioOutput> AudioOutputs { get; set; } = [];
@@ -24,6 +27,38 @@ internal sealed class FakeMediaSession : IMediaSession
         new Dictionary<int, OutputVolumeState>();
 
     public IReadOnlyDictionary<int, double> OutputDelays { get; set; } = new Dictionary<int, double>();
+
+    public IReadOnlyList<List<AudioRoute>> AppliedAudioRoutes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _appliedAudioRoutes.ToList();
+            }
+        }
+    }
+
+    public IReadOnlyList<List<SubtitleRoute>> AppliedSubtitleRoutes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _appliedSubtitleRoutes.ToList();
+            }
+        }
+    }
+
+    public List<(int OutputId, double Volume)> OutputVolumeCalls { get; } = [];
+
+    public List<(int OutputId, bool Muted)> OutputMutedCalls { get; } = [];
+
+    public List<(int OutputId, double DelaySeconds)> OutputDelayCalls { get; } = [];
+
+    private readonly object _sync = new();
+    private readonly List<List<AudioRoute>> _appliedAudioRoutes = [];
+    private readonly List<List<SubtitleRoute>> _appliedSubtitleRoutes = [];
 
     public TimeSpan CurrentTime { get; set; }
 
@@ -59,9 +94,52 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public void SetAudioRoutes(IEnumerable<AudioRoute> routes)
     {
+        var applied = routes.ToList();
+
+        lock (_sync)
+        {
+            _appliedAudioRoutes.Add(applied);
+            Monitor.PulseAll(_sync);
+        }
     }
 
-    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes) => routes.ToList();
+    public IReadOnlyList<SubtitleRoute> SetSubtitleRoutes(IEnumerable<SubtitleRoute> routes)
+    {
+        var applied = routes.ToList();
+
+        lock (_sync)
+        {
+            _appliedSubtitleRoutes.Add(applied);
+            Monitor.PulseAll(_sync);
+        }
+
+        return applied;
+    }
+
+    public void WaitForAudioRoutes(int minCount) => WaitFor(() => _appliedAudioRoutes.Count >= minCount, "audio routes");
+
+    public void WaitForSubtitleRoutes(int minCount) =>
+        WaitFor(() => _appliedSubtitleRoutes.Count >= minCount, "subtitle routes");
+
+    public void SettleRouteApplications() => Thread.Sleep(SettleMs);
+
+    private void WaitFor(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(WaitTimeoutMs);
+
+        lock (_sync)
+        {
+            while (!condition())
+            {
+                var remaining = deadline - DateTime.UtcNow;
+
+                if (remaining <= TimeSpan.Zero || !Monitor.Wait(_sync, remaining))
+                {
+                    throw new TimeoutException($"Timed out waiting for {what} to be applied.");
+                }
+            }
+        }
+    }
 
     public SubtitleStream AddSubtitleSidecar(SubtitleSidecarSource sidecar) =>
         new(SubtitleStreams.Count, "Unknown", sidecar.Title ?? "Unknown", sidecar.Language ?? "Unknown", IsTextBased: true);
@@ -82,17 +160,11 @@ internal sealed class FakeMediaSession : IMediaSession
 
     public void SetMasterMuted(bool muted) => IsMuted = muted;
 
-    public void SetOutputVolume(int outputId, double volume)
-    {
-    }
+    public void SetOutputVolume(int outputId, double volume) => OutputVolumeCalls.Add((outputId, volume));
 
-    public void SetOutputMuted(int outputId, bool muted)
-    {
-    }
+    public void SetOutputMuted(int outputId, bool muted) => OutputMutedCalls.Add((outputId, muted));
 
-    public void SetOutputDelay(int outputId, double delaySeconds)
-    {
-    }
+    public void SetOutputDelay(int outputId, double delaySeconds) => OutputDelayCalls.Add((outputId, delaySeconds));
 
     public void RaiseVideoFrameReady(VideoFrame frame) => VideoFrameReady?.Invoke(frame);
 

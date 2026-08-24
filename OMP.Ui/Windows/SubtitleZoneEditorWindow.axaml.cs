@@ -233,57 +233,49 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         };
     }
 
-    private void OnHorizontalAlignChanged(object? sender, RoutedEventArgs e)
+    private void OnHorizontalAlignChanged(object? sender, RoutedEventArgs e) =>
+        SelectAlignmentExclusively(
+            sender,
+            ref _isUpdatingHorizontalAlign,
+            _horizontalAlignOptions,
+            (HorizontalAlignment value) => _zone.HorizontalAlignment = value);
+
+    private void OnVerticalAlignChanged(object? sender, RoutedEventArgs e) =>
+        SelectAlignmentExclusively(
+            sender,
+            ref _isUpdatingVerticalAlign,
+            _verticalAlignOptions,
+            (VerticalAlignment value) => _zone.VerticalAlignment = value);
+
+    private void SelectAlignmentExclusively<TOption, TAlignment>(
+        object? sender,
+        ref bool guard,
+        List<TOption> options,
+        Action<TAlignment> assign)
+        where TOption : class, IAlignmentOption<TAlignment>
+        where TAlignment : struct
     {
-        if (_isUpdatingHorizontalAlign ||
-            sender is not ToggleButton { DataContext: HorizontalAlignmentOption option } button)
+        if (guard || sender is not ToggleButton { DataContext: TOption option } button)
         {
             return;
         }
 
         if (button.IsChecked != true)
         {
-            _isUpdatingHorizontalAlign = true;
+            guard = true;
             button.IsChecked = true;
-            _isUpdatingHorizontalAlign = false;
+            guard = false;
             return;
         }
 
-        _isUpdatingHorizontalAlign = true;
-        foreach (var other in _horizontalAlignOptions.Where(o => !ReferenceEquals(o, option)))
+        guard = true;
+        foreach (var other in options.Where(o => !ReferenceEquals(o, option)))
         {
             other.IsSelected = false;
         }
-        _isUpdatingHorizontalAlign = false;
+        guard = false;
 
-        _zone.HorizontalAlignment = option.Value;
-        UpdateSampleTextStyle();
-    }
-
-    private void OnVerticalAlignChanged(object? sender, RoutedEventArgs e)
-    {
-        if (_isUpdatingVerticalAlign ||
-            sender is not ToggleButton { DataContext: VerticalAlignmentOption option } button)
-        {
-            return;
-        }
-
-        if (button.IsChecked != true)
-        {
-            _isUpdatingVerticalAlign = true;
-            button.IsChecked = true;
-            _isUpdatingVerticalAlign = false;
-            return;
-        }
-
-        _isUpdatingVerticalAlign = true;
-        foreach (var other in _verticalAlignOptions.Where(o => !ReferenceEquals(o, option)))
-        {
-            other.IsSelected = false;
-        }
-        _isUpdatingVerticalAlign = false;
-
-        _zone.VerticalAlignment = option.Value;
+        assign(option.Value);
         UpdateSampleTextStyle();
     }
 
@@ -329,21 +321,8 @@ public sealed partial class SubtitleZoneEditorWindow : Window
         Canvas.SetTop(ResizeHandle, Canvas.GetTop(ZoneBorder) + ZoneBorder.Height - ResizeHandleSize / 2);
     }
 
-    private void UpdateSampleTextStyle()
-    {
-        SampleText.FontFamily = new FontFamily(_zone.FontFamily);
-        SampleText.FontSize = Math.Max(6, _zone.FontSizeRatio * PreviewCanvas.Height);
-        SampleText.Foreground = new SolidColorBrush(Color.Parse(_zone.FontColor));
-        SampleText.Background = new SolidColorBrush(Color.Parse(_zone.BackgroundColor), _zone.BackgroundOpacity);
-        SampleText.TextAlignment = _zone.HorizontalAlignment switch
-        {
-            HorizontalAlignment.Left => TextAlignment.Left,
-            HorizontalAlignment.Right => TextAlignment.Right,
-            _ => TextAlignment.Center
-        };
-        SampleText.HorizontalAlignment = _zone.HorizontalAlignment;
-        SampleText.VerticalAlignment = _zone.VerticalAlignment;
-    }
+    private void UpdateSampleTextStyle() =>
+        SubtitleZoneTextStyle.Apply(SampleText, _zone, PreviewCanvas.Height);
 
     private static string ToHex(Color color)
     {

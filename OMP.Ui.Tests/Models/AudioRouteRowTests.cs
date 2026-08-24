@@ -116,4 +116,29 @@ public class AudioRouteRowTests
         Assert.Equal(25, row.DelayMs);
         Assert.Equal(nameof(row.DelayMs), raised?.PropertyName);
     }
+
+    [Fact]
+    public void CanDelete_SetToDifferentValue_RaisesPropertyChanged()
+    {
+        var row = new AudioRouteRow(new AudioRoute(_mainStream, _output), 100, false, 0);
+        PropertyChangedEventArgs? raised = null;
+        row.PropertyChanged += (_, e) => raised = e;
+
+        row.CanDelete = true;
+
+        Assert.True(row.CanDelete);
+        Assert.Equal(nameof(row.CanDelete), raised?.PropertyName);
+    }
+
+    [Fact]
+    public void CanDelete_SetToSameValue_DoesNotRaisePropertyChanged()
+    {
+        var row = new AudioRouteRow(new AudioRoute(_mainStream, _output), 100, false, 0) { CanDelete = true };
+        var raised = false;
+        row.PropertyChanged += (_, _) => raised = true;
+
+        row.CanDelete = true;
+
+        Assert.False(raised);
+    }
 }

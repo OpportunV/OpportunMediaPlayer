@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
@@ -17,26 +18,6 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public int SourceId { get; }
 
     public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
-
-    public int DiagPacketQueueCount => _packetChannel.Reader.Count;
-
-    public int DiagDecodedQueueCount => _decodedPcmChannel.Reader.Count;
-
-    public int DiagTotalChunksDecoded => _diagTotalChunksDecoded;
-
-    public double? DiagSkipBeforeSeconds => _skipBeforeSeconds;
-
-    public double DiagCurrentTimeSeconds => _currentTimeSeconds;
-
-    public int DiagBufferedBytes => _buffer.BufferedBytes;
-
-    public int DiagBufferLength => _buffer.BufferLength;
-
-    public double? DiagFrontChunkSeconds => _decodedPcmChannel.Reader.TryPeek(out var chunk) ? chunk.TimeSeconds : null;
-
-    public double DiagPtsBaselineOffsetSeconds => _ptsBaselineOffsetSeconds;
-
-    public int DiagPacketDropCount => _diagPacketDropCount;
 
     public double OutputTimeSeconds =>
         Math.Max(
@@ -382,6 +363,21 @@ internal sealed unsafe class AudioPipeline : IDisposable
     public void SetDelay(double delaySeconds)
     {
         _userDelaySeconds = delaySeconds;
+    }
+
+    public string DescribeDiagnostics(string friendlyName, double expectedSeconds)
+    {
+        var outputSeconds = OutputTimeSeconds;
+        var driftMs = (outputSeconds - expectedSeconds) * 1000;
+        double? frontChunkSeconds = _decodedPcmChannel.Reader.TryPeek(out var chunk) ? chunk.TimeSeconds : null;
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{friendlyName}={outputSeconds:F3}s(drift={driftMs:F0}ms,pktQ={_packetChannel.Reader.Count}," +
+            $"pktDrop={_diagPacketDropCount},pcmQ={_decodedPcmChannel.Reader.Count},total={_diagTotalChunksDecoded}," +
+            $"skipBefore={_skipBeforeSeconds:F3},cur={_currentTimeSeconds:F3}," +
+            $"ptsBaseline={_ptsBaselineOffsetSeconds:F3}," +
+            $"buf={_buffer.BufferedBytes}/{_buffer.BufferLength},front={frontChunkSeconds:F3})");
     }
 
     private void Decode(AVPacket* packet)
