@@ -1,13 +1,11 @@
 using System;
 using System.Buffers;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using OMP.Lib;
@@ -17,7 +15,6 @@ using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
 using OMP.Ui.Extensions;
-using OMP.Ui.Helpers;
 using OMP.Ui.Input;
 using OMP.Ui.Localization;
 using OMP.Ui.Services;
@@ -49,22 +46,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static readonly FilePickerFileType _mediaFileTypeFilter = new(Strings.MainWindow_OpenFileTypeFilterName)
-    {
-        Patterns =
-        [
-            "*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov", "*.flv", "*.wmv",
-            "*.mp3", "*.flac", "*.wav", "*.ogg", "*.m4a", "*.aac"
-        ]
-    };
-
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
-    private bool _isResolvingUrl;
     private int _lastKnownSubtitleRouteCount;
     private int _sessionGeneration;
-    private string? _resolvedTitleOverride;
     private readonly DispatcherTimer _uiTimer = new();
     private readonly Action<IMediaSessionRegistry> _onSessionChanged;
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
@@ -72,13 +58,12 @@ public sealed partial class MainWindow : Window
     private readonly IMainWindowHotkeyService _hotkeyService;
     private readonly IWindowFactory _windowFactory;
     private readonly IUserSettingsService _settings;
-    private readonly IYtDlpResolver _ytDlpResolver;
     private readonly ILogger<MainWindow> _logger;
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
-    private readonly NativeLibraryOptions _nativeLibraryOptions;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
+    private readonly MediaOpener _mediaOpener;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
     private readonly VolumeFlyoutView _volumeFlyoutView = new();
 
@@ -99,10 +84,8 @@ public sealed partial class MainWindow : Window
         _hotkeyService = hotkeyService;
         _windowFactory = windowFactory;
         _settings = settings;
-        _ytDlpResolver = ytDlpResolver;
         _logger = logger;
         _singleInstanceCoordinator = singleInstanceCoordinator;
-        _nativeLibraryOptions = nativeLibraryOptions;
         InitializeComponent();
         Title = AppInfo.DisplayName;
         RestoreWindowGeometry();
@@ -110,6 +93,10 @@ public sealed partial class MainWindow : Window
         _videoRenderSurface = new VideoRenderSurface(VideoView);
         _fullscreenController = new FullscreenController(this, TopMenu, OverlayControls, VideoSurface);
         _subtitleOverlayRenderer = new SubtitleOverlayRenderer(SubtitleOverlay);
+        _mediaOpener = new MediaOpener(
+            this, LoadingIndicator, EmptyStateLabel, mediaSessionRegistry, ytDlpResolver, windowFactory,
+            nativeLibraryOptions);
+        _mediaOpener.MediaOpened += UpdateSessionData;
 
         _commands.Attach(
             new MainWindowCommandContext
@@ -131,7 +118,6 @@ public sealed partial class MainWindow : Window
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
-        SetupDragDrop();
         SetupVideoDoubleClick();
         SetupProgressSlider();
         SetupWindowGeometryPersistence();
@@ -150,7 +136,7 @@ public sealed partial class MainWindow : Window
         }
         else if (startupOptions.FilePath is { } startupFilePath)
         {
-            Opened += async (_, _) => await OpenPath(startupFilePath);
+            Opened += async (_, _) => await _mediaOpener.OpenPathAsync(startupFilePath);
         }
     }
 
@@ -160,7 +146,7 @@ public sealed partial class MainWindow : Window
 
         if (!string.IsNullOrEmpty(path))
         {
-            _ = OpenPath(path);
+            _ = _mediaOpener.OpenPathAsync(path);
         }
     }
 
@@ -479,10 +465,10 @@ public sealed partial class MainWindow : Window
     {
         // Built in code, not XAML - elements declared inside Window.NativeMenu don't get compiled x:Name fields
         var openItem = new NativeMenuItem(Strings.MainWindow_OpenMenuItem);
-        openItem.Click += async (_, _) => await OpenFile();
+        openItem.Click += async (_, _) => await _mediaOpener.OpenFileAsync();
 
         var openUrlItem = new NativeMenuItem(Strings.MainWindow_OpenUrlMenuItem);
-        openUrlItem.Click += async (_, _) => await OpenUrl();
+        openUrlItem.Click += async (_, _) => await _mediaOpener.OpenUrlAsync();
 
         var optionsItem = new NativeMenuItem(Strings.MainWindow_OptionsMenuItem);
         optionsItem.Click += (_, _) => ShowOptionsWindow();
@@ -518,162 +504,6 @@ public sealed partial class MainWindow : Window
         MuteButton.Click += (_, _) => _commands.ToggleMute();
         FullscreenButton.Click += (_, _) => _commands.ToggleFullscreen();
         OptionsButton.Click += (_, _) => ShowOptionsWindow();
-    }
-
-    private async Task OpenFile()
-    {
-        var files = await StorageProvider.OpenFilePickerAsync(
-            new FilePickerOpenOptions
-            {
-                Title = Strings.MainWindow_OpenFileDialogTitle,
-                AllowMultiple = false,
-                FileTypeFilter = [_mediaFileTypeFilter]
-            });
-
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        var path = files[0].TryGetLocalPath();
-
-        if (path == null)
-        {
-            return;
-        }
-
-        await OpenPath(path);
-    }
-
-    private async Task OpenPath(string path)
-    {
-        _resolvedTitleOverride = null;
-
-        if (await TryOpenSessionAsync(MediaOpenRequest.ForFile(path)))
-        {
-            UpdateSessionData();
-        }
-    }
-
-    private async Task OpenUrl()
-    {
-        if (_isResolvingUrl)
-        {
-            return;
-        }
-
-        _isResolvingUrl = true;
-
-        try
-        {
-            string? prefillUrl = null;
-
-            while (true)
-            {
-                var dialog = _windowFactory.Create<OpenUrlWindow>();
-                dialog.Load(prefillUrl);
-
-                var result = await dialog.ShowDialog<YtDlpResolveResult?>(this);
-
-                if (result is null)
-                {
-                    return;
-                }
-
-                _resolvedTitleOverride = result.Title;
-                var request = new MediaOpenRequest(result.Url!, result.AudioSidecars, result.Headers, result.SubtitleSidecars);
-
-                if (await OpenSessionAsync(request) is null)
-                {
-                    UpdateSessionData();
-                    return;
-                }
-
-                var retryResult = await _ytDlpResolver.ResolveAsync(result.PageUrl, CancellationToken.None);
-                var retryRequest = request;
-
-                if (retryResult.Status == YtDlpResolveStatus.Success)
-                {
-                    _resolvedTitleOverride = retryResult.Title;
-                    retryRequest = new MediaOpenRequest(
-                        retryResult.Url!, retryResult.AudioSidecars, retryResult.Headers, retryResult.SubtitleSidecars);
-                }
-
-                if (await TryOpenSessionAsync(retryRequest))
-                {
-                    UpdateSessionData();
-                    return;
-                }
-
-                prefillUrl = result.PageUrl;
-            }
-        }
-        finally
-        {
-            _isResolvingUrl = false;
-        }
-    }
-
-    private async Task<bool> TryOpenSessionAsync(MediaOpenRequest request)
-    {
-        var error = await OpenSessionAsync(request);
-        if (error is null)
-        {
-            return true;
-        }
-
-        var heading = OperatingSystem.IsMacOS() && _nativeLibraryOptions.FFmpegLibraryDirectory is null
-            ? Strings.OpenFileError_FFmpegMacHeading
-            : Strings.OpenFileError_Heading;
-
-        await ShowError(heading, error.Message);
-        return false;
-    }
-
-    private async Task<Exception?> OpenSessionAsync(MediaOpenRequest request)
-    {
-        var isNetworkSource = UrlType.IsHttpUrl(request.PrimarySource);
-        if (isNetworkSource)
-        {
-            LoadingIndicator.IsVisible = true;
-        }
-
-        try
-        {
-            await Task.Run(() => _mediaSessionRegistry.Open(request));
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-        finally
-        {
-            if (isNetworkSource)
-            {
-                LoadingIndicator.IsVisible = false;
-            }
-        }
-    }
-
-    private async Task ShowError(string heading, string reason)
-    {
-        var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-        errorWindow.Load(heading, reason);
-        await errorWindow.ShowDialog(this);
-    }
-
-    private void SetupDragDrop()
-    {
-        if (OperatingSystem.IsLinux())
-        {
-            EmptyStateLabel.Text = Strings.MainWindow_EmptyStateLabelNoDragDrop;
-            return;
-        }
-
-        DragDrop.SetAllowDrop(this, true);
-        AddHandler(DragDrop.DropEvent, OnFileDrop);
-        AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
     }
 
     private void SetupVideoDoubleClick()
@@ -780,27 +610,9 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private static void OnFileDragOver(object? sender, DragEventArgs e)
-    {
-        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    private async void OnFileDrop(object? sender, DragEventArgs e)
-    {
-        var path = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
-
-        if (path == null || !MediaFileType.IsSupportedMediaFile(path, _mediaFileTypeFilter.Patterns!))
-        {
-            return;
-        }
-
-        Activate();
-        await OpenPath(path);
-    }
-
     private void UpdateSessionData()
     {
-        var displayName = _resolvedTitleOverride ?? _mediaSessionRegistry.Current!.FileName;
+        var displayName = _mediaOpener.ResolvedTitle ?? _mediaSessionRegistry.Current!.FileName;
         Title = $"{displayName} | {AppInfo.DisplayName}";
         DurationLabel.Text = _mediaSessionRegistry.Current!.Duration.Format();
         ProgressSlider.Maximum = _mediaSessionRegistry.Current?.Duration.TotalSeconds ?? 0;
