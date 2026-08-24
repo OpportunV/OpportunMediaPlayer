@@ -141,6 +141,30 @@ public class PlaybackStatusTimerTests
         Assert.Equal(0, h.OverlayClearCount);
     }
 
+    [AvaloniaFact]
+    public void ResizingTheVideoSurface_RedrawsTheOverlayImmediately()
+    {
+        var h = new Harness();
+        h.Session.SubtitleRoutes = [new SubtitleRoute(_english, "zone-a")];
+        h.PumpTick();
+        var before = h.OverlayRenderCount;
+
+        h.ResizeVideoSurface(640, 360);
+
+        Assert.True(h.OverlayRenderCount > before, "resizing should redraw without waiting for a tick");
+    }
+
+    [AvaloniaFact]
+    public void ResizingTheVideoSurface_WithSubtitlesOff_DrawsNothing()
+    {
+        var h = new Harness();
+        var before = h.OverlayRenderCount;
+
+        h.ResizeVideoSurface(640, 360);
+
+        Assert.Equal(before, h.OverlayRenderCount);
+    }
+
     private sealed class Harness
     {
         public Slider Slider { get; } = new() { Minimum = 0, Maximum = 100 };
@@ -148,6 +172,8 @@ public class PlaybackStatusTimerTests
         public TextBlock Label { get; } = new();
 
         public ToggleButton SubtitlesButton { get; } = new();
+
+        public Border VideoSurface { get; } = new() { Width = 320, Height = 180 };
 
         public FakeMediaSession Session { get; } = new();
 
@@ -173,12 +199,16 @@ public class PlaybackStatusTimerTests
                 Slider,
                 Label,
                 SubtitlesButton,
+                VideoSurface,
                 _ => OverlayRenderCount++,
                 () => OverlayClearCount++);
 
             Timer.Start();
 
-            _window = new Window { Content = Slider, Width = 400, Height = 60 };
+            var root = new StackPanel();
+            root.Children.Add(Slider);
+            root.Children.Add(VideoSurface);
+            _window = new Window { Content = root, Width = 400, Height = 300 };
             _window.Show();
             Dispatcher.UIThread.RunJobs();
         }
@@ -188,6 +218,13 @@ public class PlaybackStatusTimerTests
         public void PressSlider() => Mouse(w => w.MouseDown(SliderPoint, MouseButton.Left));
 
         public void ReleaseSlider() => Mouse(w => w.MouseUp(SliderPoint, MouseButton.Left));
+
+        public void ResizeVideoSurface(double width, double height)
+        {
+            VideoSurface.Width = width;
+            VideoSurface.Height = height;
+            Dispatcher.UIThread.RunJobs();
+        }
 
         private Point SliderPoint => new(Slider.Bounds.Width * 0.4, Slider.Bounds.Height / 2);
 

@@ -23,6 +23,7 @@ internal sealed class PlaybackStatusTimer : IDisposable
     private readonly Slider _progressSlider;
     private readonly TextBlock _currentTimeLabel;
     private readonly ToggleButton _subtitlesButton;
+    private readonly Control _videoSurface;
     private readonly Action<IMediaSession> _renderSubtitleOverlay;
     private readonly Action _clearSubtitleOverlay;
 
@@ -35,6 +36,7 @@ internal sealed class PlaybackStatusTimer : IDisposable
         Slider progressSlider,
         TextBlock currentTimeLabel,
         ToggleButton subtitlesButton,
+        Control videoSurface,
         Action<IMediaSession> renderSubtitleOverlay,
         Action clearSubtitleOverlay)
     {
@@ -42,11 +44,14 @@ internal sealed class PlaybackStatusTimer : IDisposable
         _progressSlider = progressSlider;
         _currentTimeLabel = currentTimeLabel;
         _subtitlesButton = subtitlesButton;
+        _videoSurface = videoSurface;
         _renderSubtitleOverlay = renderSubtitleOverlay;
         _clearSubtitleOverlay = clearSubtitleOverlay;
 
         _subtitlesButton.IsChecked = _areSubtitlesEnabled;
         _subtitlesButton.IsCheckedChanged += OnSubtitlesToggled;
+
+        _videoSurface.SizeChanged += OnVideoSurfaceSizeChanged;
 
         SetupProgressSlider();
 
@@ -68,6 +73,7 @@ internal sealed class PlaybackStatusTimer : IDisposable
         _timer.Stop();
         _timer.Tick -= OnTick;
         _subtitlesButton.IsCheckedChanged -= OnSubtitlesToggled;
+        _videoSurface.SizeChanged -= OnVideoSurfaceSizeChanged;
     }
 
     internal void Tick()
@@ -95,13 +101,22 @@ internal sealed class PlaybackStatusTimer : IDisposable
 
         _lastKnownSubtitleRouteCount = subtitleRouteCount;
 
-        if (_areSubtitlesEnabled)
+        RenderOverlayIfEnabled();
+    }
+
+    private void OnTick(object? sender, EventArgs e) => Tick();
+
+    private void OnVideoSurfaceSizeChanged(object? sender, SizeChangedEventArgs e) => RenderOverlayIfEnabled();
+
+    private void RenderOverlayIfEnabled()
+    {
+        var session = _mediaSessionRegistry.Current;
+
+        if (session is not null && _areSubtitlesEnabled)
         {
             _renderSubtitleOverlay(session);
         }
     }
-
-    private void OnTick(object? sender, EventArgs e) => Tick();
 
     private void OnSubtitlesToggled(object? sender, RoutedEventArgs e)
     {

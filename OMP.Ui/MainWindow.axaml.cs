@@ -108,6 +108,7 @@ public sealed partial class MainWindow : Window
             ProgressSlider,
             CurrentTimeLabel,
             SubtitlesButton,
+            VideoSurface,
             UpdateSubtitleOverlay,
             _subtitleOverlayRenderer.Clear);
         _playbackStatus.Start();
