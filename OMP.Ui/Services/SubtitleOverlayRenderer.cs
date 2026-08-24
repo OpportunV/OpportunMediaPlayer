@@ -1,19 +1,18 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
-using Avalonia.Layout;
 using Avalonia.Media;
 using OMP.Lib.Subtitle;
+using OMP.Ui.Helpers;
 using OMP.Ui.Settings;
 
 namespace OMP.Ui.Services;
 
 internal sealed class SubtitleOverlayRenderer(Canvas overlayCanvas)
 {
-    private readonly Dictionary<string, TextBlock> _zoneTextBlocks = [];
+    private readonly Dictionary<string, Border> _zoneContainers = [];
 
     public void Render(IReadOnlyList<SubtitleCue> cues, IReadOnlyList<SubtitleZone> zones, Rect videoContentRect)
     {
@@ -30,62 +29,53 @@ internal sealed class SubtitleOverlayRenderer(Canvas overlayCanvas)
                 }
 
                 activeZoneIds.Add(zone.Id);
-                var textBlock = GetOrCreateTextBlock(zone.Id);
-                PositionAndStyle(textBlock, zone, videoContentRect);
-                SetCueContent(textBlock, group.ToList());
-                textBlock.IsVisible = true;
+                var container = GetOrCreateContainer(zone.Id);
+                PositionAndStyle(container, zone, videoContentRect);
+                SetCueContent(TextOf(container), group.ToList());
+                container.IsVisible = true;
             }
         }
 
-        foreach (var (zoneId, textBlock) in _zoneTextBlocks)
+        foreach (var (zoneId, container) in _zoneContainers)
         {
             if (!activeZoneIds.Contains(zoneId))
             {
-                textBlock.IsVisible = false;
+                container.IsVisible = false;
             }
         }
     }
 
     public void Clear()
     {
-        foreach (var textBlock in _zoneTextBlocks.Values)
+        foreach (var container in _zoneContainers.Values)
         {
-            textBlock.IsVisible = false;
+            container.IsVisible = false;
         }
     }
 
-    private TextBlock GetOrCreateTextBlock(string zoneId)
+    private static TextBlock TextOf(Border container) => (TextBlock)container.Child!;
+
+    private Border GetOrCreateContainer(string zoneId)
     {
-        if (_zoneTextBlocks.TryGetValue(zoneId, out var existing))
+        if (_zoneContainers.TryGetValue(zoneId, out var existing))
         {
             return existing;
         }
 
-        var textBlock = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        _zoneTextBlocks[zoneId] = textBlock;
-        overlayCanvas.Children.Add(textBlock);
-        return textBlock;
+        var container = new Border { Child = new TextBlock { TextWrapping = TextWrapping.Wrap } };
+        _zoneContainers[zoneId] = container;
+        overlayCanvas.Children.Add(container);
+        return container;
     }
 
-    private static void PositionAndStyle(TextBlock textBlock, SubtitleZone zone, Rect videoRect)
+    private static void PositionAndStyle(Border container, SubtitleZone zone, Rect videoRect)
     {
-        Canvas.SetLeft(textBlock, videoRect.X + zone.X * videoRect.Width);
-        Canvas.SetTop(textBlock, videoRect.Y + zone.Y * videoRect.Height);
-        textBlock.Width = zone.Width * videoRect.Width;
-        textBlock.Height = zone.Height * videoRect.Height;
+        Canvas.SetLeft(container, videoRect.X + zone.X * videoRect.Width);
+        Canvas.SetTop(container, videoRect.Y + zone.Y * videoRect.Height);
+        container.Width = zone.Width * videoRect.Width;
+        container.Height = zone.Height * videoRect.Height;
 
-        textBlock.FontFamily = new FontFamily(zone.FontFamily);
-        textBlock.FontSize = Math.Max(6, zone.FontSizeRatio * videoRect.Height);
-        textBlock.Foreground = new SolidColorBrush(Color.Parse(zone.FontColor));
-        textBlock.Background = new SolidColorBrush(Color.Parse(zone.BackgroundColor), zone.BackgroundOpacity);
-        textBlock.TextAlignment = zone.HorizontalAlignment switch
-        {
-            HorizontalAlignment.Left => TextAlignment.Left,
-            HorizontalAlignment.Right => TextAlignment.Right,
-            _ => TextAlignment.Center
-        };
-        textBlock.HorizontalAlignment = zone.HorizontalAlignment;
-        textBlock.VerticalAlignment = zone.VerticalAlignment;
+        SubtitleZoneTextStyle.Apply(TextOf(container), zone, videoRect.Height);
     }
 
     private static void SetCueContent(TextBlock textBlock, List<SubtitleCue> cues)

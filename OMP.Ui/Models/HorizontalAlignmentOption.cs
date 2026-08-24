@@ -3,7 +3,8 @@ using Avalonia.Layout;
 
 namespace OMP.Ui.Models;
 
-internal sealed class HorizontalAlignmentOption(HorizontalAlignment value, string label) : INotifyPropertyChanged
+internal sealed class HorizontalAlignmentOption(HorizontalAlignment value, string label)
+    : INotifyPropertyChanged, IAlignmentOption<HorizontalAlignment>
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 

@@ -14,7 +14,20 @@ internal sealed class AudioRouteRow(AudioRoute route, double volume, bool muted,
 
     public string OutputLabel { get; } = route.Output.FriendlyName;
 
-    public bool CanDelete { get; set; }
+    public bool CanDelete
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanDelete)));
+        }
+    }
 
     public bool Muted
     {

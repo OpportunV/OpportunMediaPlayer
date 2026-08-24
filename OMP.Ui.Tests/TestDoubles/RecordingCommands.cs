@@ -22,7 +22,13 @@ internal sealed class RecordingCommands : IMainWindowCommands
 
     public void ResetSpeed() => Calls.Add(nameof(ResetSpeed));
 
-    public void SetMasterVolume(double volume) => Calls.Add(nameof(SetMasterVolume));
+    public double? LastMasterVolume { get; private set; }
+
+    public void SetMasterVolume(double volume)
+    {
+        LastMasterVolume = volume;
+        Calls.Add(nameof(SetMasterVolume));
+    }
 
     public void IncreaseMasterVolume() => Calls.Add(nameof(IncreaseMasterVolume));
 

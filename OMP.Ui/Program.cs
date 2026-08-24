@@ -23,8 +23,13 @@ internal static class Program
             "OMP_LOG_DIR",
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
 
+        var bootstrapConfiguration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .Build();
+
         Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
+            .ReadFrom.Configuration(bootstrapConfiguration)
             .CreateBootstrapLogger();
 
         try

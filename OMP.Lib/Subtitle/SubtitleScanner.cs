@@ -1,6 +1,6 @@
-using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using OMP.Lib.Interop;
 
 namespace OMP.Lib.Subtitle;
 
@@ -30,8 +30,8 @@ internal sealed unsafe class SubtitleScanner(ILoggerFactory loggerFactory)
                 var subtitleStream = new SubtitleStream(
                     i,
                     ffmpeg.avcodec_get_name(codecId),
-                    GetMetadata(stream, "title"),
-                    GetMetadata(stream, "language"),
+                    StreamMetadata.Read(stream, "title", _logger),
+                    StreamMetadata.Read(stream, "language", _logger),
                     _textBasedCodecs.Contains(codecId));
 
                 subtitleStreams.Add(subtitleStream);
@@ -55,17 +55,5 @@ internal sealed unsafe class SubtitleScanner(ILoggerFactory loggerFactory)
         }
 
         return subtitleStreams;
-    }
-
-    private string GetMetadata(AVStream* stream, string key)
-    {
-        var tag = ffmpeg.av_dict_get(stream->metadata, key, null, 0);
-        if (tag == null)
-        {
-            _logger.LogTrace("Stream {StreamIndex} has no '{Key}' metadata tag.", stream->index, key);
-            return "Unknown";
-        }
-
-        return Marshal.PtrToStringUTF8((IntPtr)tag->value) ?? "Unknown";
     }
 }

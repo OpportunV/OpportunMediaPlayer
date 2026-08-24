@@ -28,6 +28,8 @@ internal sealed class FullscreenController : IDisposable
         _videoSurface = videoSurface;
         _previousWindowState = window.WindowState;
 
+        _overlayControls.SizeChanged += OnOverlayControlsSizeChanged;
+
         _overlayTimer.Interval = TimeSpan.FromSeconds(3);
         _overlayTimer.Tick += (_, _) =>
         {
@@ -37,6 +39,8 @@ internal sealed class FullscreenController : IDisposable
                 _overlayTimer.Stop();
             }
         };
+
+        UpdateVideoViewportMargin();
     }
 
     public void Toggle()
@@ -93,6 +97,7 @@ internal sealed class FullscreenController : IDisposable
     public void Dispose()
     {
         _overlayTimer.Stop();
+        _overlayControls.SizeChanged -= OnOverlayControlsSizeChanged;
 
         if (!IsFullscreen)
         {
@@ -102,6 +107,9 @@ internal sealed class FullscreenController : IDisposable
         _window.PointerMoved -= OnPointerMoved;
         _window.PointerExited -= OnPointerExited;
     }
+
+    private void OnOverlayControlsSizeChanged(object? sender, SizeChangedEventArgs e) =>
+        UpdateVideoViewportMargin();
 
     private void OnPointerExited(object? sender, PointerEventArgs e)
     {
