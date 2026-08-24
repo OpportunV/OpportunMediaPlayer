@@ -9,7 +9,6 @@ using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using OMP.Lib;
 using OMP.Lib.Audio;
-using OMP.Lib.Audio.Output;
 using OMP.Lib.Session;
 using OMP.Lib.Video;
 using OMP.Ui.Controls;
@@ -34,17 +33,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private bool IsMuted
-    {
-        get;
-        set
-        {
-            field = value;
-            _settings.Current.IsMuted = value;
-            UpdateMuteIcon();
-        }
-    }
-
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private bool _hasShownAudioOutputWarning;
@@ -61,10 +49,10 @@ public sealed partial class MainWindow : Window
     private readonly SingleInstanceCoordinator _singleInstanceCoordinator;
     private readonly VideoRenderSurface _videoRenderSurface;
     private readonly FullscreenController _fullscreenController;
+    private readonly VolumeBarPresenter _volumeBar;
     private readonly SubtitleOverlayRenderer _subtitleOverlayRenderer;
     private readonly MediaOpener _mediaOpener;
     private readonly SpeedFlyoutView _speedFlyoutView = new();
-    private readonly VolumeFlyoutView _volumeFlyoutView = new();
 
     public MainWindow(
         IMediaSessionRegistry mediaSessionRegistry,
@@ -88,8 +76,6 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Title = AppInfo.DisplayName;
 
-        // Not a field: nothing calls back into it after construction, and its subscriptions are to
-        // this window's own events, so it lives and dies with the window.
         var windowGeometry = new WindowGeometryPersistence(this, settings, () => _fullscreenController!.IsFullscreen);
         windowGeometry.Restore();
 
@@ -101,23 +87,25 @@ public sealed partial class MainWindow : Window
             nativeLibraryOptions);
         _mediaOpener.MediaOpened += UpdateSessionData;
 
+        _volumeBar = new VolumeBarPresenter(
+            VolumeSlider, VolumeLabel, SpeakerIcon, SpeakerMutedIcon, commands, settings);
+
         _commands.Attach(
             new MainWindowCommandContext
             {
                 GetIsPlaying = () => IsPlaying,
                 GetIsFullscreen = () => _fullscreenController.IsFullscreen,
                 SetIsPlaying = value => IsPlaying = value,
-                SetIsMuted = value => IsMuted = value,
+                SetIsMuted = value => _volumeBar.IsMuted = value,
                 SetSpeedDisplay = OnSpeedChanged,
-                SetVolumeDisplay = OnVolumeChanged,
+                SetVolumeDisplay = _volumeBar.OnVolumeChanged,
                 ToggleFullscreen = () => _fullscreenController.Toggle(),
                 ToggleSubtitles = () => SubtitlesButton.IsChecked = SubtitlesButton.IsChecked != true
             });
         SetupNativeMenu();
         SetupButtons();
-        SetupVolume();
         SetupSpeed();
-        SetupOutputVolumePopup();
+        _ = new OutputVolumeFlyoutPresenter(OutputVolumesButton, mediaSessionRegistry, settings);
         SetupSubtitles();
         SetupUiTimer();
         SetupHotkeys();
@@ -192,7 +180,7 @@ public sealed partial class MainWindow : Window
         }
 
         RestoreAudioRoutes(registry.Current);
-        RestoreVolume(registry.Current);
+        _volumeBar.RestoreVolume(registry.Current);
 
         _commands.SetSpeed(_settings.Current.PlaybackSpeed);
 
@@ -217,54 +205,6 @@ public sealed partial class MainWindow : Window
         _speedFlyoutView.SpeedCommitted += speed => _commands.SetSpeed(speed);
 
         SetSpeedDisplayText(_settings.Current.PlaybackSpeed);
-    }
-
-    private void SetupOutputVolumePopup()
-    {
-        var flyout = new Flyout
-        {
-            Content = _volumeFlyoutView,
-            Placement = PlacementMode.Top,
-            FlyoutPresenterClasses = { "app-flyout" }
-        };
-        flyout.Opened += (_, _) => RefreshOutputVolumeRows();
-        OutputVolumesButton.Flyout = flyout;
-
-        _volumeFlyoutView.OutputVolumeChanged += (output, volume) =>
-            _mediaSessionRegistry.Current?.SetOutputVolume(output.Id, volume / 100);
-
-        _volumeFlyoutView.OutputVolumeCommitted += PersistOutputVolumeSetting;
-
-        _volumeFlyoutView.OutputMuteChanged += (output, muted) =>
-        {
-            _mediaSessionRegistry.Current?.SetOutputMuted(output.Id, muted);
-            PersistOutputVolumeSetting(output);
-        };
-    }
-
-    private void RefreshOutputVolumeRows()
-    {
-        var session = _mediaSessionRegistry.Current;
-
-        if (session == null)
-        {
-            _volumeFlyoutView.SetOutputs([]);
-            return;
-        }
-
-        _volumeFlyoutView.SetOutputs(session.AudioRoutes.ToVolumeRows(session.OutputVolumes));
-    }
-
-    private void PersistOutputVolumeSetting(AudioOutput output)
-    {
-        var session = _mediaSessionRegistry.Current;
-
-        if (session != null && session.OutputVolumes.TryGetValue(output.Id, out var state))
-        {
-            _settings.UpsertOutputVolumeSetting(output, state.Volume * 100, state.Muted);
-        }
-
-        _settings.Save();
     }
 
     private void SetSpeedDisplayText(double speed)
@@ -294,30 +234,6 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private void SetupVolume()
-    {
-        VolumeSlider.Value = _settings.Current.MasterVolume * 100;
-        VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
-        IsMuted = _settings.Current.IsMuted;
-
-        VolumeSlider.ValueChanged += (_, e) =>
-        {
-            _commands.SetMasterVolume(e.NewValue / 100);
-            _settings.Current.MasterVolume = e.NewValue / 100;
-            VolumeLabel.Text = $"{(int)e.NewValue}%";
-        };
-
-        VolumeSlider.PointerCaptureLost += (_, _) => _settings.Save();
-    }
-
-    private void OnVolumeChanged(double volume)
-    {
-        VolumeSlider.Value = volume * 100;
-        VolumeLabel.Text = $"{(int)VolumeSlider.Value}%";
-        _settings.Current.MasterVolume = volume;
-        _settings.Save();
-    }
-
     private void RestoreAudioRoutes(IMediaSession session)
     {
         var preferred = _settings.Current.PreferredAudioTracks;
@@ -345,20 +261,6 @@ public sealed partial class MainWindow : Window
                     _logger.LogError(ex, "Restoring persisted audio routes failed.");
                 }
             });
-        }
-    }
-
-    private void RestoreVolume(IMediaSession session)
-    {
-        session.SetMasterVolume(_settings.Current.MasterVolume);
-        session.SetMasterMuted(_settings.Current.IsMuted);
-        IsMuted = _settings.Current.IsMuted;
-
-        foreach (var (output, setting) in session.AudioOutputs.MatchSettings(_settings.Current.OutputVolumes))
-        {
-            session.SetOutputVolume(output.Id, setting.Volume);
-            session.SetOutputMuted(output.Id, setting.Muted);
-            session.SetOutputDelay(output.Id, setting.DelayMs / 1000.0);
         }
     }
 
@@ -451,12 +353,6 @@ public sealed partial class MainWindow : Window
     {
         PlayIcon.IsVisible = !IsPlaying;
         PauseIcon.IsVisible = IsPlaying;
-    }
-
-    private void UpdateMuteIcon()
-    {
-        SpeakerIcon.IsVisible = !IsMuted;
-        SpeakerMutedIcon.IsVisible = IsMuted;
     }
 
     private void SetupNativeMenu()
