@@ -26,7 +26,7 @@ public class OptionsSubtitleSectionsTests
     {
         var h = new Harness();
 
-        Assert.Equal(2, h.Zones.Zones.Count);
+        Assert.Equal(3, h.Zones.Zones.Count);
         Assert.Same(h.Zones.Zones, h.ZonesList.ItemsSource);
     }
 
@@ -126,8 +126,8 @@ public class OptionsSubtitleSectionsTests
     public void DeletingAnUnroutedZone_LeavesRoutesAlone()
     {
         var h = new Harness();
-        var routedZone = h.Zones.Zones.First(z => !z.IsBuiltIn);
-        var otherZone = h.Zones.Zones.First(z => z.IsBuiltIn);
+        var routedZone = h.Zones.Zones.First(z => z.Id == "custom-zone");
+        var otherZone = h.Zones.Zones.First(z => z.Id == "other-zone");
 
         h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
         h.ZoneSelector.SelectedItem = routedZone;
@@ -139,6 +139,28 @@ public class OptionsSubtitleSectionsTests
 
         Assert.Single(h.Rows);
         Assert.Equal(appliedBefore, h.Session.AppliedSubtitleRoutes.Count);
+    }
+
+    [AvaloniaFact]
+    public void RenamingARoutedZone_UpdatesTheRowLabel()
+    {
+        var h = new Harness();
+        var zone = h.Zones.Zones.First(z => z.Id == "custom-zone");
+
+        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.ZoneSelector.SelectedItem = zone;
+        h.Session.WaitForSubtitleRoutes(1);
+        Assert.Equal("Custom", h.Rows.Single().ZoneLabel);
+
+        var renamed = new SubtitleZone { Id = zone.Id, Name = "Renamed" };
+        h.Zones.Zones[h.Zones.Zones.IndexOf(zone)] = renamed;
+
+        h.Zones.OnDeleteZone(
+            new Button { DataContext = h.Zones.Zones.First(z => z.Id == "other-zone") }, new RoutedEventArgs());
+
+        var row = h.Rows.Single();
+        Assert.Same(renamed, row.Zone);
+        Assert.Equal("Renamed", row.ZoneLabel);
     }
 
     [AvaloniaFact]
@@ -189,7 +211,8 @@ public class OptionsSubtitleSectionsTests
             Settings.SubtitleZones =
             [
                 SubtitleZone.CreateBuiltIns()[0],
-                new SubtitleZone { Id = "custom-zone", Name = "Custom" }
+                new SubtitleZone { Id = "custom-zone", Name = "Custom" },
+                new SubtitleZone { Id = "other-zone", Name = "Other" }
             ];
 
             Session = new FakeMediaSession { SubtitleStreams = [_english, _french] };

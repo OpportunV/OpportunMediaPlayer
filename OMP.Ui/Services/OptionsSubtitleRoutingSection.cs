@@ -106,6 +106,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
     private void OnZonesChanged()
     {
         UpdateZoneSelector();
+        RepointRowsAtCurrentZones();
 
         var orphanedRows = _rows.Where(row => _zones.Zones.All(z => z.Id != row.Zone.Id)).ToList();
         if (orphanedRows.Count == 0)
@@ -120,6 +121,17 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
 
         UpdateStreamSelector();
         ApplySubtitleRoutes();
+    }
+
+    private void RepointRowsAtCurrentZones()
+    {
+        foreach (var row in _rows)
+        {
+            if (_zones.Zones.FirstOrDefault(z => z.Id == row.Zone.Id) is { } current)
+            {
+                row.Zone = current;
+            }
+        }
     }
 
     private void OnDraftSubtitleStreamChanged(object? sender, SelectionChangedEventArgs e)
