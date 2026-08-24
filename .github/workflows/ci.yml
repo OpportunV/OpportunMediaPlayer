@@ -17,6 +17,7 @@ jobs:
               - '**'
               - '!docs/**'
               - '!.github/images/**'
+              - '!**/*.md'
 
   build-and-test:
     needs: changes
