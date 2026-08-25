@@ -45,10 +45,8 @@ internal sealed class OptionsSubtitleZonesSection
             return;
         }
 
-        var editor = _windowFactory.Create<SubtitleZoneEditorWindow>();
-        editor.Load(zone.Clone(), isNew: false);
-
-        var result = await editor.ShowDialog<SubtitleZone?>(_owner);
+        var result = await _windowFactory.ShowDialogAsync<SubtitleZoneEditorWindow, SubtitleZone>(
+            _owner, w => w.Load(zone.Clone(), isNew: false));
         if (result is null)
         {
             return;
@@ -92,10 +90,8 @@ internal sealed class OptionsSubtitleZonesSection
 
     private async void OnAddZone(object? sender, RoutedEventArgs e)
     {
-        var editor = _windowFactory.Create<SubtitleZoneEditorWindow>();
-        editor.Load(new SubtitleZone(), isNew: true);
-
-        var result = await editor.ShowDialog<SubtitleZone?>(_owner);
+        var result = await _windowFactory.ShowDialogAsync<SubtitleZoneEditorWindow, SubtitleZone>(
+            _owner, w => w.Load(new SubtitleZone(), isNew: true));
         if (result is null)
         {
             return;

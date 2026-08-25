@@ -38,6 +38,7 @@ internal sealed class MediaOpener
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IYtDlpResolver _ytDlpResolver;
     private readonly IWindowFactory _windowFactory;
+    private readonly IFilePickerService _filePicker;
     private readonly NativeLibraryOptions _nativeLibraryOptions;
 
     private bool _isResolvingUrl;
@@ -49,6 +50,7 @@ internal sealed class MediaOpener
         IMediaSessionRegistry mediaSessionRegistry,
         IYtDlpResolver ytDlpResolver,
         IWindowFactory windowFactory,
+        IFilePickerService filePicker,
         NativeLibraryOptions nativeLibraryOptions)
     {
         _owner = owner;
@@ -56,6 +58,7 @@ internal sealed class MediaOpener
         _mediaSessionRegistry = mediaSessionRegistry;
         _ytDlpResolver = ytDlpResolver;
         _windowFactory = windowFactory;
+        _filePicker = filePicker;
         _nativeLibraryOptions = nativeLibraryOptions;
 
         if (OperatingSystem.IsLinux())
@@ -71,27 +74,12 @@ internal sealed class MediaOpener
 
     public async Task OpenFileAsync()
     {
-        var files = await _owner.StorageProvider.OpenFilePickerAsync(
-            new FilePickerOpenOptions
-            {
-                Title = Strings.MainWindow_OpenFileDialogTitle,
-                AllowMultiple = false,
-                FileTypeFilter = [_mediaFileTypeFilter]
-            });
+        var path = await _filePicker.PickFileAsync(_owner, Strings.MainWindow_OpenFileDialogTitle, _mediaFileTypeFilter);
 
-        if (files.Count == 0)
+        if (path is not null)
         {
-            return;
+            await OpenPathAsync(path);
         }
-
-        var path = files[0].TryGetLocalPath();
-
-        if (path == null)
-        {
-            return;
-        }
-
-        await OpenPathAsync(path);
     }
 
     public async Task OpenPathAsync(string path)
@@ -124,10 +112,8 @@ internal sealed class MediaOpener
 
             while (true)
             {
-                var dialog = _windowFactory.Create<OpenUrlWindow>();
-                dialog.Load(prefillUrl);
-
-                var result = await dialog.ShowDialog<YtDlpResolveResult?>(_owner);
+                var result = await _windowFactory.ShowDialogAsync<OpenUrlWindow, YtDlpResolveResult>(
+                    _owner, w => w.Load(prefillUrl));
 
                 if (result is null)
                 {
@@ -210,12 +196,8 @@ internal sealed class MediaOpener
         }
     }
 
-    private async Task ShowError(string heading, string reason)
-    {
-        var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-        errorWindow.Load(heading, reason);
-        await errorWindow.ShowDialog(_owner);
-    }
+    private async Task ShowError(string heading, string reason) =>
+        await _windowFactory.ShowDialogAsync<OpenFileErrorWindow>(_owner, w => w.Load(heading, reason));
 
     private static void OnFileDragOver(object? sender, DragEventArgs e)
     {

@@ -2,6 +2,8 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Moq;
 using OMP.Ui.Models;
 using OMP.Ui.Services;
@@ -98,6 +100,31 @@ public class OptionsGeneralSectionTests
         Assert.Equal(string.Empty, h.YtDlpPathTextBox.Text);
     }
 
+    [AvaloniaFact]
+    public void BrowseButton_PersistsThePathThePickerReturns()
+    {
+        var h = new Harness();
+        h.FilePicker.Setup(p => p.PickFileAsync(It.IsAny<Window>(), It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync(@"C:\tools\yt-dlp.exe");
+
+        h.RaiseBrowseClick();
+
+        Assert.Equal(@"C:\tools\yt-dlp.exe", h.Settings.YtDlpPath);
+        Assert.Equal(@"C:\tools\yt-dlp.exe", h.YtDlpPathTextBox.Text);
+    }
+
+    [AvaloniaFact]
+    public void BrowseButton_CancelledPicker_LeavesThePathUnchanged()
+    {
+        var h = new Harness(ytDlpPath: "/usr/bin/yt-dlp");
+        h.FilePicker.Setup(p => p.PickFileAsync(It.IsAny<Window>(), It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync((string?)null);
+
+        h.RaiseBrowseClick();
+
+        Assert.Equal("/usr/bin/yt-dlp", h.Settings.YtDlpPath);
+    }
+
     private sealed class Harness
     {
         public ComboBox ThemeSelector { get; } = new();
@@ -115,6 +142,8 @@ public class OptionsGeneralSectionTests
         public UserSettings Settings { get; } = new();
 
         public Mock<IUserSettingsService> SettingsService { get; } = new();
+
+        public Mock<IFilePickerService> FilePicker { get; } = new();
 
         public int RestartCount { get; private set; }
 
@@ -134,7 +163,14 @@ public class OptionsGeneralSectionTests
                 BrowseButton,
                 ResetButton,
                 SettingsService.Object,
+                FilePicker.Object,
                 () => RestartCount++);
+        }
+
+        public void RaiseBrowseClick()
+        {
+            BrowseButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
         }
 
         public IEnumerable<LanguageOption> LanguageOptions => LanguageSelector.ItemsSource!.Cast<LanguageOption>();

@@ -18,7 +18,7 @@ public sealed partial class OptionsWindow : Window
     private readonly OptionsAudioRoutingSection _audioRoutingSection;
 
     public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings,
-        IWindowFactory windowFactory, ILoggerFactory loggerFactory,
+        IWindowFactory windowFactory, IFilePickerService filePicker, ILoggerFactory loggerFactory,
         SingleInstanceCoordinator singleInstanceCoordinator)
     {
         InitializeComponent();
@@ -34,6 +34,7 @@ public sealed partial class OptionsWindow : Window
             BrowseYtDlpPathButton,
             ResetYtDlpPathButton,
             settings,
+            filePicker,
             () => ApplicationRestart.Restart(
                 mediaSessionRegistry.Current?.FilePath, singleInstanceCoordinator));
 
@@ -48,6 +49,7 @@ public sealed partial class OptionsWindow : Window
             _zonesSection,
             mediaSessionRegistry,
             windowFactory,
+            filePicker,
             loggerFactory);
 
         _audioRoutingSection = new OptionsAudioRoutingSection(

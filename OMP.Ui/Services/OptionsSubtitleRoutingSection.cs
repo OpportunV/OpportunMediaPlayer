@@ -39,6 +39,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
     private readonly OptionsSubtitleZonesSection _zones;
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
     private readonly IWindowFactory _windowFactory;
+    private readonly IFilePickerService _filePicker;
     private readonly ILogger _logger;
     private readonly ObservableCollection<SubtitleRouteRow> _rows = [];
     private readonly List<SubtitleStreamOption> _streamOptions = [];
@@ -54,6 +55,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
         OptionsSubtitleZonesSection zones,
         IMediaSessionRegistry mediaSessionRegistry,
         IWindowFactory windowFactory,
+        IFilePickerService filePicker,
         ILoggerFactory loggerFactory)
     {
         _owner = owner;
@@ -63,6 +65,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
         _zones = zones;
         _mediaSessionRegistry = mediaSessionRegistry;
         _windowFactory = windowFactory;
+        _filePicker = filePicker;
         _logger = loggerFactory.CreateLogger<OptionsSubtitleRoutingSection>();
 
         var session = _mediaSessionRegistry.Current;
@@ -183,20 +186,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
             return;
         }
 
-        var files = await _owner.StorageProvider.OpenFilePickerAsync(
-            new FilePickerOpenOptions
-            {
-                Title = Strings.Options_LoadSubtitleFileTitle,
-                AllowMultiple = false,
-                FileTypeFilter = [_subtitleFileTypeFilter]
-            });
-
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        var path = files[0].TryGetLocalPath();
+        var path = await _filePicker.PickFileAsync(_owner, Strings.Options_LoadSubtitleFileTitle, _subtitleFileTypeFilter);
         if (path is null)
         {
             return;
@@ -214,9 +204,8 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
         {
             _logger.LogError(ex, "Could not load subtitle file {Path}.", path);
 
-            var errorWindow = _windowFactory.Create<OpenFileErrorWindow>();
-            errorWindow.Load(Strings.OpenFileError_SubtitleHeading, ex.Message);
-            await errorWindow.ShowDialog(_owner);
+            await _windowFactory.ShowDialogAsync<OpenFileErrorWindow>(
+                _owner, w => w.Load(Strings.OpenFileError_SubtitleHeading, ex.Message));
         }
     }
 

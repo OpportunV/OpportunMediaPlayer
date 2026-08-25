@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using OMP.Lib.Subtitle;
@@ -8,6 +10,7 @@ using OMP.Ui.Models;
 using OMP.Ui.Services;
 using OMP.Ui.Settings;
 using OMP.Ui.Tests.TestDoubles;
+using OMP.Ui.Windows;
 
 namespace OMP.Ui.Tests.Services;
 
@@ -164,6 +167,69 @@ public class OptionsSubtitleSectionsTests
     }
 
     [AvaloniaFact]
+    public void AddZoneButton_AddsWhateverTheEditorReturns()
+    {
+        var h = new Harness();
+        var raised = 0;
+        h.Zones.ZonesChanged += () => raised++;
+        var newZone = new SubtitleZone { Id = "new-zone", Name = "New" };
+        h.WindowFactory
+            .Setup(f => f.ShowDialogAsync<SubtitleZoneEditorWindow, SubtitleZone>(
+                h.Window, It.IsAny<Action<SubtitleZoneEditorWindow>>()))
+            .ReturnsAsync(newZone);
+
+        h.RaiseAddZoneClick();
+
+        Assert.Contains(h.Zones.Zones, z => z.Id == "new-zone");
+        Assert.Contains(h.Settings.SubtitleZones, z => z.Id == "new-zone");
+        Assert.Equal(1, raised);
+    }
+
+    [AvaloniaFact]
+    public void AddZoneButton_CancelledEditor_AddsNothing()
+    {
+        var h = new Harness();
+        var countBefore = h.Zones.Zones.Count;
+        h.WindowFactory
+            .Setup(f => f.ShowDialogAsync<SubtitleZoneEditorWindow, SubtitleZone>(
+                h.Window, It.IsAny<Action<SubtitleZoneEditorWindow>>()))
+            .ReturnsAsync((SubtitleZone?)null);
+
+        h.RaiseAddZoneClick();
+
+        Assert.Equal(countBefore, h.Zones.Zones.Count);
+    }
+
+    [AvaloniaFact]
+    public void LoadSubtitleFileButton_AddsTheSidecarAsAStreamOption()
+    {
+        var h = new Harness();
+        h.FilePicker
+            .Setup(p => p.PickFileAsync(h.Window, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync(@"C:\subs\external.srt");
+
+        h.RaiseLoadSubtitleFileClick();
+
+        Assert.Contains(
+            h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>(),
+            o => o.Stream.Title == "external");
+    }
+
+    [AvaloniaFact]
+    public void LoadSubtitleFileButton_CancelledPicker_AddsNoStreamOption()
+    {
+        var h = new Harness();
+        var optionsBefore = h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count();
+        h.FilePicker
+            .Setup(p => p.PickFileAsync(h.Window, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync((string?)null);
+
+        h.RaiseLoadSubtitleFileClick();
+
+        Assert.Equal(optionsBefore, h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count());
+    }
+
+    [AvaloniaFact]
     public void Dispose_StopsReactingToZoneChanges()
     {
         var h = new Harness();
@@ -206,6 +272,12 @@ public class OptionsSubtitleSectionsTests
 
         public OptionsSubtitleRoutingSection Routing { get; }
 
+        public Mock<IWindowFactory> WindowFactory { get; } = new();
+
+        public Mock<IFilePickerService> FilePicker { get; } = new();
+
+        public Window Window { get; } = new();
+
         public Harness()
         {
             Settings.SubtitleZones =
@@ -221,15 +293,13 @@ public class OptionsSubtitleSectionsTests
             settingsService.Setup(s => s.Current).Returns(Settings);
             settingsService.Setup(s => s.Save());
 
-            var window = new Window();
             var registry = new FakeMediaSessionRegistry { Current = Session };
-            var windowFactory = new Mock<IWindowFactory>();
 
             Zones = new OptionsSubtitleZonesSection(
-                window, ZonesList, AddZoneButton, windowFactory.Object, settingsService.Object);
+                Window, ZonesList, AddZoneButton, WindowFactory.Object, settingsService.Object);
 
             Routing = new OptionsSubtitleRoutingSection(
-                window,
+                Window,
                 RoutesList,
                 StreamSelector,
                 ZoneSelector,
@@ -238,8 +308,26 @@ public class OptionsSubtitleSectionsTests
                 ErrorText,
                 Zones,
                 registry,
-                windowFactory.Object,
+                WindowFactory.Object,
+                FilePicker.Object,
                 NullLoggerFactory.Instance);
+        }
+
+        public void RaiseAddZoneClick()
+        {
+            AddZoneButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        public void RaiseLoadSubtitleFileClick()
+        {
+            LoadFileButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            for (var i = 0; i < 40; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(5);
+            }
         }
 
         public IEnumerable<SubtitleRouteRow> Rows => RoutesList.ItemsSource!.Cast<SubtitleRouteRow>();

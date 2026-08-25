@@ -25,6 +25,7 @@ internal sealed class OptionsGeneralSection
     private readonly Button _restartNowButton;
     private readonly TextBox _ytDlpPathTextBox;
     private readonly IUserSettingsService _settings;
+    private readonly IFilePickerService _filePicker;
     private readonly Action _restart;
 
     public OptionsGeneralSection(
@@ -36,6 +37,7 @@ internal sealed class OptionsGeneralSection
         Button browseYtDlpPathButton,
         Button resetYtDlpPathButton,
         IUserSettingsService settings,
+        IFilePickerService filePicker,
         Action restart)
     {
         _owner = owner;
@@ -44,6 +46,7 @@ internal sealed class OptionsGeneralSection
         _restartNowButton = restartNowButton;
         _ytDlpPathTextBox = ytDlpPathTextBox;
         _settings = settings;
+        _filePicker = filePicker;
         _restart = restart;
 
         _themeSelector.ItemsSource = Enum.GetValues<ThemeMode>().Select(mode => new ThemeModeOption(mode)).ToList();
@@ -108,27 +111,12 @@ internal sealed class OptionsGeneralSection
 
     private async void OnBrowseYtDlpPath(object? sender, RoutedEventArgs e)
     {
-        var files = await _owner.StorageProvider.OpenFilePickerAsync(
-            new FilePickerOpenOptions
-            {
-                Title = Strings.Options_YtDlpPathBrowseTitle,
-                AllowMultiple = false,
-                FileTypeFilter = [_ytDlpFileTypeFilter]
-            });
+        var path = await _filePicker.PickFileAsync(_owner, Strings.Options_YtDlpPathBrowseTitle, _ytDlpFileTypeFilter);
 
-        if (files.Count == 0)
+        if (path is not null)
         {
-            return;
+            SetYtDlpPath(path);
         }
-
-        var path = files[0].TryGetLocalPath();
-
-        if (path == null)
-        {
-            return;
-        }
-
-        SetYtDlpPath(path);
     }
 
     private void SetYtDlpPath(string? path)

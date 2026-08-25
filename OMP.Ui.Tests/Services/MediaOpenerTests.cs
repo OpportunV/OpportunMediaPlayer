@@ -1,10 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Platform.Storage;
 using Moq;
 using OMP.Lib;
 using OMP.Ui.Services;
 using OMP.Ui.Tests.TestDoubles;
+using OMP.Ui.Windows;
 
 namespace OMP.Ui.Tests.Services;
 
@@ -50,8 +52,43 @@ public class MediaOpenerTests
         Assert.Null(h.Opener.ResolvedTitle);
     }
 
-    // Not covered: the failure path calls ShowError, which needs a real modal dialog. Closing that
-    // gap needs a dialog seam - see the composition follow-up.
+    [AvaloniaFact]
+    public async Task OpenPathAsync_SessionOpenFails_ShowsTheErrorDialogAndDoesNotAnnounceAnOpen()
+    {
+        var h = new Harness();
+        h.Registry.OpenShouldThrow = new InvalidOperationException("codec not found");
+
+        await h.Opener.OpenPathAsync(@"C:\media\bad.mp4");
+
+        Assert.Equal(0, h.MediaOpenedCount);
+        h.WindowFactory.Verify(
+            f => f.ShowDialogAsync(h.Owner, It.IsAny<Action<OpenFileErrorWindow>>()),
+            Times.Once);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenFileAsync_OpensWhateverThePickerReturns()
+    {
+        var h = new Harness();
+        h.FilePicker.Setup(p => p.PickFileAsync(h.Owner, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync(@"C:\media\picked.mp4");
+
+        await h.Opener.OpenFileAsync();
+
+        Assert.Equal(@"C:\media\picked.mp4", h.Registry.LastOpenedFilePath);
+    }
+
+    [AvaloniaFact]
+    public async Task OpenFileAsync_CancelledPicker_OpensNothing()
+    {
+        var h = new Harness();
+        h.FilePicker.Setup(p => p.PickFileAsync(h.Owner, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
+            .ReturnsAsync((string?)null);
+
+        await h.Opener.OpenFileAsync();
+
+        Assert.Null(h.Registry.LastOpenedFilePath);
+    }
 
     [AvaloniaFact]
     public void Construction_OnLinux_ReplacesTheEmptyStateLabelInsteadOfEnablingDrop()
@@ -73,6 +110,12 @@ public class MediaOpenerTests
 
         public FakeMediaSessionRegistry Registry { get; } = new();
 
+        public Mock<IWindowFactory> WindowFactory { get; } = new();
+
+        public Mock<IFilePickerService> FilePicker { get; } = new();
+
+        public Window Owner { get; } = new();
+
         public MediaOpener Opener { get; }
 
         public int MediaOpenedCount { get; private set; }
@@ -89,13 +132,18 @@ public class MediaOpenerTests
                 }
             };
 
+            WindowFactory
+                .Setup(f => f.ShowDialogAsync(It.IsAny<Window>(), It.IsAny<Action<OpenFileErrorWindow>>()))
+                .Returns(Task.CompletedTask);
+
             Opener = new MediaOpener(
-                new Window(),
+                Owner,
                 LoadingIndicator,
                 EmptyStateLabel,
                 Registry,
                 new Mock<IYtDlpResolver>().Object,
-                new Mock<IWindowFactory>().Object,
+                WindowFactory.Object,
+                FilePicker.Object,
                 new NativeLibraryOptions());
 
             Opener.MediaOpened += () => MediaOpenedCount++;
