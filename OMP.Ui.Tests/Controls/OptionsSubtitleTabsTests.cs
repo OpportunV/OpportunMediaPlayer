@@ -3,38 +3,42 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using OMP.Lib.Subtitle;
+using OMP.Ui.Controls;
 using OMP.Ui.Models;
 using OMP.Ui.Services;
 using OMP.Ui.Settings;
 using OMP.Ui.Tests.TestDoubles;
 using OMP.Ui.Windows;
 
-namespace OMP.Ui.Tests.Services;
+namespace OMP.Ui.Tests.Controls;
 
 /// <summary>
-/// Covers the two subtitle sections together, because the interesting behaviour is the seam
-/// between them: zone CRUD raises an event and routing reacts. Both halves used to live in one
-/// window method, so nothing could have gone silently unwired.
+/// Covers the two subtitle tabs together, because the interesting behaviour is the seam between
+/// them: zone CRUD raises an event and routing reacts. Every control's event, including the ones
+/// inside each <c>ItemsControl</c>'s <c>DataTemplate</c>, is declared directly in each tab's own
+/// XAML, so a dropped subscription fails the build - what remains here is verifying each handler
+/// does the right thing, driving the real realized controls rather than calling handlers directly.
 /// </summary>
-public class OptionsSubtitleSectionsTests
+public class OptionsSubtitleTabsTests
 {
     private static readonly SubtitleStream _english = new(1, "subrip", "English", "en", IsTextBased: true);
     private static readonly SubtitleStream _french = new(2, "subrip", "French", "fr", IsTextBased: true);
 
     [AvaloniaFact]
-    public void ZonesSection_SeedsFromSettingsAndBindsTheList()
+    public void ZonesTab_SeedsFromSettingsAndBindsTheList()
     {
         var h = new Harness();
 
         Assert.Equal(3, h.Zones.Zones.Count);
-        Assert.Same(h.Zones.Zones, h.ZonesList.ItemsSource);
+        Assert.Same(h.Zones.Zones, h.Zones.ZonesList.ItemsSource);
     }
 
     [AvaloniaFact]
-    public void ZonesSection_ClonesZonesSoEditsDoNotLeakIntoSettingsUntilPersisted()
+    public void ZonesTab_ClonesZonesSoEditsDoNotLeakIntoSettingsUntilPersisted()
     {
         var h = new Harness();
 
@@ -49,7 +53,7 @@ public class OptionsSubtitleSectionsTests
         h.Zones.ZonesChanged += () => raised++;
         var zone = h.Zones.Zones.First(z => !z.IsBuiltIn);
 
-        h.Zones.OnDeleteZone(new Button { DataContext = zone }, new RoutedEventArgs());
+        h.FindZoneRowControl<Button>(zone, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         Assert.Equal(1, raised);
         Assert.DoesNotContain(h.Settings.SubtitleZones, z => z.Id == zone.Id);
@@ -61,7 +65,7 @@ public class OptionsSubtitleSectionsTests
         var h = new Harness();
         var builtIn = h.Zones.Zones.First(z => z.IsBuiltIn);
 
-        h.Zones.OnDeleteZone(new Button { DataContext = builtIn }, new RoutedEventArgs());
+        h.FindZoneRowControl<Button>(builtIn, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         Assert.Contains(h.Zones.Zones, z => z.Id == builtIn.Id);
     }
@@ -71,8 +75,8 @@ public class OptionsSubtitleSectionsTests
     {
         var h = new Harness();
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.ZoneSelector.SelectedItem = h.Zones.Zones[0];
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = h.Zones.Zones[0];
         h.Session.WaitForSubtitleRoutes(1);
 
         var applied = Assert.Single(h.Session.AppliedSubtitleRoutes);
@@ -85,27 +89,27 @@ public class OptionsSubtitleSectionsTests
     {
         var h = new Harness();
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        Assert.True(h.ZoneSelector.IsEnabled);
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        Assert.True(h.Routing.SubtitleZoneSelector.IsEnabled);
 
-        h.StreamSelector.SelectedItem = null;
-        Assert.False(h.ZoneSelector.IsEnabled);
+        h.Routing.SubtitleStreamSelector.SelectedItem = null;
+        Assert.False(h.Routing.SubtitleZoneSelector.IsEnabled);
     }
 
     [AvaloniaFact]
     public void ClearDraftButton_ClearsTheTrackSelection()
     {
         var h = new Harness();
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
 
-        h.ClearDraftButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        h.Routing.ClearDraftSubtitleRouteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-        Assert.Null(h.StreamSelector.SelectedItem);
+        Assert.Null(h.Routing.SubtitleStreamSelector.SelectedItem);
     }
 
     /// <summary>
-    /// The cross-section path, and the one most likely to break: deleting a zone that a route
-    /// points at has to drop that route and reapply the rest.
+    /// The cross-tab path, and the one most likely to break: deleting a zone that a route points at
+    /// has to drop that route and reapply the rest.
     /// </summary>
     [AvaloniaFact]
     public void DeletingARoutedZone_DropsTheOrphanedRouteAndReapplies()
@@ -113,12 +117,12 @@ public class OptionsSubtitleSectionsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => !z.IsBuiltIn);
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.ZoneSelector.SelectedItem = zone;
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
         h.Session.WaitForSubtitleRoutes(1);
         Assert.Single(h.Rows);
 
-        h.Zones.OnDeleteZone(new Button { DataContext = zone }, new RoutedEventArgs());
+        h.FindZoneRowControl<Button>(zone, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         h.Session.WaitForSubtitleRoutes(2);
 
         Assert.Empty(h.Rows);
@@ -132,12 +136,12 @@ public class OptionsSubtitleSectionsTests
         var routedZone = h.Zones.Zones.First(z => z.Id == "custom-zone");
         var otherZone = h.Zones.Zones.First(z => z.Id == "other-zone");
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.ZoneSelector.SelectedItem = routedZone;
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = routedZone;
         h.Session.WaitForSubtitleRoutes(1);
         var appliedBefore = h.Session.AppliedSubtitleRoutes.Count;
 
-        h.Zones.OnDeleteZone(new Button { DataContext = otherZone }, new RoutedEventArgs());
+        h.FindZoneRowControl<Button>(otherZone, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
@@ -150,16 +154,17 @@ public class OptionsSubtitleSectionsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => z.Id == "custom-zone");
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.ZoneSelector.SelectedItem = zone;
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
         h.Session.WaitForSubtitleRoutes(1);
         Assert.Equal("Custom", h.Rows.Single().ZoneLabel);
 
         var renamed = new SubtitleZone { Id = zone.Id, Name = "Renamed" };
         h.Zones.Zones[h.Zones.Zones.IndexOf(zone)] = renamed;
+        Dispatcher.UIThread.RunJobs();
 
-        h.Zones.OnDeleteZone(
-            new Button { DataContext = h.Zones.Zones.First(z => z.Id == "other-zone") }, new RoutedEventArgs());
+        var otherZone = h.Zones.Zones.First(z => z.Id == "other-zone");
+        h.FindZoneRowControl<Button>(otherZone, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         var row = h.Rows.Single();
         Assert.Same(renamed, row.Zone);
@@ -211,7 +216,7 @@ public class OptionsSubtitleSectionsTests
         h.RaiseLoadSubtitleFileClick();
 
         Assert.Contains(
-            h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>(),
+            h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>(),
             o => o.Stream.Title == "external");
     }
 
@@ -219,14 +224,14 @@ public class OptionsSubtitleSectionsTests
     public void LoadSubtitleFileButton_CancelledPicker_AddsNoStreamOption()
     {
         var h = new Harness();
-        var optionsBefore = h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count();
+        var optionsBefore = h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count();
         h.FilePicker
             .Setup(p => p.PickFileAsync(h.Window, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
             .ReturnsAsync((string?)null);
 
         h.RaiseLoadSubtitleFileClick();
 
-        Assert.Equal(optionsBefore, h.StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count());
+        Assert.Equal(optionsBefore, h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count());
     }
 
     [AvaloniaFact]
@@ -235,12 +240,12 @@ public class OptionsSubtitleSectionsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => !z.IsBuiltIn);
 
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.ZoneSelector.SelectedItem = zone;
+        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
 
         h.Session.WaitForSubtitleRoutes(1);
         h.Routing.Dispose();
-        h.Zones.OnDeleteZone(new Button { DataContext = zone }, new RoutedEventArgs());
+        h.FindZoneRowControl<Button>(zone, "DeleteZoneButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
@@ -248,35 +253,19 @@ public class OptionsSubtitleSectionsTests
 
     private sealed class Harness
     {
-        public ItemsControl ZonesList { get; } = new();
+        public OptionsSubtitleZonesTab Zones { get; } = new();
 
-        public ItemsControl RoutesList { get; } = new();
+        public OptionsSubtitleRoutingTab Routing { get; } = new();
 
-        public ComboBox StreamSelector { get; } = new();
-
-        public ComboBox ZoneSelector { get; } = new();
-
-        public Button AddZoneButton { get; } = new();
-
-        public Button ClearDraftButton { get; } = new();
-
-        public Button LoadFileButton { get; } = new();
-
-        public TextBlock ErrorText { get; } = new();
+        public Window Window { get; }
 
         public FakeMediaSession Session { get; }
 
         public UserSettings Settings { get; } = new();
 
-        public OptionsSubtitleZonesSection Zones { get; }
-
-        public OptionsSubtitleRoutingSection Routing { get; }
-
         public Mock<IWindowFactory> WindowFactory { get; } = new();
 
         public Mock<IFilePickerService> FilePicker { get; } = new();
-
-        public Window Window { get; } = new();
 
         public Harness()
         {
@@ -295,33 +284,32 @@ public class OptionsSubtitleSectionsTests
 
             var registry = new FakeMediaSessionRegistry { Current = Session };
 
-            Zones = new OptionsSubtitleZonesSection(
-                Window, ZonesList, AddZoneButton, WindowFactory.Object, settingsService.Object);
+            var panel = new StackPanel { Children = { Zones, Routing } };
+            Window = new Window { Content = panel };
+            Window.Show();
 
-            Routing = new OptionsSubtitleRoutingSection(
-                Window,
-                RoutesList,
-                StreamSelector,
-                ZoneSelector,
-                ClearDraftButton,
-                LoadFileButton,
-                ErrorText,
-                Zones,
-                registry,
-                WindowFactory.Object,
-                FilePicker.Object,
-                NullLoggerFactory.Instance);
+            Zones.Initialize(Window, WindowFactory.Object, settingsService.Object);
+            Routing.Initialize(Window, Zones, registry, WindowFactory.Object, FilePicker.Object, NullLoggerFactory.Instance);
+            Dispatcher.UIThread.RunJobs();
         }
+
+        public IEnumerable<SubtitleRouteRow> Rows => Routing.SubtitleRoutesList.ItemsSource!.Cast<SubtitleRouteRow>();
+
+        public SubtitleStreamOption StreamOptionFor(SubtitleStream stream) =>
+            Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().First(o => o.Stream.Id == stream.Id);
+
+        public T FindZoneRowControl<T>(SubtitleZone zone, string name) where T : Control =>
+            Zones.ZonesList.GetVisualDescendants().OfType<T>().First(c => c.Name == name && Equals(c.DataContext, zone));
 
         public void RaiseAddZoneClick()
         {
-            AddZoneButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Zones.AddZoneButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
         }
 
         public void RaiseLoadSubtitleFileClick()
         {
-            LoadFileButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Routing.LoadSubtitleFileButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
             for (var i = 0; i < 40; i++)
             {
@@ -329,10 +317,5 @@ public class OptionsSubtitleSectionsTests
                 Thread.Sleep(5);
             }
         }
-
-        public IEnumerable<SubtitleRouteRow> Rows => RoutesList.ItemsSource!.Cast<SubtitleRouteRow>();
-
-        public SubtitleStreamOption StreamOptionFor(SubtitleStream stream) =>
-            StreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().First(o => o.Stream.Id == stream.Id);
     }
 }

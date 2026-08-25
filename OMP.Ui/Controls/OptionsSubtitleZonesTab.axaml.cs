@@ -3,27 +3,28 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using OMP.Ui.Services;
 using OMP.Ui.Settings;
 using OMP.Ui.Windows;
 
-namespace OMP.Ui.Services;
+namespace OMP.Ui.Controls;
 
-internal sealed class OptionsSubtitleZonesSection
+internal sealed partial class OptionsSubtitleZonesTab : UserControl
 {
     public event Action? ZonesChanged;
 
     public ObservableCollection<SubtitleZone> Zones { get; } = [];
 
-    private readonly Window _owner;
-    private readonly IWindowFactory _windowFactory;
-    private readonly IUserSettingsService _settings;
+    private Window _owner = null!;
+    private IWindowFactory _windowFactory = null!;
+    private IUserSettingsService _settings = null!;
 
-    public OptionsSubtitleZonesSection(
-        Window owner,
-        ItemsControl zonesList,
-        Button addZoneButton,
-        IWindowFactory windowFactory,
-        IUserSettingsService settings)
+    public OptionsSubtitleZonesTab()
+    {
+        InitializeComponent();
+    }
+
+    public void Initialize(Window owner, IWindowFactory windowFactory, IUserSettingsService settings)
     {
         _owner = owner;
         _windowFactory = windowFactory;
@@ -34,11 +35,10 @@ internal sealed class OptionsSubtitleZonesSection
             Zones.Add(zone.Clone());
         }
 
-        zonesList.ItemsSource = Zones;
-        addZoneButton.Click += OnAddZone;
+        ZonesList.ItemsSource = Zones;
     }
 
-    internal async void OnEditZone(object? sender, RoutedEventArgs e)
+    private async void OnEditZone(object? sender, RoutedEventArgs e)
     {
         if (((Control)sender!).DataContext is not SubtitleZone zone)
         {
@@ -60,7 +60,7 @@ internal sealed class OptionsSubtitleZonesSection
         }
     }
 
-    internal void OnResetZone(object? sender, RoutedEventArgs e)
+    private void OnResetZone(object? sender, RoutedEventArgs e)
     {
         if (((Control)sender!).DataContext is not SubtitleZone { IsBuiltIn: true } zone)
         {
@@ -77,7 +77,7 @@ internal sealed class OptionsSubtitleZonesSection
         PersistAndNotify();
     }
 
-    internal void OnDeleteZone(object? sender, RoutedEventArgs e)
+    private void OnDeleteZone(object? sender, RoutedEventArgs e)
     {
         if (((Control)sender!).DataContext is not SubtitleZone zone || zone.IsBuiltIn)
         {

@@ -16,33 +16,28 @@ using OMP.Ui.Helpers;
 using OMP.Ui.Models;
 using OMP.Ui.Settings;
 
-namespace OMP.Ui.Services;
+namespace OMP.Ui.Controls;
 
-internal sealed class OptionsAudioRoutingSection
+internal sealed partial class OptionsAudioRoutingTab : UserControl
 {
-    private readonly ComboBox _outputSelector;
-    private readonly ComboBox _streamSelector;
-    private readonly IMediaSessionRegistry _mediaSessionRegistry;
-    private readonly IUserSettingsService _settings;
-    private readonly ILogger _logger;
     private readonly ObservableCollection<AudioRouteRow> _rows = [];
     private readonly List<AudioStreamOption> _streamOptions = [];
     private readonly List<AudioOutput> _outputs = [];
 
-    public OptionsAudioRoutingSection(
-        ItemsControl routesList,
-        ComboBox outputSelector,
-        ComboBox streamSelector,
-        Button clearDraftButton,
-        IMediaSessionRegistry mediaSessionRegistry,
-        IUserSettingsService settings,
-        ILoggerFactory loggerFactory)
+    private IMediaSessionRegistry _mediaSessionRegistry = null!;
+    private IUserSettingsService _settings = null!;
+    private ILogger _logger = null!;
+
+    public OptionsAudioRoutingTab()
     {
-        _outputSelector = outputSelector;
-        _streamSelector = streamSelector;
+        InitializeComponent();
+    }
+
+    public void Initialize(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings, ILoggerFactory loggerFactory)
+    {
         _mediaSessionRegistry = mediaSessionRegistry;
         _settings = settings;
-        _logger = loggerFactory.CreateLogger<OptionsAudioRoutingSection>();
+        _logger = loggerFactory.CreateLogger<OptionsAudioRoutingTab>();
 
         var session = _mediaSessionRegistry.Current;
         _streamOptions.AddRange((session?.AudioStreams ?? []).Select(stream => new AudioStreamOption(stream)));
@@ -61,19 +56,15 @@ internal sealed class OptionsAudioRoutingSection
             _rows.Add(new AudioRouteRow(route, volume.Volume * 100, volume.Muted, delayMs));
         }
 
-        routesList.ItemsSource = _rows;
-        _streamSelector.ItemsSource = _streamOptions;
-
-        clearDraftButton.Click += OnClearDraftRoute;
-        _outputSelector.SelectionChanged += OnDraftOutputChanged;
-        _streamSelector.SelectionChanged += OnDraftStreamChanged;
+        RoutesList.ItemsSource = _rows;
+        StreamSelector.ItemsSource = _streamOptions;
 
         UpdateOutputSelector();
         UpdateRowStreamOptions();
         RefreshRows();
     }
 
-    internal void OnDeleteRoute(object? sender, RoutedEventArgs e)
+    private void OnDeleteRoute(object? sender, RoutedEventArgs e)
     {
         if (((Control)sender!).DataContext is not AudioRouteRow row || _rows.Count <= 1)
         {
@@ -92,7 +83,7 @@ internal sealed class OptionsAudioRoutingSection
     /// its initial selection rather than the user picking a different track, which would otherwise
     /// reapply every route once per row.
     /// </summary>
-    internal void OnRouteStreamChanged(object? sender, SelectionChangedEventArgs e)
+    private void OnRouteStreamChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (((Control)sender!).DataContext is not AudioRouteRow || e.RemovedItems.Count == 0)
         {
@@ -102,7 +93,7 @@ internal sealed class OptionsAudioRoutingSection
         ApplyAndPersistRoutes();
     }
 
-    internal void OnRouteVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    private void OnRouteVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         if (((Control)sender!).DataContext is not AudioRouteRow row)
         {
@@ -113,12 +104,12 @@ internal sealed class OptionsAudioRoutingSection
         _settings.UpsertOutputVolumeSetting(row.Route.Output, e.NewValue, row.Muted, row.DelayMs);
     }
 
-    internal void OnRouteVolumeReleased(object? sender, PointerCaptureLostEventArgs e)
+    private void OnRouteVolumeReleased(object? sender, PointerCaptureLostEventArgs e)
     {
         _settings.Save();
     }
 
-    internal void OnRouteMuteChanged(object? sender, RoutedEventArgs e)
+    private void OnRouteMuteChanged(object? sender, RoutedEventArgs e)
     {
         if (sender is not ToggleButton { DataContext: AudioRouteRow row } toggle)
         {
@@ -132,7 +123,7 @@ internal sealed class OptionsAudioRoutingSection
         _settings.Save();
     }
 
-    internal void OnRouteDelayChanged(object? sender, NumericUpDownValueChangedEventArgs e)
+    private void OnRouteDelayChanged(object? sender, NumericUpDownValueChangedEventArgs e)
     {
         if (((Control)sender!).DataContext is not AudioRouteRow row)
         {
@@ -148,17 +139,17 @@ internal sealed class OptionsAudioRoutingSection
 
     private void OnDraftOutputChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_outputSelector.SelectedItem is not AudioOutput)
+        if (OutputSelector.SelectedItem is not AudioOutput)
         {
-            _streamSelector.IsEnabled = false;
-            _streamSelector.SelectedItem = null;
+            StreamSelector.IsEnabled = false;
+            StreamSelector.SelectedItem = null;
             return;
         }
 
-        _streamSelector.IsEnabled = true;
+        StreamSelector.IsEnabled = true;
         if (_streamOptions.Count == 1)
         {
-            _streamSelector.SelectedIndex = 0;
+            StreamSelector.SelectedIndex = 0;
         }
 
         TryCommitDraftRoute();
@@ -166,12 +157,12 @@ internal sealed class OptionsAudioRoutingSection
 
     private void OnDraftStreamChanged(object? sender, SelectionChangedEventArgs e) => TryCommitDraftRoute();
 
-    private void OnClearDraftRoute(object? sender, RoutedEventArgs e) => _outputSelector.SelectedItem = null;
+    private void OnClearDraftRoute(object? sender, RoutedEventArgs e) => OutputSelector.SelectedItem = null;
 
     private void TryCommitDraftRoute()
     {
-        if (_outputSelector.SelectedItem is not AudioOutput output ||
-            _streamSelector.SelectedItem is not AudioStreamOption streamOption)
+        if (OutputSelector.SelectedItem is not AudioOutput output ||
+            StreamSelector.SelectedItem is not AudioStreamOption streamOption)
         {
             return;
         }
@@ -186,7 +177,7 @@ internal sealed class OptionsAudioRoutingSection
         ApplyAndPersistRoutes();
 
         UpdateOutputSelector();
-        _outputSelector.Focus();
+        OutputSelector.Focus();
     }
 
     private void ApplyAndPersistRoutes()
@@ -227,7 +218,7 @@ internal sealed class OptionsAudioRoutingSection
 
     private void UpdateOutputSelector() =>
         OptionsSelector.Rebind(
-            _outputSelector, _outputs, _rows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
+            OutputSelector, _outputs, _rows.Select(row => row.Route.Output.FriendlyName), o => o.FriendlyName);
 
     private void UpdateRowStreamOptions()
     {

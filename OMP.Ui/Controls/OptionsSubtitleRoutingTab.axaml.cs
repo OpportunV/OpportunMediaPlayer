@@ -14,59 +14,48 @@ using OMP.Lib.Subtitle;
 using OMP.Ui.Helpers;
 using OMP.Ui.Localization;
 using OMP.Ui.Models;
+using OMP.Ui.Services;
 using OMP.Ui.Settings;
 using OMP.Ui.Windows;
 
-namespace OMP.Ui.Services;
+namespace OMP.Ui.Controls;
 
-/// <summary>
-/// The Subtitles tab of the Options window: routing a subtitle track to a zone, and attaching an
-/// external subtitle file. Binds against the zone collection owned by
-/// <see cref="OptionsSubtitleZonesSection"/> and prunes its own rows when a zone disappears, so
-/// zone CRUD never has to know that routing exists.
-/// </summary>
-internal sealed class OptionsSubtitleRoutingSection : IDisposable
+internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposable
 {
     private static readonly FilePickerFileType _subtitleFileTypeFilter = new(Strings.Options_SubtitleFileTypeFilterName)
     {
         Patterns = ["*.srt", "*.vtt", "*.ass", "*.ssa", "*.sub"]
     };
 
-    private readonly Window _owner;
-    private readonly ComboBox _streamSelector;
-    private readonly ComboBox _zoneSelector;
-    private readonly TextBlock _errorText;
-    private readonly OptionsSubtitleZonesSection _zones;
-    private readonly IMediaSessionRegistry _mediaSessionRegistry;
-    private readonly IWindowFactory _windowFactory;
-    private readonly IFilePickerService _filePicker;
-    private readonly ILogger _logger;
     private readonly ObservableCollection<SubtitleRouteRow> _rows = [];
     private readonly List<SubtitleStreamOption> _streamOptions = [];
 
-    public OptionsSubtitleRoutingSection(
+    private Window _owner = null!;
+    private OptionsSubtitleZonesTab _zones = null!;
+    private IMediaSessionRegistry _mediaSessionRegistry = null!;
+    private IWindowFactory _windowFactory = null!;
+    private IFilePickerService _filePicker = null!;
+    private ILogger _logger = null!;
+
+    public OptionsSubtitleRoutingTab()
+    {
+        InitializeComponent();
+    }
+
+    public void Initialize(
         Window owner,
-        ItemsControl routesList,
-        ComboBox streamSelector,
-        ComboBox zoneSelector,
-        Button clearDraftButton,
-        Button loadSubtitleFileButton,
-        TextBlock errorText,
-        OptionsSubtitleZonesSection zones,
+        OptionsSubtitleZonesTab zones,
         IMediaSessionRegistry mediaSessionRegistry,
         IWindowFactory windowFactory,
         IFilePickerService filePicker,
         ILoggerFactory loggerFactory)
     {
         _owner = owner;
-        _streamSelector = streamSelector;
-        _zoneSelector = zoneSelector;
-        _errorText = errorText;
         _zones = zones;
         _mediaSessionRegistry = mediaSessionRegistry;
         _windowFactory = windowFactory;
         _filePicker = filePicker;
-        _logger = loggerFactory.CreateLogger<OptionsSubtitleRoutingSection>();
+        _logger = loggerFactory.CreateLogger<OptionsSubtitleRoutingTab>();
 
         var session = _mediaSessionRegistry.Current;
         _streamOptions.AddRange((session?.SubtitleStreams ?? []).Select(s => new SubtitleStreamOption(s)));
@@ -80,11 +69,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
             }
         }
 
-        routesList.ItemsSource = _rows;
-        clearDraftButton.Click += OnClearDraftSubtitleRoute;
-        loadSubtitleFileButton.Click += OnLoadSubtitleFile;
-        _streamSelector.SelectionChanged += OnDraftSubtitleStreamChanged;
-        _zoneSelector.SelectionChanged += OnDraftSubtitleZoneChanged;
+        SubtitleRoutesList.ItemsSource = _rows;
         _zones.ZonesChanged += OnZonesChanged;
 
         UpdateStreamSelector();
@@ -93,7 +78,7 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
 
     public void Dispose() => _zones.ZonesChanged -= OnZonesChanged;
 
-    internal void OnDeleteSubtitleRoute(object? sender, RoutedEventArgs e)
+    private void OnDeleteSubtitleRoute(object? sender, RoutedEventArgs e)
     {
         if (((Control)sender!).DataContext is not SubtitleRouteRow row)
         {
@@ -139,17 +124,17 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
 
     private void OnDraftSubtitleStreamChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_streamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true })
+        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true })
         {
-            _zoneSelector.IsEnabled = false;
-            _zoneSelector.SelectedItem = null;
+            SubtitleZoneSelector.IsEnabled = false;
+            SubtitleZoneSelector.SelectedItem = null;
             return;
         }
 
-        _zoneSelector.IsEnabled = true;
-        if (_zoneSelector.Items.Count == 1)
+        SubtitleZoneSelector.IsEnabled = true;
+        if (SubtitleZoneSelector.Items.Count == 1)
         {
-            _zoneSelector.SelectedIndex = 0;
+            SubtitleZoneSelector.SelectedIndex = 0;
         }
 
         TryCommitDraftSubtitleRoute();
@@ -159,23 +144,23 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
         TryCommitDraftSubtitleRoute();
 
     private void OnClearDraftSubtitleRoute(object? sender, RoutedEventArgs e) =>
-        _streamSelector.SelectedItem = null;
+        SubtitleStreamSelector.SelectedItem = null;
 
     private void TryCommitDraftSubtitleRoute()
     {
-        if (_streamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true } streamOption ||
-            _zoneSelector.SelectedItem is not SubtitleZone zone)
+        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true } streamOption ||
+            SubtitleZoneSelector.SelectedItem is not SubtitleZone zone)
         {
             return;
         }
 
-        _errorText.IsVisible = false;
+        SubtitleRouteErrorText.IsVisible = false;
         _rows.Add(new SubtitleRouteRow(streamOption.Stream, zone));
         ApplySubtitleRoutes();
 
         UpdateStreamSelector();
         UpdateZoneSelector();
-        _streamSelector.Focus();
+        SubtitleStreamSelector.Focus();
     }
 
     private async void OnLoadSubtitleFile(object? sender, RoutedEventArgs e)
@@ -251,15 +236,15 @@ internal sealed class OptionsSubtitleRoutingSection : IDisposable
         UpdateStreamSelector();
         UpdateZoneSelector();
 
-        _errorText.Text = Strings.Options_SubtitleRouteError;
-        _errorText.IsVisible = true;
+        SubtitleRouteErrorText.Text = Strings.Options_SubtitleRouteError;
+        SubtitleRouteErrorText.IsVisible = true;
     }
 
     private void UpdateStreamSelector() =>
         OptionsSelector.Rebind(
-            _streamSelector, _streamOptions, _rows.Select(row => row.Stream.Id), o => o.Stream.Id);
+            SubtitleStreamSelector, _streamOptions, _rows.Select(row => row.Stream.Id), o => o.Stream.Id);
 
     private void UpdateZoneSelector() =>
         OptionsSelector.Rebind(
-            _zoneSelector, _zones.Zones, _rows.Select(row => row.Zone.Id), z => z.Id);
+            SubtitleZoneSelector, _zones.Zones, _rows.Select(row => row.Zone.Id), z => z.Id);
 }

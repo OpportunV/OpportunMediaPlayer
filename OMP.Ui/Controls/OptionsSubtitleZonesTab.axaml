@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="clr-namespace:OMP.Ui.Settings"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
+             x:Class="OMP.Ui.Controls.OptionsSubtitleZonesTab">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+          Margin="20,16,24,16">
+
+        <TextBlock Grid.Row="0"
+                   Classes="hint"
+                   Text="{x:Static loc:Strings.Options_ZonesHelpText}"
+                   Margin="0,0,0,14" />
+
+        <Border Grid.Row="1"
+                Classes="rule" />
+
+        <ItemsControl Grid.Row="2"
+                      Name="ZonesList">
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="settings:SubtitleZone">
+
+                    <StackPanel>
+                        <Grid ColumnDefinitions="*,Auto,80"
+                              Margin="0,8">
+
+                            <StackPanel Grid.Column="0"
+                                        Spacing="2"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Classes="mono"
+                                           Text="{Binding Summary}" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Name="EditZoneButton"
+                                    Classes="link"
+                                    Foreground="{DynamicResource SettingsMonoBrush}"
+                                    Click="OnEditZone"
+                                    Content="{x:Static loc:Strings.Options_EditZoneButton}"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,10,0" />
+
+                            <Button Grid.Column="2"
+                                    Name="ResetZoneButton"
+                                    Classes="link"
+                                    Foreground="{DynamicResource SettingsHintBrush}"
+                                    Click="OnResetZone"
+                                    IsVisible="{Binding IsBuiltIn}"
+                                    Content="{x:Static loc:Strings.Options_ResetZoneButton}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="{x:Static loc:Strings.Options_ResetZoneTooltip}" />
+
+                            <Button Grid.Column="2"
+                                    Name="DeleteZoneButton"
+                                    Classes="icon-button-sm ghost"
+                                    Click="OnDeleteZone"
+                                    IsVisible="{Binding IsDeletable}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                                <Viewbox Width="14" Height="14">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="{StaticResource DeleteIconGeometry}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="2"
+                                              StrokeLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                        <Border Classes="rule" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+        <Button Grid.Row="3"
+                Name="AddZoneButton"
+                Click="OnAddZone"
+                Classes="link"
+                Content="{x:Static loc:Strings.Options_AddZoneButton}"
+                HorizontalAlignment="Left"
+                Margin="0,12,0,0" />
+
+    </Grid>
+</UserControl>
