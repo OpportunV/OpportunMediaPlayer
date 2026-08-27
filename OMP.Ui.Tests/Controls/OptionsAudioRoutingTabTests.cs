@@ -1,23 +1,26 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using OMP.Lib.Audio;
 using OMP.Lib.Audio.Output;
+using OMP.Ui.Controls;
 using OMP.Ui.Models;
-using OMP.Ui.Services;
 using OMP.Ui.Settings;
 using OMP.Ui.Tests.TestDoubles;
 
-namespace OMP.Ui.Tests.Services;
+namespace OMP.Ui.Tests.Controls;
 
 /// <summary>
-/// These exist mainly to catch a dropped event subscription. Moving the handlers off the window
-/// traded XAML attributes for <c>+=</c> wiring, and a missing <c>+=</c> still compiles - the
-/// control simply stops doing anything. Every test here drives a real control and asserts the
-/// effect reached the session or the settings, rather than calling the handler directly.
+/// Behaviour coverage for the Audio Routing tab. Every control's event, including the ones inside
+/// the per-row <c>DataTemplate</c>, is declared directly in <c>OptionsAudioRoutingTab.axaml</c>, so
+/// a dropped subscription fails the build - what remains here is verifying each handler does the
+/// right thing, driving the real realized controls rather than calling handlers directly.
 /// </summary>
-public class OptionsAudioRoutingSectionTests
+public class OptionsAudioRoutingTabTests
 {
     private static readonly AudioStream _mainStream = new(1, "aac", "Main", "en");
     private static readonly AudioStream _commentaryStream = new(2, "aac", "Commentary", "en");
@@ -29,8 +32,8 @@ public class OptionsAudioRoutingSectionTests
     {
         var h = new Harness();
 
-        h.OutputSelector.SelectedItem = _speakers;
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Tab.OutputSelector.SelectedItem = _speakers;
+        h.Tab.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
         h.Session.WaitForAudioRoutes(1);
 
         var applied = Assert.Single(h.Session.AppliedAudioRoutes);
@@ -43,28 +46,24 @@ public class OptionsAudioRoutingSectionTests
     public void ClearDraftButton_ClearsTheOutputSelection()
     {
         var h = new Harness();
-        h.OutputSelector.SelectedItem = _speakers;
+        h.Tab.OutputSelector.SelectedItem = _speakers;
 
-        h.RaiseClick(h.ClearDraftButton);
+        h.Tab.ClearDraftRouteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-        Assert.Null(h.OutputSelector.SelectedItem);
+        Assert.Null(h.Tab.OutputSelector.SelectedItem);
     }
 
-    /// <summary>
-    /// Guards the output picker specifically: without its own subscription the track picker still
-    /// commits a route, so only the enable/disable gate proves that handler is wired.
-    /// </summary>
     [AvaloniaFact]
     public void TrackPicker_IsDisabledUntilAnOutputIsChosen_AndDisabledAgainWhenCleared()
     {
         var h = new Harness();
 
-        h.OutputSelector.SelectedItem = _speakers;
-        Assert.True(h.StreamSelector.IsEnabled);
+        h.Tab.OutputSelector.SelectedItem = _speakers;
+        Assert.True(h.Tab.StreamSelector.IsEnabled);
 
-        h.OutputSelector.SelectedItem = null;
-        Assert.False(h.StreamSelector.IsEnabled);
-        Assert.Null(h.StreamSelector.SelectedItem);
+        h.Tab.OutputSelector.SelectedItem = null;
+        Assert.False(h.Tab.StreamSelector.IsEnabled);
+        Assert.Null(h.Tab.StreamSelector.SelectedItem);
     }
 
     [AvaloniaFact]
@@ -72,10 +71,10 @@ public class OptionsAudioRoutingSectionTests
     {
         var h = new Harness();
 
-        h.OutputSelector.SelectedItem = _speakers;
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Tab.OutputSelector.SelectedItem = _speakers;
+        h.Tab.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
 
-        var remaining = h.OutputSelector.ItemsSource!.Cast<AudioOutput>().ToList();
+        var remaining = h.Tab.OutputSelector.ItemsSource!.Cast<AudioOutput>().ToList();
         Assert.DoesNotContain(remaining, o => o.Id == _speakers.Id);
         Assert.Contains(remaining, o => o.Id == _headset.Id);
     }
@@ -85,10 +84,10 @@ public class OptionsAudioRoutingSectionTests
     {
         var h = new Harness();
 
-        h.OutputSelector.SelectedItem = _speakers;
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
-        h.OutputSelector.SelectedItem = _headset;
-        h.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Tab.OutputSelector.SelectedItem = _speakers;
+        h.Tab.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
+        h.Tab.OutputSelector.SelectedItem = _headset;
+        h.Tab.StreamSelector.SelectedItem = h.StreamOptionFor(_mainStream);
         h.Session.WaitForAudioRoutes(2);
 
         var applied = h.Session.AppliedAudioRoutes.Last();
@@ -100,11 +99,8 @@ public class OptionsAudioRoutingSectionTests
     public void OnRouteVolumeChanged_PushesToTheSessionAndPersists()
     {
         var h = new Harness(withExistingRoute: true);
-        var row = h.Rows.Single();
 
-        var slider = new Slider { Minimum = 0, Maximum = 200, Value = 100, DataContext = row };
-        slider.ValueChanged += h.Section.OnRouteVolumeChanged;
-
+        var slider = h.FindRowControl<Slider>("RouteVolumeSlider");
         slider.Value = 40;
 
         Assert.Contains(h.Session.OutputVolumeCalls, c => c.OutputId == _speakers.Id && Math.Abs(c.Volume - 0.4) < .001);
@@ -115,9 +111,9 @@ public class OptionsAudioRoutingSectionTests
     public void DeleteRoute_IsRefusedWhileOnlyOneRouteRemains()
     {
         var h = new Harness(withExistingRoute: true);
-        var row = h.Rows.Single();
 
-        h.Section.OnDeleteRoute(new Button { DataContext = row }, new Avalonia.Interactivity.RoutedEventArgs());
+        var deleteButton = h.FindRowControl<Button>("DeleteRouteButton");
+        deleteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         h.Session.SettleRouteApplications();
 
         Assert.Single(h.Rows);
@@ -126,19 +122,13 @@ public class OptionsAudioRoutingSectionTests
 
     private sealed class Harness
     {
-        public ItemsControl RoutesList { get; } = new();
+        public OptionsAudioRoutingTab Tab { get; }
 
-        public ComboBox OutputSelector { get; } = new();
-
-        public ComboBox StreamSelector { get; } = new();
-
-        public Button ClearDraftButton { get; } = new();
+        public Window Window { get; }
 
         public FakeMediaSession Session { get; }
 
         public UserSettings Settings { get; } = new();
-
-        public OptionsAudioRoutingSection Section { get; }
 
         public Harness(bool withExistingRoute = false)
         {
@@ -152,22 +142,21 @@ public class OptionsAudioRoutingSectionTests
             var settingsService = new Mock<IUserSettingsService>();
             settingsService.Setup(s => s.Current).Returns(Settings);
 
-            Section = new OptionsAudioRoutingSection(
-                RoutesList,
-                OutputSelector,
-                StreamSelector,
-                ClearDraftButton,
-                new FakeMediaSessionRegistry { Current = Session },
-                settingsService.Object,
-                NullLoggerFactory.Instance);
+            Tab = new OptionsAudioRoutingTab();
+            Window = new Window { Content = Tab };
+            Window.Show();
+
+            Tab.Initialize(
+                new FakeMediaSessionRegistry { Current = Session }, settingsService.Object, NullLoggerFactory.Instance);
+            Dispatcher.UIThread.RunJobs();
         }
 
-        public IEnumerable<AudioRouteRow> Rows => RoutesList.ItemsSource!.Cast<AudioRouteRow>();
+        public IEnumerable<AudioRouteRow> Rows => Tab.RoutesList.ItemsSource!.Cast<AudioRouteRow>();
 
         public AudioStreamOption StreamOptionFor(AudioStream stream) =>
-            StreamSelector.ItemsSource!.Cast<AudioStreamOption>().First(o => o.Stream.Id == stream.Id);
+            Tab.StreamSelector.ItemsSource!.Cast<AudioStreamOption>().First(o => o.Stream.Id == stream.Id);
 
-        public void RaiseClick(Button button) =>
-            button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        public T FindRowControl<T>(string name) where T : Control =>
+            Tab.RoutesList.GetVisualDescendants().OfType<T>().First(c => c.Name == name);
     }
 }

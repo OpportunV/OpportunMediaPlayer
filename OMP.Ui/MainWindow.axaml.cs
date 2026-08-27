@@ -58,6 +58,7 @@ public sealed partial class MainWindow : Window
         IWindowFactory windowFactory,
         IUserSettingsService settings,
         IYtDlpResolver ytDlpResolver,
+        IFilePickerService filePicker,
         ILogger<MainWindow> logger,
         SingleInstanceCoordinator singleInstanceCoordinator,
         NativeLibraryOptions nativeLibraryOptions,
@@ -81,7 +82,7 @@ public sealed partial class MainWindow : Window
         _subtitleOverlayRenderer = new SubtitleOverlayRenderer(SubtitleOverlay);
         _mediaOpener = new MediaOpener(
             this, LoadingIndicator, EmptyStateLabel, mediaSessionRegistry, ytDlpResolver, windowFactory,
-            nativeLibraryOptions);
+            filePicker, nativeLibraryOptions);
         _mediaOpener.MediaOpened += UpdateSessionData;
 
         _volumeBar = new VolumeBarPresenter(

@@ -1,0 +1,161 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:OMP.Ui.Models"
+             xmlns:settings="clr-namespace:OMP.Ui.Settings"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
+             x:Class="OMP.Ui.Controls.OptionsSubtitleRoutingTab">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+          Margin="20,16,24,16">
+
+        <TextBlock Grid.Row="0"
+                   Classes="hint"
+                   Text="{x:Static loc:Strings.Options_SubtitlesHelpText}"
+                   Margin="0,0,0,14" />
+
+        <Grid Grid.Row="1"
+              Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="28" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_TrackHeader}" />
+            <TextBlock Grid.Column="2"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_ZoneHeader}" />
+        </Grid>
+
+        <Border Grid.Row="2"
+                Classes="rule" />
+
+        <ItemsControl Grid.Row="3"
+                      Name="SubtitleRoutesList">
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:SubtitleRouteRow">
+
+                    <StackPanel>
+                        <Grid Margin="0,9">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="300" />
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="300" />
+                                <ColumnDefinition Width="28" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding StreamLabel}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding StreamLabel}" />
+
+                            <TextBlock Grid.Column="1"
+                                       Classes="hint"
+                                       Text="&#x2192;"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding ZoneLabel}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding ZoneLabel}" />
+
+                            <Button Grid.Column="3"
+                                    Name="DeleteSubtitleRouteButton"
+                                    Classes="icon-button-sm ghost"
+                                    Click="OnDeleteSubtitleRoute">
+                                <Viewbox Width="14" Height="14">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="{StaticResource DeleteIconGeometry}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="2"
+                                              StrokeLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                        <Border Classes="rule" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+        <Grid Grid.Row="4"
+              Margin="0,9" ColumnDefinitions="300,28,300,28">
+            <ComboBox Grid.Column="0"
+                      Name="SubtitleStreamSelector"
+                      SelectionChanged="OnDraftSubtitleStreamChanged"
+                      BorderBrush="{DynamicResource AccentLineBrush}"
+                      PlaceholderText="{x:Static loc:Strings.Options_SelectTrackPlaceholder}"
+                      HorizontalAlignment="Stretch">
+                <ComboBox.Styles>
+                    <Style Selector="ComboBoxItem"
+                           x:DataType="models:SubtitleStreamOption">
+                        <Setter Property="IsEnabled"
+                                Value="{Binding IsSupported}" />
+                    </Style>
+                </ComboBox.Styles>
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:SubtitleStreamOption">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <TextBlock Grid.Column="1"
+                       Foreground="{DynamicResource SettingsHintBrush}"
+                       FontSize="16"
+                       Text="&#x2192;"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+
+            <ComboBox Grid.Column="2"
+                      Name="SubtitleZoneSelector"
+                      SelectionChanged="OnDraftSubtitleZoneChanged"
+                      IsEnabled="False"
+                      PlaceholderText="{x:Static loc:Strings.Options_SelectZonePlaceholder}"
+                      HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="settings:SubtitleZone">
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <Button Grid.Column="3"
+                    Name="ClearDraftSubtitleRouteButton"
+                    Click="OnClearDraftSubtitleRoute"
+                    Classes="icon-button-sm ghost">
+                <Viewbox Width="14" Height="14">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="{StaticResource DeleteIconGeometry}"
+                              Stroke="{Binding $parent[Button].Foreground}"
+                              StrokeThickness="2"
+                              StrokeLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+        </Grid>
+
+        <TextBlock Grid.Row="5"
+                   Name="SubtitleRouteErrorText"
+                   Foreground="IndianRed"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,0"
+                   IsVisible="False" />
+
+        <Button Grid.Row="6"
+                Name="LoadSubtitleFileButton"
+                Click="OnLoadSubtitleFile"
+                Classes="default"
+                Margin="0,10,0,0"
+                Content="{x:Static loc:Strings.Options_LoadSubtitleFileButton}" />
+    </Grid>
+</UserControl>
