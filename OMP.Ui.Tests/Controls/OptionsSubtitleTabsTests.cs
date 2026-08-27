@@ -211,7 +211,7 @@ public class OptionsSubtitleTabsTests
         var h = new Harness();
         h.FilePicker
             .Setup(p => p.PickFileAsync(h.Window, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
-            .ReturnsAsync(@"C:\subs\external.srt");
+            .ReturnsAsync(Path.Combine("subs", "external.srt"));
 
         h.RaiseLoadSubtitleFileClick();
 
