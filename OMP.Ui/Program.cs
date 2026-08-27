@@ -59,6 +59,7 @@ internal static class Program
                     services.AddTransient<IMainWindowCommands, MainWindowCommands>();
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
                     services.AddSingleton<IWindowFactory, WindowFactory>();
+                    services.AddSingleton<IFilePickerService, FilePickerService>();
                     services.AddSingleton<IUserSettingsService, UserSettingsService>();
                     services.AddSingleton<IYtDlpResolver, YtDlpResolver>();
 

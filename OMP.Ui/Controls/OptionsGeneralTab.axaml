@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:OMP.Ui.Models"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
+             x:Class="OMP.Ui.Controls.OptionsGeneralTab">
+
+    <StackPanel Margin="20,16,24,16"
+                Width="420"
+                Spacing="0">
+
+        <Grid ColumnDefinitions="*,Auto"
+              Margin="0,0,0,12">
+            <StackPanel Grid.Column="0"
+                        Spacing="2"
+                        VerticalAlignment="Center">
+                <TextBlock Text="{x:Static loc:Strings.Options_ThemeLabel}" />
+                <TextBlock Classes="hint"
+                           Text="{x:Static loc:Strings.Options_ThemeHint}" />
+            </StackPanel>
+            <ComboBox Grid.Column="1"
+                      Name="ThemeSelector"
+                      SelectionChanged="OnThemeChanged"
+                      Width="200"
+                      VerticalAlignment="Center">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:ThemeModeOption">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <Border Classes="rule" />
+
+        <Grid ColumnDefinitions="*,Auto"
+              Margin="0,12,0,12">
+            <StackPanel Grid.Column="0"
+                        Spacing="2"
+                        VerticalAlignment="Center">
+                <TextBlock Text="{x:Static loc:Strings.Options_LanguageLabel}" />
+                <TextBlock Classes="hint"
+                           Text="{x:Static loc:Strings.Options_LanguageHint}" />
+                <Button Name="RestartNowButton"
+                        Click="OnRestartNowClick"
+                        Classes="link"
+                        Content="{x:Static loc:Strings.Options_LanguageRestartButton}"
+                        HorizontalAlignment="Left"
+                        Margin="-2,0,0,0"
+                        IsVisible="False" />
+            </StackPanel>
+            <ComboBox Grid.Column="1"
+                      Name="LanguageSelector"
+                      SelectionChanged="OnLanguageChanged"
+                      Width="200"
+                      VerticalAlignment="Center">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:LanguageOption">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <Border Classes="rule" />
+
+        <StackPanel Spacing="6"
+                    Margin="0,14,0,0">
+            <TextBlock Text="{x:Static loc:Strings.Options_YtDlpPathLabel}" />
+            <TextBlock Classes="hint"
+                       Text="{x:Static loc:Strings.Options_YtDlpPathHint}" />
+            <Grid ColumnDefinitions="*,Auto,Auto"
+                  ColumnSpacing="6">
+                <TextBox Grid.Column="0"
+                         Name="YtDlpPathTextBox"
+                         LostFocus="OnYtDlpPathChanged"
+                         FontFamily="Consolas"
+                         Watermark="{x:Static loc:Strings.Options_YtDlpPathWatermarkShort}" />
+                <Button Grid.Column="1"
+                        Name="BrowseYtDlpPathButton"
+                        Click="OnBrowseYtDlpPath"
+                        Classes="default"
+                        VerticalAlignment="Center"
+                        Content="{x:Static loc:Strings.Options_YtDlpPathBrowseButton}" />
+                <Button Grid.Column="2"
+                        Name="ResetYtDlpPathButton"
+                        Click="OnResetYtDlpPath"
+                        Classes="link"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource SettingsHintBrush}"
+                        Content="{x:Static loc:Strings.Options_YtDlpPathResetButton}"
+                        ToolTip.Tip="{x:Static loc:Strings.Options_YtDlpPathResetTooltip}" />
+            </Grid>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

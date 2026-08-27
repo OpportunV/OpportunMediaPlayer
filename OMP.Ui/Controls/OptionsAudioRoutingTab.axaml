@@ -1,0 +1,266 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:OMP.Ui.Models"
+             xmlns:output="clr-namespace:OMP.Lib.Audio.Output;assembly=OMP.Lib"
+             xmlns:loc="clr-namespace:OMP.Ui.Localization"
+             x:Class="OMP.Ui.Controls.OptionsAudioRoutingTab">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+          Margin="20,16,24,16"
+          Grid.IsSharedSizeScope="True">
+
+        <Grid Grid.Row="0"
+              Margin="0,0,0,8">
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_OutputHeader}" />
+
+            <TextBlock Grid.Column="1"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_StreamHeader}"
+                       Margin="10,0" />
+
+            <TextBlock Grid.Column="3"
+                       Grid.ColumnSpan="2"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_VolumeHeader}"
+                       HorizontalAlignment="Center" />
+
+            <TextBlock Grid.Column="5"
+                       Classes="column-header"
+                       Text="{x:Static loc:Strings.Options_DelayMsHeader}"
+                       HorizontalAlignment="Center" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Classes="rule" />
+
+        <ItemsControl Grid.Row="2"
+                      Name="RoutesList">
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:AudioRouteRow">
+
+                    <StackPanel>
+                        <Grid Margin="0,10">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding OutputLabel}"
+                                       MaxWidth="260"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding OutputLabel}" />
+
+                            <ComboBox Grid.Column="1"
+                                      Name="RouteStreamSelector"
+                                      ItemsSource="{Binding AvailableStreamOptions}"
+                                      SelectedItem="{Binding SelectedStreamOption, Mode=TwoWay}"
+                                      SelectionChanged="OnRouteStreamChanged"
+                                      MaxWidth="260"
+                                      Margin="10,0"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Stretch"
+                                      ToolTip.Tip="{Binding SelectedStreamOption.Label}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:AudioStreamOption">
+                                        <TextBlock Text="{Binding Label}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <ToggleButton Grid.Column="2"
+                                          Name="RouteMuteButton"
+                                          Classes="icon-button-sm ghost"
+                                          IsChecked="{Binding Muted, Mode=TwoWay}"
+                                          IsCheckedChanged="OnRouteMuteChanged"
+                                          Margin="0,0,6,0"
+                                          ToolTip.Tip="{x:Static loc:Strings.Options_MuteOutputTooltip}">
+                                <Grid Width="14" Height="14">
+                                    <Viewbox Width="14" Height="14"
+                                             IsVisible="{Binding !Muted}">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                            <Path Data="{StaticResource SpeakerWavesGeometry}"
+                                                  Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                    <Viewbox Width="14" Height="14"
+                                             IsVisible="{Binding Muted}">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Data="{StaticResource SpeakerBodyGeometry}"
+                                                  Fill="{Binding $parent[ToggleButton].Foreground}" />
+                                            <Path Data="{StaticResource SpeakerMutedXGeometry}"
+                                                  Stroke="{Binding $parent[ToggleButton].Foreground}"
+                                                  StrokeThickness="2"
+                                                  StrokeLineCap="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Grid>
+                            </ToggleButton>
+
+                            <Slider Grid.Column="3"
+                                    Name="RouteVolumeSlider"
+                                    Value="{Binding Volume, Mode=TwoWay}"
+                                    ValueChanged="OnRouteVolumeChanged"
+                                    PointerCaptureLost="OnRouteVolumeReleased"
+                                    Minimum="{x:Static models:VolumeSliderRange.Min}"
+                                    Maximum="{x:Static models:VolumeSliderRange.Max}"
+                                    Width="130"
+                                    VerticalAlignment="Center"
+                                    Opacity="{Binding Muted, Converter={x:Static models:BoolToDimOpacityConverter.Instance}}" />
+
+                            <TextBlock Grid.Column="4"
+                                       Classes="mono"
+                                       Text="{Binding Volume, StringFormat={}{0:0}%}"
+                                       Width="42"
+                                       Margin="6,0,0,0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Opacity="{Binding Muted, Converter={x:Static models:BoolToDimOpacityConverter.Instance}}" />
+
+                            <NumericUpDown Grid.Column="5"
+                                           Name="RouteDelayUpDown"
+                                           Value="{Binding DelayMs, Mode=TwoWay}"
+                                           ValueChanged="OnRouteDelayChanged"
+                                           FormatString="0"
+                                           Increment="10"
+                                           Minimum="{x:Static models:AudioDelayInputRange.MinMs}"
+                                           Maximum="{x:Static models:AudioDelayInputRange.MaxMs}"
+                                           Width="120"
+                                           MinWidth="120"
+                                           Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           ToolTip.Tip="{x:Static loc:Strings.Options_DelayMsTooltip}" />
+
+                            <Button Grid.Column="6"
+                                    Name="DeleteRouteButton"
+                                    Classes="icon-button-sm ghost"
+                                    Click="OnDeleteRoute"
+                                    IsEnabled="{Binding CanDelete}"
+                                    Margin="6,0,0,0">
+                                <Viewbox Width="14" Height="14">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="{StaticResource DeleteIconGeometry}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="2"
+                                              StrokeLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                        <Border Classes="rule" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+        <Grid Grid.Row="3"
+              Margin="0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteOutput" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteStream" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteMute" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolume" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteVolumePercent" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelay" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="AudioRouteDelete" />
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Grid.Column="0"
+                      Name="OutputSelector"
+                      SelectionChanged="OnDraftOutputChanged"
+                      BorderBrush="{DynamicResource AccentLineBrush}"
+                      PlaceholderText="{x:Static loc:Strings.Options_SelectOutputPlaceholder}"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="output:AudioOutput">
+                        <TextBlock Text="{Binding FriendlyName}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <ComboBox Grid.Column="1"
+                      Name="StreamSelector"
+                      SelectionChanged="OnDraftStreamChanged"
+                      Margin="10,0"
+                      IsEnabled="False"
+                      PlaceholderText="{x:Static loc:Strings.Options_SelectStreamPlaceholder}"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:AudioStreamOption">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <Slider Grid.Column="3"
+                    Value="100"
+                    IsEnabled="False"
+                    Opacity="0.35"
+                    Minimum="{x:Static models:VolumeSliderRange.Min}"
+                    Maximum="{x:Static models:VolumeSliderRange.Max}"
+                    Width="130"
+                    VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4"
+                       Classes="mono"
+                       Text="100%"
+                       Width="42"
+                       Opacity="0.35"
+                       Margin="6,0,0,0"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+            <NumericUpDown Grid.Column="5"
+                           Value="0"
+                           IsEnabled="False"
+                           Opacity="0.35"
+                           FormatString="0"
+                           Width="120"
+                           MinWidth="120"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center" />
+
+            <Button Grid.Column="6"
+                    Name="ClearDraftRouteButton"
+                    Click="OnClearDraftRoute"
+                    Classes="icon-button-sm ghost"
+                    Margin="6,0,0,0">
+                <Viewbox Width="14" Height="14">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="{StaticResource DeleteIconGeometry}"
+                              Stroke="{Binding $parent[Button].Foreground}"
+                              StrokeThickness="2"
+                              StrokeLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+        </Grid>
+    </Grid>
+</UserControl>
