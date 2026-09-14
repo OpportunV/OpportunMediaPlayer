@@ -21,6 +21,12 @@ jobs:
         with:
           lfs: false
 
+      - name: Cache LFS native libs
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-win-x64-${{ hashFiles('OMP.Lib/Libs/win/**') }}
+
       - name: Pull Windows native libs
         run: git lfs pull --include="OMP.Lib/Libs/win/**"
 
@@ -77,6 +83,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: false
+
+      - name: Cache LFS native libs
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-linux-x64-${{ hashFiles('OMP.Lib/Libs/linux-x64/**') }}
 
       - name: Pull Linux native libs
         run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"

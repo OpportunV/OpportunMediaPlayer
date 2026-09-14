@@ -33,14 +33,6 @@ jobs:
         with:
           lfs: false
 
-      - name: Pull Windows native libs
-        if: runner.os == 'Windows'
-        run: git lfs pull --include="OMP.Lib/Libs/win/**"
-
-      - name: Pull Linux native libs
-        if: runner.os == 'Linux'
-        run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"
-
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
@@ -73,6 +65,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: false
+
+      - name: Cache LFS native libs
+        if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ matrix.rid }}-${{ hashFiles(format('OMP.Lib/Libs/{0}/**', matrix.rid == 'win-x64' && 'win' || 'linux-x64')) }}
 
       - name: Pull Windows native libs
         if: matrix.rid == 'win-x64'
