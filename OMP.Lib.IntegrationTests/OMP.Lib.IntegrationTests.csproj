@@ -48,4 +48,5 @@
     </Content>
   </ItemGroup>
 
+  <Import Project="$(MSBuildThisFileDirectory)..\build\NativeLibs.targets" />
 </Project>

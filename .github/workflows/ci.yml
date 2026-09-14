@@ -66,20 +66,12 @@ jobs:
         with:
           lfs: false
 
-      - name: Cache LFS native libs
+      - name: Cache native libs
         if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
         uses: actions/cache@v4
         with:
-          path: .git/lfs
-          key: lfs-${{ matrix.rid }}-${{ hashFiles(format('OMP.Lib/Libs/{0}/**', matrix.rid == 'win-x64' && 'win' || 'linux-x64')) }}
-
-      - name: Pull Windows native libs
-        if: matrix.rid == 'win-x64'
-        run: git lfs pull --include="OMP.Lib/Libs/win/**"
-
-      - name: Pull Linux native libs
-        if: matrix.rid == 'linux-x64'
-        run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"
+          path: OMP.Lib/Libs
+          key: native-libs-${{ matrix.rid }}-${{ hashFiles('OMP.Lib/native-libs.manifest.json') }}
 
       - uses: actions/setup-dotnet@v6
         with:

@@ -10,6 +10,11 @@
 *.AppImage
 appimagetool-*.AppImage
 
+# Vendored FFmpeg native libs - fetched from a GitHub Release by build/NativeLibs.targets, not
+# stored in git (see OMP.Lib/native-libs.manifest.json and CLAUDE.md's "Native library bundling").
+/OMP.Lib/Libs/win/
+/OMP.Lib/Libs/linux-x64/
+
 # dotenv files
 .env
 

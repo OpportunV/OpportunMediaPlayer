@@ -796,6 +796,50 @@ explicitly by whoever owns their lifetime (e.g. `MainWindow.OnClosed` disposes
 
 ## Native library bundling
 
+**The Windows/Linux FFmpeg libs are not stored in git at all — they're fetched from a GitHub
+Release the first time a RID-specific build/test/publish needs them.** They used to be committed
+via Git LFS, which turned out to be a real cost, not a style preference: GitHub's free LFS
+bandwidth quota (1 GiB/month) was getting fully consumed within days with zero CI runs that
+month, confirmed against the repo's own traffic graph showing ordinary `git clone`s (not bots,
+not this repo's own CI, which was separately confirmed innocent by fixing its own — smaller —
+self-inflicted waste first: `build-and-test` used to `git lfs pull` on every run despite never
+building with a RID, so the Content items below never even consumed them). LFS bandwidth has no
+per-repo throttle or allowlist on GitHub — anyone's `git clone` of a public repo pulls LFS content
+against the *owner's* quota, with no setting to gate that — so the only real fix for a public repo
+was to stop putting the binaries in git's object graph in the first place.
+
+`OMP.Lib/native-libs.manifest.json` records the release tag, each RID's archive filename, and its
+SHA256. `build/fetch-native-libs.ps1` (invoked via `build/NativeLibs.targets`, imported by both
+`OMP.Ui.csproj` and `OMP.Lib.IntegrationTests.csproj`) downloads that RID's archive, verifies the
+hash, extracts it into `OMP.Lib/Libs/<folder>/`, and drops a `.fetched-<sha256>` marker file so a
+repeat build/restore skips the download entirely once the content already matches. A checksum
+mismatch throws and fails the build rather than silently extracting a wrong or corrupted archive —
+confirmed by deliberately corrupting a manifest hash and watching the script fail loudly instead
+of extracting anyway.
+
+The fetch target is hooked to `BeforeTargets="Restore"`, not `BeforeBuild` — confirmed necessary
+by testing, not assumed. The RID-conditional `Content` wildcard items below
+(`Include="..\OMP.Lib\Libs\win\**"`) are evaluated once, when MSBuild parses the project file,
+*before* any target executes. `dotnet build`/`test`/`publish` run `Restore` as an earlier, separate
+MSBuild evaluation pass and then re-evaluate the project from scratch for `Build` — so a file
+fetched during `Restore` is already on disk by the time `Build`'s fresh evaluation looks for it.
+Fetching during `BeforeBuild` is too late for a clean clone specifically: the wildcard would
+already have resolved to nothing (no files existed at evaluation time), and no amount of creating
+files afterward makes that already-fixed item list pick them up. Verified directly: a temporary
+marker file dropped by the fetch step was traced all the way into the build output only once the
+hook moved from `BeforeBuild` to `BeforeTargets="Restore"`.
+
+The script is `pwsh`-only on non-Windows, `powershell.exe` on Windows (`NativeLibs.targets` picks
+the shell by `$(OS)`) — GitHub-hosted `ubuntu-latest`/`macos-latest` runners ship `pwsh`
+preinstalled, so CI needs no extra setup. One genuine cross-platform trap already caught here:
+every path built inside the script uses `/`, never a literal `\` — `Join-Path $repoRoot
+"OMP.Lib\Libs\$rid"` looks harmless and works fine on Windows, but a literal backslash is not a
+path separator on Linux/macOS, so PowerShell would look for a single file/directory literally
+*named* `OMP.Lib\Libs\win` instead of traversing into it. `/` is unambiguous on all three
+platforms (Windows accepts it natively; it's the only separator Linux/macOS have), so it isn't a
+"hope this works" cross-platform trick the way some of the other platform-specific notes in this
+file are — but the bug was real enough to write down.
+
 FFmpeg's (and, going forward, any other engine dependency's) native libs live under
 `OMP.Lib/Libs/<rid>/` — co-located with the P/Invoke code in `OMP.Lib` that consumes them — but
 the RID-conditional `Content`/`CopyToOutputDirectory` items that actually bundle them into a
@@ -805,13 +849,20 @@ testing that `$(RuntimeIdentifier)` does not reliably flow into a referenced lib
 own item evaluation via `ProjectReference` — even an explicit `dotnet build OMP.Ui -r win-x64`
 copied nothing when the Content block lived in `OMP.Lib.csproj`. Only the project actually being
 published is guaranteed to have `$(RuntimeIdentifier)` resolved, so RID-conditional bundling has
-to be declared there.
+to be declared there. `OMP.Lib.IntegrationTests.csproj` duplicates the same Content items and the
+same `NativeLibs.targets` import rather than sharing them with `OMP.Ui.csproj` — each project
+needing bundled libs needs its own copy for exactly the reason above, since only the project
+actually building/publishing with a RID has `$(RuntimeIdentifier)` resolved.
 
 This also matters for cross-publishing — e.g. `dotnet publish -r linux-x64` run from a Windows
 host, as when testing via a VirtualBox shared folder. An `IsOSPlatform()`-based condition checks
 the build host's OS, not the target RID, and silently skips the target platform's libs in that
 scenario; `$(RuntimeIdentifier.StartsWith(...))` is the correct check, and it only works reliably
 in `OMP.Ui.csproj` for the reason above.
+
+CI no longer runs `git lfs pull` for these paths at all — `ci.yml`/`release.yml` just cache
+`OMP.Lib/Libs` keyed on `hashFiles('OMP.Lib/native-libs.manifest.json')`, and the `Restore`-time
+fetch handles the rest transparently, cache hit or not.
 
 `OMP.Ui.csproj` also pins `<PublishSingleFile>false</PublishSingleFile>` — `FFmpeg.AutoGen`'s
 `DynamicallyLoadedBindings` resolves native functions via `Marshal.GetDelegateForFunctionPointer`,

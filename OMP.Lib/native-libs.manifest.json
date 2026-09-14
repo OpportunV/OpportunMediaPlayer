@@ -1,0 +1,14 @@
+{
+  "repo": "OpportunV/OpportunMediaPlayer",
+  "releaseTag": "native-libs-ffmpeg-7.1.1",
+  "libraries": {
+    "win-x64": {
+      "archive": "ffmpeg-win-x64.zip",
+      "sha256": "426C27895F9CC8A4D98E9A41D6A528E586E3BDEE5E8D3386B72F78250846370B"
+    },
+    "linux-x64": {
+      "archive": "ffmpeg-linux-x64.zip",
+      "sha256": "3079BFCAAF43721CEF9ED77CC7ADB376552645E6EFBD7C5E220F69E8F00EE247"
+    }
+  }
+}
