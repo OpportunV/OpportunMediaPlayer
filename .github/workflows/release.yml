@@ -21,8 +21,11 @@ jobs:
         with:
           lfs: false
 
-      - name: Pull Windows native libs
-        run: git lfs pull --include="OMP.Lib/Libs/win/**"
+      - name: Cache native libs
+        uses: actions/cache@v4
+        with:
+          path: OMP.Lib/Libs
+          key: native-libs-win-x64-${{ hashFiles('OMP.Lib/native-libs.manifest.json') }}
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -78,8 +81,11 @@ jobs:
         with:
           lfs: false
 
-      - name: Pull Linux native libs
-        run: git lfs pull --include="OMP.Lib/Libs/linux-x64/**"
+      - name: Cache native libs
+        uses: actions/cache@v4
+        with:
+          path: OMP.Lib/Libs
+          key: native-libs-linux-x64-${{ hashFiles('OMP.Lib/native-libs.manifest.json') }}
 
       - uses: actions/setup-dotnet@v6
         with:

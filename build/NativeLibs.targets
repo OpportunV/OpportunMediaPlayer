@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    Vendored FFmpeg native libs (win-x64/linux-x64) are no longer stored in git - see CLAUDE.md's
+    "Native library bundling" section. They're fetched from a GitHub Release the first time a
+    RID-specific build/test/publish needs them, verified by checksum against
+    OMP.Lib/native-libs.manifest.json, and cached in OMP.Lib/Libs/ afterward (a marker file named
+    after the expected sha256 skips re-fetching once it's already correct) - see
+    fetch-native-libs.ps1.
+
+    Hooked to BeforeTargets="Restore", not "BeforeBuild": confirmed by testing (a temporary marker
+    file dropped by this target's script and traced through a full `dotnet build -r win-x64`) -
+    the RID-conditional Content wildcard items in OMP.Ui.csproj/OMP.Lib.IntegrationTests.csproj
+    (Include="..\OMP.Lib\Libs\win\**") are evaluated once, when MSBuild parses the project file,
+    before any target executes. `dotnet build`/`test`/`publish` run Restore as an earlier, separate
+    MSBuild evaluation pass, then re-evaluate the project from scratch for Build - so files fetched
+    during Restore are already on disk by the time Build's evaluation looks for them. Fetching
+    later (BeforeBuild) would be too late for a fresh clone: the wildcard would already have
+    resolved to nothing, and no amount of adding files afterward makes that already-fixed item list
+    pick them up - confirmed the hard way before switching to Restore.
+  -->
+  <Target Name="FetchNativeLibs" BeforeTargets="Restore"
+          Condition="$(RuntimeIdentifier.StartsWith('win')) Or $(RuntimeIdentifier.StartsWith('linux'))">
+    <PropertyGroup>
+      <_NativeLibsFetchScript>$(MSBuildThisFileDirectory)fetch-native-libs.ps1</_NativeLibsFetchScript>
+      <_NativeLibsShell Condition="'$(OS)' == 'Windows_NT'">powershell -NoProfile -ExecutionPolicy Bypass -File</_NativeLibsShell>
+      <_NativeLibsShell Condition="'$(OS)' != 'Windows_NT'">pwsh -NoProfile -File</_NativeLibsShell>
+    </PropertyGroup>
+    <Exec Command="$(_NativeLibsShell) &quot;$(_NativeLibsFetchScript)&quot; -Rid $(RuntimeIdentifier)" />
+  </Target>
+</Project>

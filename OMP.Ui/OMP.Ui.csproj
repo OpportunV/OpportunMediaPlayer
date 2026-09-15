@@ -58,6 +58,9 @@
     <None Include="appsettings.Development.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--Windows/Linux FFmpeg libs are no longer stored in git - NativeLibs.targets (imported below)
+  fetches and verifies them from a GitHub Release into these paths before Restore runs, so they're
+  already on disk by the time this ItemGroup's wildcards are evaluated for Build.-->
   <ItemGroup>
     <Content Condition="$(RuntimeIdentifier.StartsWith('win'))" Include="..\OMP.Lib\Libs\win\**">
       <Link>%(Filename)%(Extension)</Link>
@@ -72,4 +75,6 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\build\NativeLibs.targets" />
 </Project>
