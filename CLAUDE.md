@@ -840,6 +840,20 @@ platforms (Windows accepts it natively; it's the only separator Linux/macOS have
 "hope this works" cross-platform trick the way some of the other platform-specific notes in this
 file are — but the bug was real enough to write down.
 
+**`Get-FileHash`/`Expand-Archive` are deliberately not used, in favor of the raw .NET types
+underneath them.** A real `windows-latest` GitHub Actions run failed with `Get-FileHash: term not
+recognized` on `powershell.exe` (Windows PowerShell 5.1) — surprising because `Invoke-WebRequest`
+and `ConvertFrom-Json`, both from the *same* `Microsoft.PowerShell.Utility` module, had already run
+successfully earlier in that exact script execution, ruling out "the whole module failed to
+autoload" as the explanation. The narrower real cause was never pinned down (no access to
+re-diagnose that exact runner), but the fix doesn't need one: `[System.Security.Cryptography
+.SHA256]::Create()`/`ComputeHash` and `[System.IO.Compression.ZipFile]::ExtractToDirectory` (after
+`Add-Type -AssemblyName System.IO.Compression.FileSystem`) do the identical work via the BCL types
+those cmdlets themselves wrap, with no PowerShell module-resolution step involved at all — a
+strictly more robust dependency than "hope this particular cmdlet resolves on this particular
+host," confirmed by re-running the exact same fetch-and-verify flow locally on Windows PowerShell
+5.1 afterward.
+
 FFmpeg's (and, going forward, any other engine dependency's) native libs live under
 `OMP.Lib/Libs/<rid>/` — co-located with the P/Invoke code in `OMP.Lib` that consumes them — but
 the RID-conditional `Content`/`CopyToOutputDirectory` items that actually bundle them into a

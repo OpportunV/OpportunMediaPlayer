@@ -41,7 +41,19 @@ $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) $entry.archive
 Write-Host "Downloading native libs for $Rid from $downloadUrl"
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
 
-$actualHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $fileStream = [System.IO.File]::OpenRead($zipPath)
+    try {
+        $hashBytes = $sha256.ComputeHash($fileStream)
+    } finally {
+        $fileStream.Dispose()
+    }
+} finally {
+    $sha256.Dispose()
+}
+$actualHash = [System.BitConverter]::ToString($hashBytes).Replace("-", "")
+
 if ($actualHash -ne $entry.sha256) {
     Remove-Item -Path $zipPath -Force
     throw "Checksum mismatch for $($entry.archive): expected $($entry.sha256), got $actualHash"
@@ -49,7 +61,8 @@ if ($actualHash -ne $entry.sha256) {
 
 # Clear a stale marker (and any leftover files) from a previous manifest version before extracting.
 Get-ChildItem -Path $libsDir -Filter ".fetched-*" -Force -ErrorAction SilentlyContinue | Remove-Item -Force
-Expand-Archive -Path $zipPath -DestinationPath $libsDir -Force
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $libsDir)
 Remove-Item -Path $zipPath -Force
 
 New-Item -ItemType File -Path $markerPath -Force | Out-Null
