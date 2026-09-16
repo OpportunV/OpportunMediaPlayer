@@ -118,10 +118,22 @@ internal sealed class FullscreenController : IDisposable
             return;
         }
 
+        if (IsWithinWindowBounds(e))
+        {
+            return;
+        }
+
         _topMenu.IsVisible = false;
         _overlayControls.Opacity = 0;
 
         _overlayTimer.Stop();
+    }
+
+    private bool IsWithinWindowBounds(PointerEventArgs e)
+    {
+        var position = e.GetPosition(_window);
+        var size = _window.ClientSize;
+        return position is { X: >= 0, Y: >= 0 } && position.X <= size.Width && position.Y <= size.Height;
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)

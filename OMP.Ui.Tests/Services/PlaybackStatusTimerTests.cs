@@ -165,6 +165,18 @@ public class PlaybackStatusTimerTests
         Assert.Equal(before, h.OverlayRenderCount);
     }
 
+    [AvaloniaFact]
+    public void MovingAfterPressingTheSlider_ReopensTheScrubTooltip()
+    {
+        var h = new Harness();
+        h.PressSlider();
+        ToolTip.SetIsOpen(h.Slider, false);
+
+        h.MoveOverSlider();
+
+        Assert.True(ToolTip.GetIsOpen(h.Slider));
+    }
+
     private sealed class Harness
     {
         public Slider Slider { get; } = new() { Minimum = 0, Maximum = 100 };
@@ -218,6 +230,8 @@ public class PlaybackStatusTimerTests
         public void PressSlider() => Mouse(w => w.MouseDown(SliderPoint, MouseButton.Left));
 
         public void ReleaseSlider() => Mouse(w => w.MouseUp(SliderPoint, MouseButton.Left));
+
+        public void MoveOverSlider() => Mouse(w => w.MouseMove(SliderPoint));
 
         public void ResizeVideoSurface(double width, double height)
         {

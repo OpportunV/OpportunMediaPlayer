@@ -165,7 +165,7 @@
                                 Maximum="1"
                                 VerticalAlignment="Center"
                                 Focusable="False"
-                                ToolTip.Placement="Pointer"
+                                ToolTip.Placement="Custom"
                                 ToolTip.ShowDelay="0">
                             <Slider.Resources>
                                 <!-- ReSharper disable Xaml.RedundantResource
