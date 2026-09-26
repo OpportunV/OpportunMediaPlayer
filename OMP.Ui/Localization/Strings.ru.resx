@@ -48,7 +48,7 @@
   <data name="Options_DelayMsHeader" xml:space="preserve"><value>Задержка (мс)</value></data>
   <data name="Options_SelectOutputPlaceholder" xml:space="preserve"><value>Выберите устройство</value></data>
   <data name="Options_SelectStreamPlaceholder" xml:space="preserve"><value>Выберите дорожку</value></data>
-  <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Назначьте зону дорожкам субтитров из текущего файла. Неподдерживаемые (растровые) дорожки назначить нельзя.</value></data>
+  <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Выберите зону, а затем дорожку субтитров для неё - дорожку можно сменить в любой момент. Неподдерживаемые (растровые) дорожки назначить нельзя.</value></data>
   <data name="Options_TrackHeader" xml:space="preserve"><value>Дорожка</value></data>
   <data name="Options_ZoneHeader" xml:space="preserve"><value>Зона</value></data>
   <data name="Options_SelectTrackPlaceholder" xml:space="preserve"><value>Выберите дорожку</value></data>
@@ -57,6 +57,9 @@
   <data name="Options_LoadSubtitleFileTitle" xml:space="preserve"><value>Выберите файл субтитров</value></data>
   <data name="Options_SubtitleFileTypeFilterName" xml:space="preserve"><value>Субтитры</value></data>
   <data name="Options_SubtitleRouteError" xml:space="preserve"><value>Не удалось загрузить эту дорожку субтитров. Возможно, она временно недоступна - попробуйте ещё раз через некоторое время.</value></data>
+  <data name="Options_SearchTracksWatermark" xml:space="preserve"><value>Начните вводить для поиска...</value></data>
+  <data name="Options_NoMatchingTracks" xml:space="preserve"><value>Нет подходящих дорожек</value></data>
+  <data name="Options_SubtitleRouteRetrying" xml:space="preserve"><value>Дорожка субтитров временно недоступна - повторная попытка...</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Зоны определяют, где на экране показываются субтитры. Первые две зоны заданы по умолчанию, их нельзя удалить.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Изменить</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Сбросить</value></data>

@@ -20,4 +20,12 @@ public class SubtitleStreamExtTests
 
         Assert.Equal("English [en] (hdmv_pgs_subtitle) - unsupported", stream.Describe());
     }
+
+    [Fact]
+    public void Describe_UnknownCodec_IsLeftOut()
+    {
+        var stream = new SubtitleStream(1, "Unknown", "English (auto-generated)", "en", IsTextBased: true);
+
+        Assert.Equal("English (auto-generated) [en]", stream.Describe());
+    }
 }

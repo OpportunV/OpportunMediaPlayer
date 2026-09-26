@@ -1,6 +1,8 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -17,6 +19,7 @@ namespace OMP.Ui.Services;
 internal sealed class PlaybackStatusTimer : IDisposable
 {
     private const int TickIntervalMs = 200;
+    private const double TooltipVerticalPaddingPixels = 10;
 
     private readonly DispatcherTimer _timer = new();
     private readonly IMediaSessionRegistry _mediaSessionRegistry;
@@ -30,6 +33,7 @@ internal sealed class PlaybackStatusTimer : IDisposable
     private bool _isSeekingViaSlider;
     private bool _areSubtitlesEnabled;
     private int _lastKnownSubtitleRouteCount;
+    private Point _lastPointerPosition;
 
     public PlaybackStatusTimer(
         IMediaSessionRegistry mediaSessionRegistry,
@@ -130,6 +134,8 @@ internal sealed class PlaybackStatusTimer : IDisposable
 
     private void SetupProgressSlider()
     {
+        ToolTip.SetCustomPopupPlacementCallback(_progressSlider, PlaceTooltipAboveCursor);
+
         _progressSlider.PointerMoved += (_, e) =>
         {
             if (_mediaSessionRegistry.Current == null || _progressSlider.Bounds.Width <= 0)
@@ -137,9 +143,13 @@ internal sealed class PlaybackStatusTimer : IDisposable
                 return;
             }
 
+            _lastPointerPosition = e.GetPosition(null);
             var ratio = Math.Clamp(e.GetPosition(_progressSlider).X / _progressSlider.Bounds.Width, 0, 1);
             var hoveredTime = TimeSpan.FromSeconds(ratio * _progressSlider.Maximum);
             ToolTip.SetTip(_progressSlider, hoveredTime.Format());
+
+            // A click forces ToolTipService to close the tooltip.
+            ToolTip.SetIsOpen(_progressSlider, true);
         };
 
         _progressSlider.AddHandler(
@@ -150,5 +160,13 @@ internal sealed class PlaybackStatusTimer : IDisposable
             _mediaSessionRegistry.Current?.Seek(TimeSpan.FromSeconds(_progressSlider.Value));
             _isSeekingViaSlider = false;
         };
+    }
+
+    private void PlaceTooltipAboveCursor(CustomPopupPlacement parameters)
+    {
+        parameters.AnchorRectangle = new(_lastPointerPosition, new Size(1, 1));
+        parameters.Anchor = PopupAnchor.None;
+        parameters.Gravity = PopupGravity.Top;
+        parameters.Offset = new(0, -TooltipVerticalPaddingPixels);
     }
 }

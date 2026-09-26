@@ -37,7 +37,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<SubtitleRoute> SubtitleRoutes => _subtitleRoutes.AsReadOnly();
 
-    public TimeSpan CurrentTime => TimeSpan.FromSeconds(_clock.CurrentSeconds);
+    public TimeSpan CurrentTime =>
+        TimeSpan.FromSeconds(PlaybackPosition.ClampToDuration(_clock.CurrentSeconds, Duration.TotalSeconds));
 
     public TimeSpan Duration => PrimarySource.Duration;
 
@@ -84,6 +85,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly AudioOutputMixer _mixer = new();
     private readonly int _audioBufferDurationSeconds;
     private readonly int _audioPacketChannelCapacity;
+    private readonly int _networkAudioPacketChannelCapacity;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly PlaybackClock _clock = new();
 
@@ -117,6 +119,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double LoopErrorLogIntervalMs = 5000;
     private const double SyncLogIntervalMs = 1000;
     private const double MaxDemuxLookaheadSeconds = 3;
+    private const double NetworkDemuxLookaheadSeconds = 30;
+    private const double EndOfPlaybackGraceSeconds = 1;
 
     public MediaSession(
         MediaOpenRequest request,
@@ -126,15 +130,9 @@ internal sealed unsafe class MediaSession : IMediaSession
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MediaSession>();
-        _loopErrorLog = new LoopErrorLog(_logger, "Presentation loop iteration failed.", LoopErrorLogIntervalMs);
+        _loopErrorLog = new(_logger, "Presentation loop iteration failed.", LoopErrorLogIntervalMs);
 
         FFmpegEnvironment.EnsureInitialized(_logger, nativeLibraryOptions.FFmpegLibraryDirectory);
-
-        _videoChannel = Channel.CreateBounded<PacketRef>(
-            new BoundedChannelOptions(options.VideoChannelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait
-            });
 
         _subtitleChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.SubtitleChannelCapacity)
@@ -144,6 +142,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         _audioBufferDurationSeconds = options.BufferDurationSeconds;
         _audioPacketChannelCapacity = options.AudioChannelCapacity;
+        _networkAudioPacketChannelCapacity = options.NetworkAudioChannelCapacity;
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
         var primary = new MediaInputSource(
@@ -153,6 +152,12 @@ internal sealed unsafe class MediaSession : IMediaSession
             cancellationToken: _cancellationTokenSource.Token,
             headers: request.PrimaryHeaders);
         _sources.Add(primary);
+
+        _videoChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(primary.IsNetwork ? options.NetworkVideoChannelCapacity : options.VideoChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait
+            });
 
         foreach (var sidecar in request.AudioSidecars)
         {
@@ -174,7 +179,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             var stream = primary.FormatContext->streams[i];
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO)
             {
-                _videoPipeline = new VideoPipeline(primary.FormatContext, i, loggerFactory, _cancellationTokenSource.Token);
+                _videoPipeline = new(primary.FormatContext, i, loggerFactory, _cancellationTokenSource.Token);
                 break;
             }
         }
@@ -185,8 +190,8 @@ internal sealed unsafe class MediaSession : IMediaSession
         AudioOutputUnavailableReason = outputScanner.UnavailableReason;
         BuildSubtitleCatalog();
 
-        _subtitleWorker = new PipelineWorker(PipelineWorkerRole.Subtitle, _cancellationTokenSource.Token);
-        _sessionWorker = new PipelineWorker(PipelineWorkerRole.Session, _cancellationTokenSource.Token);
+        _subtitleWorker = new(PipelineWorkerRole.Subtitle, _cancellationTokenSource.Token);
+        _sessionWorker = new(PipelineWorkerRole.Session, _cancellationTokenSource.Token);
 
         _subtitleWorker.Pause();
         _sessionWorker.Pause();
@@ -201,8 +206,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         if (_videoPipeline is not null)
         {
-            _videoWorker = new PipelineWorker(PipelineWorkerRole.Video, _cancellationTokenSource.Token);
-            _videoRenderWorker = new PipelineWorker(PipelineWorkerRole.VideoRender, _cancellationTokenSource.Token);
+            _videoWorker = new(PipelineWorkerRole.Video, _cancellationTokenSource.Token);
+            _videoRenderWorker = new(PipelineWorkerRole.VideoRender, _cancellationTokenSource.Token);
 
             _videoWorker.Pause();
             _videoRenderWorker.Pause();
@@ -213,7 +218,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         _logger.LogInformation(
             "Opened {FilePath}: duration {Duration:c}, {AudioStreamCount} audio stream(s) across {SourceCount} " +
-            "source(s), {SubtitleStreamCount} subtitle stream(s), {OutputCount} output(s), video={HasVideo}.",
+            "source(s), {SubtitleStreamCount} subtitle stream(s), {OutputCount} output(s), video={HasVideo}",
             FilePath,
             Duration,
             AudioStreams.Count,
@@ -224,7 +229,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         if (AudioStreams.Count > 0 && AudioOutputs.Count > 0)
         {
-            SetAudioRoutes([new AudioRoute(AudioStreams[0], AudioOutputs[0])]);
+            SetAudioRoutes([new(AudioStreams[0], AudioOutputs[0])]);
         }
         else
         {
@@ -277,13 +282,13 @@ internal sealed unsafe class MediaSession : IMediaSession
                 {
                     try
                     {
-                        pipeline = new AudioPipeline(
+                        pipeline = new(
                             source.FormatContext,
                             location.LocalStreamIndex,
                             source.SourceId,
                             route.Output,
                             _audioBufferDurationSeconds,
-                            _audioPacketChannelCapacity,
+                            source.IsNetwork ? _networkAudioPacketChannelCapacity : _audioPacketChannelCapacity,
                             () => Volatile.Read(ref _seekGeneration),
                             () => _clock.CurrentSeconds,
                             _loggerFactory,
@@ -385,7 +390,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                 lock (source.FormatSync)
                 {
                     _subtitlePipelines.Add(
-                        new SubtitlePipeline(source.FormatContext, localStreamIndex, sourceId, route.ZoneId, _loggerFactory));
+                        new(source.FormatContext, localStreamIndex, sourceId, route.ZoneId, _loggerFactory));
                 }
 
                 _logger.LogDebug(
@@ -694,7 +699,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             var globalId = nextId++;
             _pendingSidecarStreamIds[globalId] = sourceId;
             result.Add(
-                new AudioStream(
+                new(
                     globalId,
                     StreamMetadata.Unknown,
                     sidecar.Title ?? StreamMetadata.Unknown,
@@ -729,7 +734,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             var globalId = _nextSubtitleStreamId++;
             _pendingSubtitleSidecarStreamIds[globalId] = sourceId;
             _subtitleStreamCatalog.Add(
-                new SubtitleStream(
+                new(
                     globalId,
                     StreamMetadata.Unknown,
                     sidecar.Title ?? StreamMetadata.Unknown,
@@ -750,7 +755,7 @@ internal sealed unsafe class MediaSession : IMediaSession
         MediaInputSource source;
         try
         {
-            source = new MediaInputSource(
+            source = new(
                 sourceId,
                 sidecar.Url,
                 _loggerFactory,
@@ -818,7 +823,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     {
         try
         {
-            source = new MediaInputSource(
+            source = new(
                 sourceId,
                 sidecar.Url,
                 _loggerFactory,
@@ -951,7 +956,11 @@ internal sealed unsafe class MediaSession : IMediaSession
                 var baselineOffset = source.GetOrDetectPtsBaselineOffset(streamIndex, packetSeconds);
 
                 LogLandingPositionOnce(source, streamIndex, packetSeconds + baselineOffset, generation);
-                ThrottleDemuxAhead(packetSeconds + baselineOffset, generation, worker);
+                ThrottleDemuxAhead(
+                    packetSeconds + baselineOffset,
+                    source.IsNetwork ? NetworkDemuxLookaheadSeconds : MaxDemuxLookaheadSeconds,
+                    generation,
+                    worker);
             }
 
             foreach (var pipeline in _audioPipelines)
@@ -1027,14 +1036,14 @@ internal sealed unsafe class MediaSession : IMediaSession
             packetSeconds - _lastSeekTargetSeconds);
     }
 
-    private void ThrottleDemuxAhead(double packetSeconds, int generation, PipelineWorker worker)
+    private void ThrottleDemuxAhead(double packetSeconds, double lookaheadSeconds, int generation, PipelineWorker worker)
     {
         if (packetSeconds < _lastSeekTargetSeconds)
         {
             return;
         }
 
-        while (packetSeconds - _clock.CurrentSeconds > MaxDemuxLookaheadSeconds &&
+        while (packetSeconds - _clock.CurrentSeconds > lookaheadSeconds &&
                generation == Volatile.Read(ref _seekGeneration) &&
                !_cancellationTokenSource.IsCancellationRequested)
         {
@@ -1213,6 +1222,17 @@ internal sealed unsafe class MediaSession : IMediaSession
                 {
                     HandlePlaybackEnded();
                 }
+                else if (PlaybackPosition.HasOverrunDuration(
+                             _clock.CurrentSeconds, Duration.TotalSeconds, EndOfPlaybackGraceSeconds))
+                {
+                    _logger.LogInformation(
+                        "Clock passed the end of {FileName} ({Duration:c}) without every source reporting end " +
+                        "of stream (pending content: {HasPending}); ending playback.",
+                        FileName,
+                        Duration,
+                        hasPending);
+                    HandlePlaybackEnded();
+                }
             }
             catch (Exception ex)
             {
@@ -1242,14 +1262,17 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
+    /// <summary>
+    /// Counts still-undecoded packets, not just decoded frames/PCM.
+    /// </summary>
     private bool HasPendingPlayableContent()
     {
-        if (_videoPipeline is not null && _videoPipeline.TryPeek(out _))
+        if (_videoPipeline is not null && (_videoPipeline.TryPeek(out _) || _videoChannel.Reader.Count > 0))
         {
             return true;
         }
 
-        return _audioPipelines.Any(p => p.HasBufferedAudio);
+        return _audioPipelines.Any(p => p.HasBufferedAudio || p.HasQueuedPackets);
     }
 
     private void HandlePlaybackEnded()

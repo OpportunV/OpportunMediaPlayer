@@ -18,20 +18,17 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
     public string Url { get; }
 
+    /// <summary>
+    /// True for anything FFmpeg reads through a network protocol rather than the local file system.
+    /// </summary>
+    public bool IsNetwork { get; }
+
     public AVFormatContext* FormatContext => _formatContext;
 
-    public TimeSpan Duration
-    {
-        get
-        {
-            lock (FormatSync)
-            {
-                return _formatContext->duration > 0
-                    ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
-                    : TimeSpan.Zero;
-            }
-        }
-    }
+    /// <summary>
+    /// Read once at open rather than on every access.
+    /// </summary>
+    public TimeSpan Duration { get; }
 
     public Lock FormatSync { get; } = new();
 
@@ -47,10 +44,12 @@ internal sealed unsafe class MediaInputSource : IDisposable
     private readonly CancellationToken _cancellationToken;
     private readonly Dictionary<int, double> _ptsBaselineOffsets = [];
 
+    // ReSharper disable once PrivateFieldCanBeConvertedToLocalVariable To prevent GC
     private readonly AVIOInterruptCB_callback _interruptCallback;
 
     private const int InterruptTimeoutMs = 15000;
     private const double ZeroSeekEpsilonSeconds = 0.05;
+    private const string ReconnectDelayMaxSeconds = "5";
 
     public MediaInputSource(
         int sourceId,
@@ -69,6 +68,9 @@ internal sealed unsafe class MediaInputSource : IDisposable
         _logger = loggerFactory.CreateLogger<MediaInputSource>();
         _cancellationToken = cancellationToken;
 
+        var protocol = ffmpeg.avio_find_protocol_name(url);
+        IsNetwork = protocol is not null && protocol != "file";
+
         _formatContext = ffmpeg.avformat_alloc_context();
         _interruptCallback = InterruptCallback;
         _formatContext->interrupt_callback.callback = _interruptCallback;
@@ -78,6 +80,14 @@ internal sealed unsafe class MediaInputSource : IDisposable
         {
             var headerBlock = string.Concat(headers.Select(kv => $"{kv.Key}: {kv.Value}\r\n"));
             ffmpeg.av_dict_set(&openOptions, "headers", headerBlock, 0);
+        }
+
+        if (IsNetwork)
+        {
+            ffmpeg.av_dict_set(&openOptions, "reconnect", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_streamed", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_on_network_error", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_delay_max", ReconnectDelayMaxSeconds, 0);
         }
 
         ArmInterruptDeadline();
@@ -115,7 +125,7 @@ internal sealed unsafe class MediaInputSource : IDisposable
             if (ConsumeInterruptFired())
             {
                 _logger.LogWarning(
-                    "Reading stream info for {Url} timed out after {TimeoutMs}ms and was aborted.",
+                    "Reading stream info for {Url} timed out after {TimeoutMs}ms and was aborted",
                     url,
                     InterruptTimeoutMs);
             }
@@ -127,6 +137,10 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
             throw new ApplicationException("Could not find stream info.");
         }
+
+        Duration = _formatContext->duration > 0
+            ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
+            : TimeSpan.Zero;
 
         DemuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, cancellationToken);
         DemuxWorker.Pause();

@@ -19,4 +19,20 @@ internal static class LanguageDisplay
             return languageCode;
         }
     }
+
+    /// <summary>
+    /// The language's English name, or null when the code names no known culture. Lets a search
+    /// for "russian" find a track whose label is written as "Русский".
+    /// </summary>
+    public static string? EnglishName(string languageCode)
+    {
+        try
+        {
+            return CultureInfo.GetCultureInfo(languageCode).EnglishName;
+        }
+        catch (CultureNotFoundException)
+        {
+            return null;
+        }
+    }
 }

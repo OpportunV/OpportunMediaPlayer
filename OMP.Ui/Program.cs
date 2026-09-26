@@ -60,6 +60,7 @@ internal static class Program
                     services.AddSingleton<IMainWindowHotkeyService, MainWindowHotkeyService>();
                     services.AddSingleton<IWindowFactory, WindowFactory>();
                     services.AddSingleton<IFilePickerService, FilePickerService>();
+                    services.AddSingleton<ISubtitleRouteApplier, SubtitleRouteApplier>();
                     services.AddSingleton<IUserSettingsService, UserSettingsService>();
                     services.AddSingleton<IYtDlpResolver, YtDlpResolver>();
 

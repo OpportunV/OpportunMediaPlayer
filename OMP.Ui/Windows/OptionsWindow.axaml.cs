@@ -11,8 +11,8 @@ namespace OMP.Ui.Windows;
 public sealed partial class OptionsWindow : Window
 {
     public OptionsWindow(IMediaSessionRegistry mediaSessionRegistry, IUserSettingsService settings,
-        IWindowFactory windowFactory, IFilePickerService filePicker, ILoggerFactory loggerFactory,
-        SingleInstanceCoordinator singleInstanceCoordinator)
+        IWindowFactory windowFactory, IFilePickerService filePicker, ISubtitleRouteApplier subtitleRouteApplier,
+        ILoggerFactory loggerFactory, SingleInstanceCoordinator singleInstanceCoordinator)
     {
         InitializeComponent();
 
@@ -27,7 +27,8 @@ public sealed partial class OptionsWindow : Window
 
         ZonesTab.Initialize(this, windowFactory, settings);
 
-        SubtitleRoutingTab.Initialize(this, ZonesTab, mediaSessionRegistry, windowFactory, filePicker, loggerFactory);
+        SubtitleRoutingTab.Initialize(
+            this, ZonesTab, mediaSessionRegistry, windowFactory, filePicker, subtitleRouteApplier, loggerFactory);
     }
 
     protected override void OnClosed(EventArgs e)

@@ -511,15 +511,30 @@ preferred when both are present, no functional difference — `SubtitlePipeline`
 already normalizes through the same `AVSubtitleType.SUBTITLE_ASS` path regardless of source codec).
 
 A real video can report 150+ `automatic_captions` languages, nearly all of them YouTube
-auto-translating the one original-language transcript rather than independent recognitions (each
-translated entry's `timedtext` URL carries a `tlang` query param differing from its `lang`).
-Exposing all of them would flood the picker with near-duplicate options, so only two are ever
-surfaced: the original (non-translated) track, labeled "(auto-generated)", plus — only if
-`_settings.Current.Language` differs from the original and a matching translation exists — one
-translated into the app's own UI language, labeled "(auto-generated, translated)". A translated
-entry's `Language` is the translation's *target*, not the `lang` query param it was translated
-from — caught via a failing unit test before shipping (a French translation was otherwise
-mislabeled `en`, since `lang` is always the source language the translation started from).
+auto-translating one recognized transcript (each translated entry's `timedtext` URL carries a
+`tlang` query param differing from its `lang`). **All of them are listed** — this used to be
+capped at the original plus one translation into the app's UI language, which users found too
+restrictive; the flood-of-options problem is solved in the picker instead (`SubtitleTrackPicker`,
+type-to-search, below). Nothing is fetched until a track is routed, so listing 150+ costs nothing.
+Order: real `subtitles` first, then the original recognition, then the translation into the app's
+UI language (if any), then everything else sorted by title. A translated entry's `Language` is the
+translation's *target*, not the `lang` query param it was translated from — caught via a failing
+unit test before shipping (a French translation was otherwise mislabeled `en`).
+
+**An auto-dubbed video has one recognition per audio track, merged by yt-dlp into the same keys.**
+Confirmed from yt-dlp's own source (`_video.py`'s caption loop), not guessed: for every `asr`
+caption track, yt-dlp appends that track's formats to *every* translation-language key, so the
+`ru` key of an English video with an Arabic auto-dub holds both an `ar→ru` and an `en→ru` format,
+and the `ar` key holds the Arabic dub's own untranslated recognition. Keys are ordered by
+YouTube's translation-language list, so "the first untranslated entry" is *not* the original —
+confirmed for real: an English-language video had its Arabic dub's recognition picked as the
+original, and the Russian translation came from the Arabic one. `YtDlpSubtitleSelector` now groups
+formats per (`lang`, `tlang`) pair rather than picking one format per key, identifies the original
+from the audio format yt-dlp marks `language_preference` 10 (the same field `YtDlpFormatSelector`
+already sorts by; top-level `language` is only a fallback, since it describes whichever format got
+selected and can be a joined `en+ar`), then the `<lang>-orig` key, then the first recognition — and
+only offers translations *from* the original's recognition. Other recognitions (the dubs') are still
+listed as their own "(auto-generated)" entries.
 
 A yt-dlp `subtitles`/`automatic_captions` dictionary key is not reliably a clean language code —
 confirmed for real: a genuine community-provided caption track can be keyed like
@@ -567,11 +582,29 @@ report - "nothing happens"). `OptionsWindow.ReconcileSubtitleRoutes` now compare
 against `_subtitleRows` after every `SetSubtitleRoutes` call (backgrounded, so this runs via
 `Dispatcher.UIThread.Post` from the worker thread - not the `await`-resumes-on-the-calling-context
 case, since there's no `await` here to resume from), removes any row that didn't actually apply,
-and shows `SubtitleRouteErrorText` (same inline red-text pattern `OpenUrlWindow` already uses for a
+and shows `SubtitleRouteStatusText` (same inline red-text pattern `OpenUrlWindow` already uses for a
 failed resolve, rather than a modal dialog) with a generic "temporarily unavailable, try again"
 message - deliberately generic, not the raw exception text, since the expected failure mode here is
 an external, transient condition (a rate limit), not something the user needs the technical detail
 for.
+
+**Failed subtitle routes are retried automatically, from `OMP.Ui`, not the engine.** A 429 on a
+`timedtext` URL usually clears within seconds, and users were re-selecting the track by hand until
+it stuck. `Services/SubtitleRouteApplier` (a DI singleton behind the public
+`ISubtitleRouteApplier`, since it crosses `OptionsWindow`'s public constructor) reruns the whole
+`SetSubtitleRoutes` call with 1/2/4/8s backoff while any requested route is missing from the
+returned set, and only then does `ReconcileSubtitleRoutes` drop the row and show the error; a
+"retrying..." notice shows in the meantime. Retrying inside `MediaSession` was ruled out:
+`SetSubtitleRoutes` pauses the whole session and holds `_seekSync` while it opens a sidecar, so any
+backoff there would freeze playback (and block seeks) for the whole retry window. Rerunning the
+full route set is cheap because `SetSubtitleRoutes` keeps every already-matching pipeline. The
+applier is app-wide, not per window, because retries deliberately outlive the Options window
+(pick a track, close Options) — a per-window instance couldn't be superseded by a reopened
+window's newer routes. Each call bumps a version and attempts are serialized by a semaphore, so a
+newer call (or a changed `IMediaSessionRegistry.Current`) makes an older retry return `null`
+instead of re-applying stale routes. The tab also guards its own "retrying" notice with an apply
+counter: that notice is posted from a worker thread and was confirmed (by a failing test, not by
+inspection) to be able to land *after* the final result and overwrite it.
 
 **`_loggedLandingGenerationBySource` is a `ConcurrentDictionary`, not a plain `Dictionary`** — it's
 written from every source's own demux thread (`LogLandingPositionOnce`, called from `DemuxLoop`),
@@ -582,6 +615,53 @@ bucket array can corrupt under concurrent writes, confirmed via a real crash sur
 most runs, then reliably reproduced once a test routed two sidecar-backed sources in quick
 succession). Same fix shape as `MediaInputSource.Dispose`'s cancellation-aware interrupt check
 earlier in this file: found by real multi-source testing, not by inspection alone.
+
+## Network buffering and end of playback
+
+**A network source reads 30s ahead (`NetworkDemuxLookaheadSeconds`), a local one 3s
+(`MaxDemuxLookaheadSeconds`)**, chosen per source via `MediaInputSource.IsNetwork`
+(`avio_find_protocol_name(url) != "file"` — FFmpeg's own protocol resolution, so a Windows drive
+path still reads as `file`). Raising the lookahead alone would have done nothing: the video packet
+channel is `Wait`-mode and was 10 packets (~0.3s), so it — not the lookahead — capped how far a
+primary's demux could get ahead, leaving well under a second of cushion against a network stall.
+And the audio packet channel is `DropOldest`, so a lookahead deeper than its capacity would have
+*dropped* audio rather than buffered it. So the lookahead and both channels are raised together
+for network sources only (`PlaybackTuningOptions.NetworkVideoChannelCapacity`/
+`NetworkAudioChannelCapacity`, 2400 packets each — 30s of 60fps video or ~50 packets/s audio, with
+headroom). They hold compressed packets, so this is tens of MB for typical YouTube bitrates. The
+decoded-frame/PCM buffers are unchanged — only compressed data sits in the deep queues. Network
+opens also set FFmpeg's `reconnect`/`reconnect_streamed`/`reconnect_on_network_error` (not
+`reconnect_on_http_error`: a 4xx/5xx is an answer, not a dropped connection), with
+`reconnect_delay_max` kept well inside the 15s interrupt deadline.
+
+**A deep lookahead means a source hits EOF long before its content has played**, which broke
+end-of-playback detection the moment it was introduced: `HasPendingPlayableContent` only looked at
+*decoded* frames/PCM, so a network source that had demuxed to EOF with seconds of packets still
+queued read as "ended" whenever the small decoded queue was momentarily empty — the HTTP run of
+`PlaybackEndTests.Play_AdvancesCurrentTime` ended a 12s clip after half a second, every run. It now
+also counts `_videoChannel`'s queued packets and each `AudioPipeline.HasQueuedPackets`
+(`HasBufferedAudio` itself is left alone — `ConsumePendingSeekTarget` depends on its narrower,
+decoded-only meaning). `MediaInputSource.Duration` is also computed once at open now instead of
+under `FormatSync` on every read: `CurrentTime` depends on it (the clamp below), and the demux
+thread holds `FormatSync` for a whole blocking `av_read_frame`, so the UI's position timer would
+otherwise freeze for as long as a network read stalls.
+
+**There is deliberately no "buffering" state that pauses the clock when a source runs dry** — the
+product owner ruled it out: the whole point is several outputs playing at once, so one starving
+source must not stall the others. A starved stream just drops/freezes locally until its data
+arrives; the deeper buffer is what's meant to make that rare.
+
+**`CurrentTime` is clamped to `Duration`, and the session ends itself once the clock passes
+`Duration` by `EndOfPlaybackGraceSeconds` (1s)** even if not every source reported a clean EOF
+(`PlaybackPosition`, unit-tested in `OMP.Lib.Tests`). The clock is wall-clock driven and only stops
+when `SessionLoop` sees every source's `EndOfStreamTracker` at EOF with nothing pending — confirmed
+by a user report that after a YouTube video finished, the timeline kept counting past the duration
+with nothing in the log. The exact reason one source never reported EOF wasn't pinned down, so this
+is a backstop rather than a root-cause fix, and it logs at Information when it fires (including
+whether playable content was still pending) so the next occurrence leaves a trace.
+`PlaybackEndTests` (integration) runs the same file both from disk and through
+`LocalHttpFileServer` — a loopback `HttpListener` with byte-range support, since FFmpeg's http
+protocol seeks via Range requests — and was confirmed to fail with the clamp temporarily removed.
 
 ## Threading
 
@@ -659,8 +739,9 @@ constructs directly via `services.AddTransient<T>()`/`AddSingleton<T>()` (see go
 `AudioOutputWarningWindow`, `HotkeysWindow`, `OpenFileErrorWindow`, `SubtitleZoneEditorWindow` —
 Avalonia XAML code-behind convention) and the interfaces/context type that cross into
 `MainWindow`'s public constructor signature (`IMainWindowCommands`, `IMainWindowHotkeyService`,
-`IWindowFactory`, `MainWindowCommandContext`) — their concrete implementations
-(`MainWindowCommands`, `MainWindowHotkeyService`, `WindowFactory`) stay `internal`, since an
+`IWindowFactory`, `MainWindowCommandContext`) or a `Windows/` dialog's (`IFilePickerService`,
+`ISubtitleRouteApplier`) — their concrete implementations (`MainWindowCommands`,
+`MainWindowHotkeyService`, `WindowFactory`, `SubtitleRouteApplier`) stay `internal`, since an
 internal class implementing a public interface is completely fine, and nothing outside the
 assembly ever names the concrete type. Default to `sealed` unless a class is deliberately
 designed as a base type — nothing in this codebase currently is.
@@ -786,6 +867,24 @@ audio track can legitimately be routed to more than one output at once (e.g. the
 sent to both speakers and a headset simultaneously) — matching the readme's headline feature. Both
 the per-row `AudioRouteRow.AvailableStreamOptions` and the bottom-of-tab `StreamSelector` are left
 unfiltered by design; only `OutputSelector`/`UpdateOutputSelector` filters.
+
+The Subtitles tab mirrors that exactly, with the zone in the output's role: each row is a zone,
+fixed once added, with a track picker that can be swapped at any time (`SubtitleRouteRow
+.SelectedStreamOption`). Zones are exclusive (`UpdateZoneSelector`), tracks are not — one track can
+show in two zones. It used to be the other way round (track fixed, zone chosen second, both
+exclusive), which meant deleting and re-adding a row just to change language.
+
+The track picker is `Controls/SubtitleTrackPicker`, not a `ComboBox`: a web video lists ~160
+caption tracks (see the yt-dlp notes above), so it needs type-to-search. Avalonia 11.3's editable
+`ComboBox` only jumps to a *prefix* match, and `AutoCompleteBox` (checked by decompiling it) pushes
+every arrow-key move straight into `SelectedItem` — here each selection change opens a network
+sidecar, so arrowing through the list would fire a request per keypress. The picker is a button
+styled with the `ComboBox*` theme resources that opens a flyout (search `TextBox` + `ListBox`) and
+only commits on click/Enter, raising `OptionPicked` only for a user pick. Matching is
+`Helpers/SearchQuery` (every word, ignoring case and accents) against
+`SubtitleStreamOption.SearchText`, which adds the language code and its English and native names to
+the label — so "russian" finds "Русский (...)". `SubtitleStreamExt.Describe` also drops the codec
+when it's the engine's `"Unknown"` placeholder, which every not-yet-opened web caption reports.
 
 ## Resource lifetime
 
@@ -966,7 +1065,8 @@ native FFmpeg libs or a real display:
   `Settings/` (`SubtitleZone`, `UserSettings` defaults, `UserSettingsJsonContext` round-trip), and
   `Services/MainWindowCommands` all land here — none of it touches a live `Window`/`Control`.
 - **Tier 2** — `[AvaloniaFact]` (from `Avalonia.Headless.XUnit`), real control/window instances,
-  no real display. Currently covers `Controls/SpeedFlyoutView`, `Controls/VolumeFlyoutView`, and
+  no real display. Currently covers `Controls/SpeedFlyoutView`, `Controls/VolumeFlyoutView`,
+  `Controls/SubtitleTrackPicker`, both `Controls/OptionsSubtitle*Tab`s, and
   `Services/FullscreenController`. `Windows/OptionsWindow` (now thin after extracting
   `OptionsSelector`), the other `Windows/*` dialogs, `SubtitleZoneEditorWindow`,
   `SubtitleOverlayRenderer`, and `MainWindow` itself are backlog, not yet covered.

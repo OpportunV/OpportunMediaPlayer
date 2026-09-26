@@ -48,7 +48,7 @@
   <data name="Options_DelayMsHeader" xml:space="preserve"><value>Delay (ms)</value></data>
   <data name="Options_SelectOutputPlaceholder" xml:space="preserve"><value>Select output</value></data>
   <data name="Options_SelectStreamPlaceholder" xml:space="preserve"><value>Select stream</value></data>
-  <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Assign subtitle tracks from the current file to a zone. Unsupported (bitmap) tracks can't be routed.</value></data>
+  <data name="Options_SubtitlesHelpText" xml:space="preserve"><value>Pick a zone, then choose which subtitle track it shows - the track can be swapped at any time. Unsupported (bitmap) tracks can't be routed.</value></data>
   <data name="Options_TrackHeader" xml:space="preserve"><value>Track</value></data>
   <data name="Options_ZoneHeader" xml:space="preserve"><value>Zone</value></data>
   <data name="Options_SelectTrackPlaceholder" xml:space="preserve"><value>Select track</value></data>
@@ -57,6 +57,9 @@
   <data name="Options_LoadSubtitleFileTitle" xml:space="preserve"><value>Select subtitle file</value></data>
   <data name="Options_SubtitleFileTypeFilterName" xml:space="preserve"><value>Subtitles</value></data>
   <data name="Options_SubtitleRouteError" xml:space="preserve"><value>Could not load this subtitle track. It may be temporarily unavailable - try again in a moment.</value></data>
+  <data name="Options_SearchTracksWatermark" xml:space="preserve"><value>Type to search...</value></data>
+  <data name="Options_NoMatchingTracks" xml:space="preserve"><value>No matching tracks</value></data>
+  <data name="Options_SubtitleRouteRetrying" xml:space="preserve"><value>Subtitle track is temporarily unavailable - retrying...</value></data>
   <data name="Options_ZonesHelpText" xml:space="preserve"><value>Zones define where subtitles are shown on screen. The first two zones are default and can't be removed.</value></data>
   <data name="Options_EditZoneButton" xml:space="preserve"><value>Edit</value></data>
   <data name="Options_ResetZoneButton" xml:space="preserve"><value>Reset</value></data>

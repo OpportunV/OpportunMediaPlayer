@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
@@ -35,7 +36,9 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
     private IMediaSessionRegistry _mediaSessionRegistry = null!;
     private IWindowFactory _windowFactory = null!;
     private IFilePickerService _filePicker = null!;
+    private ISubtitleRouteApplier _routeApplier = null!;
     private ILogger _logger = null!;
+    private int _applyCount;
 
     public OptionsSubtitleRoutingTab()
     {
@@ -48,6 +51,7 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         IMediaSessionRegistry mediaSessionRegistry,
         IWindowFactory windowFactory,
         IFilePickerService filePicker,
+        ISubtitleRouteApplier routeApplier,
         ILoggerFactory loggerFactory)
     {
         _owner = owner;
@@ -55,6 +59,7 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         _mediaSessionRegistry = mediaSessionRegistry;
         _windowFactory = windowFactory;
         _filePicker = filePicker;
+        _routeApplier = routeApplier;
         _logger = loggerFactory.CreateLogger<OptionsSubtitleRoutingTab>();
 
         var session = _mediaSessionRegistry.Current;
@@ -65,18 +70,31 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
             var zone = _zones.Zones.FirstOrDefault(z => z.Id == route.ZoneId);
             if (zone is not null)
             {
-                _rows.Add(new SubtitleRouteRow(route.Stream, zone));
+                var option = _streamOptions.FirstOrDefault(o => o.Stream.Id == route.Stream.Id) ??
+                             new SubtitleStreamOption(route.Stream);
+                _rows.Add(new SubtitleRouteRow(zone, option));
             }
         }
 
         SubtitleRoutesList.ItemsSource = _rows;
         _zones.ZonesChanged += OnZonesChanged;
 
-        UpdateStreamSelector();
+        UpdateStreamOptions();
         UpdateZoneSelector();
     }
 
     public void Dispose() => _zones.ZonesChanged -= OnZonesChanged;
+
+    private void OnRowTrackPicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not SubtitleTrackPicker { DataContext: SubtitleRouteRow row } picker)
+        {
+            return;
+        }
+
+        row.SelectedStreamOption = picker.SelectedOption;
+        ApplySubtitleRoutes();
+    }
 
     private void OnDeleteSubtitleRoute(object? sender, RoutedEventArgs e)
     {
@@ -86,7 +104,6 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         }
 
         _rows.Remove(row);
-        UpdateStreamSelector();
         UpdateZoneSelector();
         ApplySubtitleRoutes();
     }
@@ -107,7 +124,7 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
             _rows.Remove(row);
         }
 
-        UpdateStreamSelector();
+        UpdateZoneSelector();
         ApplySubtitleRoutes();
     }
 
@@ -122,45 +139,44 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         }
     }
 
-    private void OnDraftSubtitleStreamChanged(object? sender, SelectionChangedEventArgs e)
+    private void OnDraftSubtitleZoneChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true })
+        if (SubtitleZoneSelector.SelectedItem is not SubtitleZone)
         {
-            SubtitleZoneSelector.IsEnabled = false;
-            SubtitleZoneSelector.SelectedItem = null;
+            DraftTrackPicker.IsEnabled = false;
+            DraftTrackPicker.SelectedOption = null;
             return;
         }
 
-        SubtitleZoneSelector.IsEnabled = true;
-        if (SubtitleZoneSelector.Items.Count == 1)
+        DraftTrackPicker.IsEnabled = true;
+        var supported = _streamOptions.Where(o => o.IsSupported).ToList();
+        if (supported.Count == 1)
         {
-            SubtitleZoneSelector.SelectedIndex = 0;
+            DraftTrackPicker.SelectedOption = supported[0];
         }
 
         TryCommitDraftSubtitleRoute();
     }
 
-    private void OnDraftSubtitleZoneChanged(object? sender, SelectionChangedEventArgs e) =>
-        TryCommitDraftSubtitleRoute();
+    private void OnDraftTrackPicked(object? sender, RoutedEventArgs e) => TryCommitDraftSubtitleRoute();
 
     private void OnClearDraftSubtitleRoute(object? sender, RoutedEventArgs e) =>
-        SubtitleStreamSelector.SelectedItem = null;
+        SubtitleZoneSelector.SelectedItem = null;
 
     private void TryCommitDraftSubtitleRoute()
     {
-        if (SubtitleStreamSelector.SelectedItem is not SubtitleStreamOption { IsSupported: true } streamOption ||
-            SubtitleZoneSelector.SelectedItem is not SubtitleZone zone)
+        if (SubtitleZoneSelector.SelectedItem is not SubtitleZone zone ||
+            DraftTrackPicker.SelectedOption is not { IsSupported: true } streamOption)
         {
             return;
         }
 
-        SubtitleRouteErrorText.IsVisible = false;
-        _rows.Add(new SubtitleRouteRow(streamOption.Stream, zone));
+        _rows.Add(new SubtitleRouteRow(zone, streamOption) { AvailableStreamOptions = _streamOptions.ToList() });
         ApplySubtitleRoutes();
 
-        UpdateStreamSelector();
+        DraftTrackPicker.SelectedOption = null;
         UpdateZoneSelector();
-        SubtitleStreamSelector.Focus();
+        SubtitleZoneSelector.Focus();
     }
 
     private async void OnLoadSubtitleFile(object? sender, RoutedEventArgs e)
@@ -183,7 +199,7 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
             var added = await Task.Run(() => session.AddSubtitleSidecar(sidecar));
 
             _streamOptions.Add(new SubtitleStreamOption(added));
-            UpdateStreamSelector();
+            UpdateStreamOptions();
         }
         catch (Exception ex)
         {
@@ -194,7 +210,7 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         }
     }
 
-    private void ApplySubtitleRoutes()
+    private async void ApplySubtitleRoutes()
     {
         var session = _mediaSessionRegistry.Current;
         if (session is null)
@@ -202,29 +218,49 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
             return;
         }
 
+        SubtitleRouteStatusText.IsVisible = false;
         var routes = _rows.Select(row => new SubtitleRoute(row.Stream, row.Zone.Id)).ToList();
-        _ = Task.Run(() =>
+
+        // The retry notice is posted from a worker thread and can land after this apply has
+        // already finished (or been superseded) - it must not overwrite that newer status.
+        var applyId = ++_applyCount;
+        var finished = false;
+
+        try
         {
-            try
+            var applied = await _routeApplier.ApplyAsync(
+                session,
+                routes,
+                () => Dispatcher.UIThread.Post(() =>
+                {
+                    if (!finished && applyId == _applyCount)
+                    {
+                        ShowRetryingStatus();
+                    }
+                }));
+            finished = true;
+
+            if (applied is not null && applyId == _applyCount)
             {
-                var applied = session.SetSubtitleRoutes(routes);
-                Dispatcher.UIThread.Post(() => ReconcileSubtitleRoutes(applied));
+                ReconcileSubtitleRoutes(routes, applied);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Applying subtitle routes failed.");
-            }
-        });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Applying subtitle routes failed.");
+        }
     }
 
-    private void ReconcileSubtitleRoutes(IReadOnlyList<SubtitleRoute> applied)
+    private void ReconcileSubtitleRoutes(IReadOnlyList<SubtitleRoute> requested, IReadOnlyList<SubtitleRoute> applied)
     {
         var failedRows = _rows
+            .Where(row => requested.Any(r => r.Stream.Id == row.Stream.Id && r.ZoneId == row.Zone.Id))
             .Where(row => !applied.Any(r => r.Stream.Id == row.Stream.Id && r.ZoneId == row.Zone.Id))
             .ToList();
 
         if (failedRows.Count == 0)
         {
+            SubtitleRouteStatusText.IsVisible = false;
             return;
         }
 
@@ -233,16 +269,30 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
             _rows.Remove(row);
         }
 
-        UpdateStreamSelector();
         UpdateZoneSelector();
-
-        SubtitleRouteErrorText.Text = Strings.Options_SubtitleRouteError;
-        SubtitleRouteErrorText.IsVisible = true;
+        ShowStatus(Strings.Options_SubtitleRouteError, Brushes.IndianRed);
     }
 
-    private void UpdateStreamSelector() =>
-        OptionsSelector.Rebind(
-            SubtitleStreamSelector, _streamOptions, _rows.Select(row => row.Stream.Id), o => o.Stream.Id);
+    private void ShowRetryingStatus() =>
+        ShowStatus(Strings.Options_SubtitleRouteRetrying, this.FindResource("SettingsHintBrush") as IBrush);
+
+    private void ShowStatus(string text, IBrush? foreground)
+    {
+        SubtitleRouteStatusText.Text = text;
+        SubtitleRouteStatusText.Foreground = foreground;
+        SubtitleRouteStatusText.IsVisible = true;
+    }
+
+    private void UpdateStreamOptions()
+    {
+        var options = _streamOptions.ToList();
+        DraftTrackPicker.Options = options;
+
+        foreach (var row in _rows)
+        {
+            row.AvailableStreamOptions = options;
+        }
+    }
 
     private void UpdateZoneSelector() =>
         OptionsSelector.Rebind(
