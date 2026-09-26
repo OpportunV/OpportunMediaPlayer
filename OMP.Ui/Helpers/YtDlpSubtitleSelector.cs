@@ -38,15 +38,6 @@ internal static class YtDlpSubtitleSelector
         return result;
     }
 
-    /// <summary>
-    /// yt-dlp merges every auto-generated caption track YouTube offers into one dictionary keyed by
-    /// target language - and an auto-dubbed video has one such track per dubbed audio track, not
-    /// just one for the original. So a key's formats can come from several recognitions, and the
-    /// first untranslated entry in the dictionary is not necessarily the original language (it's
-    /// ordered by YouTube's translation-language list, so e.g. an Arabic dub's recognition sorts
-    /// ahead of the English original). The original is identified from the video's own declared
-    /// language instead, and translations are only taken from that original's recognition.
-    /// </summary>
     private static IEnumerable<SubtitleSidecarSource> SelectAutomaticCaptions(
         JsonElement automaticCaptions, string? originalLanguageCode, string? appLanguageCode)
     {
@@ -109,11 +100,6 @@ internal static class YtDlpSubtitleSelector
         }
     }
 
-    /// <summary>
-    /// yt-dlp marks the original audio track's formats with <c>language_preference</c> 10 (every
-    /// auto-dub gets -1); the top-level <c>language</c> is only a fallback, since it describes
-    /// whichever format happened to be selected and can be a joined value like <c>en+ar</c>.
-    /// </summary>
     private static string? DetectOriginalLanguage(JsonElement root)
     {
         if (root.TryGetProperty("formats", out var formats) && formats.ValueKind == JsonValueKind.Array)
@@ -164,8 +150,6 @@ internal static class YtDlpSubtitleSelector
 
     private static IEnumerable<JsonElement> PickTrackFormats(JsonElement formats)
     {
-        // A key merged from several recognitions holds one run of formats per recognition, so the
-        // preferred format is picked per (source, target) pair rather than once for the whole key.
         return formats.EnumerateArray()
             .Where(f => f.TryGetProperty("url", out _) && f.TryGetProperty("ext", out _))
             .GroupBy(f =>

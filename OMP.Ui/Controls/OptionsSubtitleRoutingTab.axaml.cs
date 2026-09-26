@@ -21,11 +21,6 @@ using OMP.Ui.Windows;
 
 namespace OMP.Ui.Controls;
 
-/// <summary>
-/// Mirrors the audio tab: each row is a zone (fixed once added, like an audio output) showing one
-/// track, which can be swapped at any time. A zone carries at most one track, but the same track
-/// can be shown in several zones at once.
-/// </summary>
 internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposable
 {
     private static readonly FilePickerFileType _subtitleFileTypeFilter = new(Strings.Options_SubtitleFileTypeFilterName)
@@ -256,10 +251,6 @@ internal sealed partial class OptionsSubtitleRoutingTab : UserControl, IDisposab
         }
     }
 
-    /// <summary>
-    /// Only rows that are still exactly what was requested are dropped: the user may have swapped
-    /// a row's track while the retries were running, and that newer choice is not this call's to undo.
-    /// </summary>
     private void ReconcileSubtitleRoutes(IReadOnlyList<SubtitleRoute> requested, IReadOnlyList<SubtitleRoute> applied)
     {
         var failedRows = _rows

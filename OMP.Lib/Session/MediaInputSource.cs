@@ -20,18 +20,13 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
     /// <summary>
     /// True for anything FFmpeg reads through a network protocol rather than the local file system.
-    /// Network sources get a much deeper read-ahead, since their read rate can stall for seconds at
-    /// a time in a way a local disk never does.
     /// </summary>
     public bool IsNetwork { get; }
 
     public AVFormatContext* FormatContext => _formatContext;
 
     /// <summary>
-    /// Read once at open rather than on every access: the old getter took <see cref="FormatSync"/>,
-    /// which the demux thread holds for the whole of a blocking <c>av_read_frame</c> - up to the
-    /// full interrupt timeout on a stalled network source - and <c>MediaSession.CurrentTime</c>
-    /// (polled by the UI's position timer) now depends on it.
+    /// Read once at open rather than on every access.
     /// </summary>
     public TimeSpan Duration { get; }
 
@@ -49,6 +44,7 @@ internal sealed unsafe class MediaInputSource : IDisposable
     private readonly CancellationToken _cancellationToken;
     private readonly Dictionary<int, double> _ptsBaselineOffsets = [];
 
+    // ReSharper disable once PrivateFieldCanBeConvertedToLocalVariable To prevent GC
     private readonly AVIOInterruptCB_callback _interruptCallback;
 
     private const int InterruptTimeoutMs = 15000;
@@ -88,8 +84,6 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
         if (IsNetwork)
         {
-            // Resume a dropped connection mid-stream instead of surfacing it as a read failure.
-            // Deliberately not reconnecting on HTTP 4xx/5xx: those are answers, not dropped connections.
             ffmpeg.av_dict_set(&openOptions, "reconnect", "1", 0);
             ffmpeg.av_dict_set(&openOptions, "reconnect_streamed", "1", 0);
             ffmpeg.av_dict_set(&openOptions, "reconnect_on_network_error", "1", 0);
@@ -131,7 +125,7 @@ internal sealed unsafe class MediaInputSource : IDisposable
             if (ConsumeInterruptFired())
             {
                 _logger.LogWarning(
-                    "Reading stream info for {Url} timed out after {TimeoutMs}ms and was aborted.",
+                    "Reading stream info for {Url} timed out after {TimeoutMs}ms and was aborted",
                     url,
                     InterruptTimeoutMs);
             }

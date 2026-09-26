@@ -5,10 +5,6 @@ using OMP.Ui.Settings;
 
 namespace OMP.Ui.Models;
 
-/// <summary>
-/// One zone's subtitle route. The zone is fixed once the row exists (mirroring an audio route's
-/// output); the track can be swapped at any time.
-/// </summary>
 internal sealed class SubtitleRouteRow(SubtitleZone zone, SubtitleStreamOption streamOption) : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;

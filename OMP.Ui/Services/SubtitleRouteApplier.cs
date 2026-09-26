@@ -9,13 +9,6 @@ using OMP.Lib.Subtitle;
 
 namespace OMP.Ui.Services;
 
-/// <summary>
-/// App-wide rather than per Options window: a retry keeps going after the window closes (picking a
-/// track and closing Options is the normal flow), so a reopened window's newer routes must still be
-/// able to supersede it. Retrying lives here rather than in the engine because
-/// <see cref="IMediaSession.SetSubtitleRoutes"/> pauses the whole session while it opens a
-/// sidecar - backing off inside it would freeze playback for the whole retry window.
-/// </summary>
 internal sealed class SubtitleRouteApplier(
     IMediaSessionRegistry mediaSessionRegistry,
     ILoggerFactory loggerFactory,
