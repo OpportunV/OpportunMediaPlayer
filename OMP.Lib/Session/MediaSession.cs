@@ -37,7 +37,8 @@ internal sealed unsafe class MediaSession : IMediaSession
 
     public IReadOnlyList<SubtitleRoute> SubtitleRoutes => _subtitleRoutes.AsReadOnly();
 
-    public TimeSpan CurrentTime => TimeSpan.FromSeconds(_clock.CurrentSeconds);
+    public TimeSpan CurrentTime =>
+        TimeSpan.FromSeconds(PlaybackPosition.ClampToDuration(_clock.CurrentSeconds, Duration.TotalSeconds));
 
     public TimeSpan Duration => PrimarySource.Duration;
 
@@ -84,6 +85,7 @@ internal sealed unsafe class MediaSession : IMediaSession
     private readonly AudioOutputMixer _mixer = new();
     private readonly int _audioBufferDurationSeconds;
     private readonly int _audioPacketChannelCapacity;
+    private readonly int _networkAudioPacketChannelCapacity;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly PlaybackClock _clock = new();
 
@@ -117,6 +119,8 @@ internal sealed unsafe class MediaSession : IMediaSession
     private const double LoopErrorLogIntervalMs = 5000;
     private const double SyncLogIntervalMs = 1000;
     private const double MaxDemuxLookaheadSeconds = 3;
+    private const double NetworkDemuxLookaheadSeconds = 30;
+    private const double EndOfPlaybackGraceSeconds = 1;
 
     public MediaSession(
         MediaOpenRequest request,
@@ -130,12 +134,6 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         FFmpegEnvironment.EnsureInitialized(_logger, nativeLibraryOptions.FFmpegLibraryDirectory);
 
-        _videoChannel = Channel.CreateBounded<PacketRef>(
-            new BoundedChannelOptions(options.VideoChannelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait
-            });
-
         _subtitleChannel = Channel.CreateBounded<PacketRef>(
             new BoundedChannelOptions(options.SubtitleChannelCapacity)
             {
@@ -144,6 +142,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         _audioBufferDurationSeconds = options.BufferDurationSeconds;
         _audioPacketChannelCapacity = options.AudioChannelCapacity;
+        _networkAudioPacketChannelCapacity = options.NetworkAudioChannelCapacity;
         _fpsSampleWindowMs = options.FpsSampleWindowMs;
 
         var primary = new MediaInputSource(
@@ -153,6 +152,15 @@ internal sealed unsafe class MediaSession : IMediaSession
             cancellationToken: _cancellationTokenSource.Token,
             headers: request.PrimaryHeaders);
         _sources.Add(primary);
+
+        // The video packet channel is what actually bounds how far ahead the primary's demux can
+        // read (Wait mode blocks it once full), so a network primary needs one deep enough to hold
+        // NetworkDemuxLookaheadSeconds of packets, or the deeper lookahead would never be reached.
+        _videoChannel = Channel.CreateBounded<PacketRef>(
+            new BoundedChannelOptions(primary.IsNetwork ? options.NetworkVideoChannelCapacity : options.VideoChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait
+            });
 
         foreach (var sidecar in request.AudioSidecars)
         {
@@ -283,7 +291,7 @@ internal sealed unsafe class MediaSession : IMediaSession
                             source.SourceId,
                             route.Output,
                             _audioBufferDurationSeconds,
-                            _audioPacketChannelCapacity,
+                            source.IsNetwork ? _networkAudioPacketChannelCapacity : _audioPacketChannelCapacity,
                             () => Volatile.Read(ref _seekGeneration),
                             () => _clock.CurrentSeconds,
                             _loggerFactory,
@@ -951,7 +959,11 @@ internal sealed unsafe class MediaSession : IMediaSession
                 var baselineOffset = source.GetOrDetectPtsBaselineOffset(streamIndex, packetSeconds);
 
                 LogLandingPositionOnce(source, streamIndex, packetSeconds + baselineOffset, generation);
-                ThrottleDemuxAhead(packetSeconds + baselineOffset, generation, worker);
+                ThrottleDemuxAhead(
+                    packetSeconds + baselineOffset,
+                    source.IsNetwork ? NetworkDemuxLookaheadSeconds : MaxDemuxLookaheadSeconds,
+                    generation,
+                    worker);
             }
 
             foreach (var pipeline in _audioPipelines)
@@ -1027,14 +1039,14 @@ internal sealed unsafe class MediaSession : IMediaSession
             packetSeconds - _lastSeekTargetSeconds);
     }
 
-    private void ThrottleDemuxAhead(double packetSeconds, int generation, PipelineWorker worker)
+    private void ThrottleDemuxAhead(double packetSeconds, double lookaheadSeconds, int generation, PipelineWorker worker)
     {
         if (packetSeconds < _lastSeekTargetSeconds)
         {
             return;
         }
 
-        while (packetSeconds - _clock.CurrentSeconds > MaxDemuxLookaheadSeconds &&
+        while (packetSeconds - _clock.CurrentSeconds > lookaheadSeconds &&
                generation == Volatile.Read(ref _seekGeneration) &&
                !_cancellationTokenSource.IsCancellationRequested)
         {
@@ -1213,6 +1225,17 @@ internal sealed unsafe class MediaSession : IMediaSession
                 {
                     HandlePlaybackEnded();
                 }
+                else if (PlaybackPosition.HasOverrunDuration(
+                             _clock.CurrentSeconds, Duration.TotalSeconds, EndOfPlaybackGraceSeconds))
+                {
+                    _logger.LogInformation(
+                        "Clock passed the end of {FileName} ({Duration:c}) without every source reporting end " +
+                        "of stream (pending content: {HasPending}); ending playback.",
+                        FileName,
+                        Duration,
+                        hasPending);
+                    HandlePlaybackEnded();
+                }
             }
             catch (Exception ex)
             {
@@ -1242,14 +1265,19 @@ internal sealed unsafe class MediaSession : IMediaSession
         }
     }
 
+    /// <summary>
+    /// Counts still-undecoded packets, not just decoded frames/PCM: a network source's deep
+    /// lookahead routinely reaches end of file with many seconds of packets still queued, and a
+    /// decoded queue that is momentarily empty (at startup, or mid-stall) must not read as "ended".
+    /// </summary>
     private bool HasPendingPlayableContent()
     {
-        if (_videoPipeline is not null && _videoPipeline.TryPeek(out _))
+        if (_videoPipeline is not null && (_videoPipeline.TryPeek(out _) || _videoChannel.Reader.Count > 0))
         {
             return true;
         }
 
-        return _audioPipelines.Any(p => p.HasBufferedAudio);
+        return _audioPipelines.Any(p => p.HasBufferedAudio || p.HasQueuedPackets);
     }
 
     private void HandlePlaybackEnded()

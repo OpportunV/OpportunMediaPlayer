@@ -18,20 +18,22 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
     public string Url { get; }
 
+    /// <summary>
+    /// True for anything FFmpeg reads through a network protocol rather than the local file system.
+    /// Network sources get a much deeper read-ahead, since their read rate can stall for seconds at
+    /// a time in a way a local disk never does.
+    /// </summary>
+    public bool IsNetwork { get; }
+
     public AVFormatContext* FormatContext => _formatContext;
 
-    public TimeSpan Duration
-    {
-        get
-        {
-            lock (FormatSync)
-            {
-                return _formatContext->duration > 0
-                    ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
-                    : TimeSpan.Zero;
-            }
-        }
-    }
+    /// <summary>
+    /// Read once at open rather than on every access: the old getter took <see cref="FormatSync"/>,
+    /// which the demux thread holds for the whole of a blocking <c>av_read_frame</c> - up to the
+    /// full interrupt timeout on a stalled network source - and <c>MediaSession.CurrentTime</c>
+    /// (polled by the UI's position timer) now depends on it.
+    /// </summary>
+    public TimeSpan Duration { get; }
 
     public Lock FormatSync { get; } = new();
 
@@ -51,6 +53,7 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
     private const int InterruptTimeoutMs = 15000;
     private const double ZeroSeekEpsilonSeconds = 0.05;
+    private const string ReconnectDelayMaxSeconds = "5";
 
     public MediaInputSource(
         int sourceId,
@@ -69,6 +72,9 @@ internal sealed unsafe class MediaInputSource : IDisposable
         _logger = loggerFactory.CreateLogger<MediaInputSource>();
         _cancellationToken = cancellationToken;
 
+        var protocol = ffmpeg.avio_find_protocol_name(url);
+        IsNetwork = protocol is not null && protocol != "file";
+
         _formatContext = ffmpeg.avformat_alloc_context();
         _interruptCallback = InterruptCallback;
         _formatContext->interrupt_callback.callback = _interruptCallback;
@@ -78,6 +84,16 @@ internal sealed unsafe class MediaInputSource : IDisposable
         {
             var headerBlock = string.Concat(headers.Select(kv => $"{kv.Key}: {kv.Value}\r\n"));
             ffmpeg.av_dict_set(&openOptions, "headers", headerBlock, 0);
+        }
+
+        if (IsNetwork)
+        {
+            // Resume a dropped connection mid-stream instead of surfacing it as a read failure.
+            // Deliberately not reconnecting on HTTP 4xx/5xx: those are answers, not dropped connections.
+            ffmpeg.av_dict_set(&openOptions, "reconnect", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_streamed", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_on_network_error", "1", 0);
+            ffmpeg.av_dict_set(&openOptions, "reconnect_delay_max", ReconnectDelayMaxSeconds, 0);
         }
 
         ArmInterruptDeadline();
@@ -127,6 +143,10 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
             throw new ApplicationException("Could not find stream info.");
         }
+
+        Duration = _formatContext->duration > 0
+            ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
+            : TimeSpan.Zero;
 
         DemuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, cancellationToken);
         DemuxWorker.Pause();

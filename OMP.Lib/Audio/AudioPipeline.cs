@@ -19,6 +19,8 @@ internal sealed unsafe class AudioPipeline : IDisposable
 
     public bool HasBufferedAudio => _decodedPcmChannel.Reader.Count > 0 || _buffer.BufferedBytes > 0;
 
+    public bool HasQueuedPackets => _packetChannel.Reader.Count > 0;
+
     public double OutputTimeSeconds =>
         Math.Max(
             0,
