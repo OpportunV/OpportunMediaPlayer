@@ -92,6 +92,12 @@ internal static class Strings
 
     public static string Options_SubtitleRouteError => Get("Options_SubtitleRouteError");
 
+    public static string Options_SearchTracksWatermark => Get("Options_SearchTracksWatermark");
+
+    public static string Options_NoMatchingTracks => Get("Options_NoMatchingTracks");
+
+    public static string Options_SubtitleRouteRetrying => Get("Options_SubtitleRouteRetrying");
+
     public static string Options_ZonesHelpText => Get("Options_ZonesHelpText");
 
     public static string Options_EditZoneButton => Get("Options_EditZoneButton");

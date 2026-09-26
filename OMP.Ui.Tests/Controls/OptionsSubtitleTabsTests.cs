@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using OMP.Lib.Subtitle;
 using OMP.Ui.Controls;
+using OMP.Ui.Localization;
 using OMP.Ui.Models;
 using OMP.Ui.Services;
 using OMP.Ui.Settings;
@@ -71,40 +72,122 @@ public class OptionsSubtitleTabsTests
     }
 
     [AvaloniaFact]
-    public void SelectingATrackAndZone_CommitsASubtitleRoute()
+    public void SelectingAZoneThenATrack_CommitsASubtitleRoute()
     {
         var h = new Harness();
+        var zone = h.Zones.Zones[0];
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.Routing.SubtitleZoneSelector.SelectedItem = h.Zones.Zones[0];
+        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
+        h.Routing.DraftTrackPicker.Commit(h.OptionFor(_english));
         h.Session.WaitForSubtitleRoutes(1);
 
-        var applied = Assert.Single(h.Session.AppliedSubtitleRoutes);
-        var route = Assert.Single(applied);
+        var route = Assert.Single(Assert.Single(h.Session.AppliedSubtitleRoutes));
         Assert.Equal(_english.Id, route.Stream.Id);
+        Assert.Equal(zone.Id, route.ZoneId);
+        Assert.Equal(zone.Id, Assert.Single(h.Rows).Zone.Id);
     }
 
     [AvaloniaFact]
-    public void ZoneSelector_IsDisabledUntilATrackIsChosen()
+    public void TrackPicker_IsDisabledUntilAZoneIsChosen()
     {
         var h = new Harness();
+        Assert.False(h.Routing.DraftTrackPicker.IsEnabled);
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        Assert.True(h.Routing.SubtitleZoneSelector.IsEnabled);
+        h.Routing.SubtitleZoneSelector.SelectedItem = h.Zones.Zones[0];
+        Assert.True(h.Routing.DraftTrackPicker.IsEnabled);
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = null;
-        Assert.False(h.Routing.SubtitleZoneSelector.IsEnabled);
+        h.Routing.SubtitleZoneSelector.SelectedItem = null;
+        Assert.False(h.Routing.DraftTrackPicker.IsEnabled);
     }
 
     [AvaloniaFact]
-    public void ClearDraftButton_ClearsTheTrackSelection()
+    public void ClearDraftButton_ClearsTheZoneSelection()
     {
         var h = new Harness();
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
+        h.Routing.SubtitleZoneSelector.SelectedItem = h.Zones.Zones[0];
 
         h.Routing.ClearDraftSubtitleRouteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-        Assert.Null(h.Routing.SubtitleStreamSelector.SelectedItem);
+        Assert.Null(h.Routing.SubtitleZoneSelector.SelectedItem);
+        Assert.False(h.Routing.DraftTrackPicker.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void ARoutedZone_LeavesTheZoneSelectorButTheTrackStaysAvailableForOtherZones()
+    {
+        var h = new Harness();
+        var first = h.Zones.Zones.First(z => z.Id == "custom-zone");
+        var second = h.Zones.Zones.First(z => z.Id == "other-zone");
+
+        h.AddRoute(first, _english);
+        Assert.DoesNotContain(first, h.Routing.SubtitleZoneSelector.ItemsSource!.Cast<SubtitleZone>());
+
+        h.AddRoute(second, _english);
+        h.Session.WaitForSubtitleRoutes(2);
+
+        Assert.Equal([first.Id, second.Id], h.Session.AppliedSubtitleRoutes.Last().Select(r => r.ZoneId));
+        Assert.All(h.Session.AppliedSubtitleRoutes.Last(), r => Assert.Equal(_english.Id, r.Stream.Id));
+    }
+
+    [AvaloniaFact]
+    public void SwappingARowsTrack_ReappliesWithTheNewTrackInTheSameZone()
+    {
+        var h = new Harness();
+        var zone = h.Zones.Zones.First(z => z.Id == "custom-zone");
+        h.AddRoute(zone, _english);
+        h.Session.WaitForSubtitleRoutes(1);
+
+        h.FindRowControl<SubtitleTrackPicker>("RowTrackPicker").Commit(h.OptionFor(_french));
+        h.Session.WaitForSubtitleRoutes(2);
+
+        var route = Assert.Single(h.Session.AppliedSubtitleRoutes.Last());
+        Assert.Equal(_french.Id, route.Stream.Id);
+        Assert.Equal(zone.Id, route.ZoneId);
+        Assert.Equal(_french.Id, h.Rows.Single().Stream.Id);
+    }
+
+    [AvaloniaFact]
+    public void DeletingARow_ReappliesWithoutItAndOffersTheZoneAgain()
+    {
+        var h = new Harness();
+        var zone = h.Zones.Zones.First(z => z.Id == "custom-zone");
+        h.AddRoute(zone, _english);
+        h.Session.WaitForSubtitleRoutes(1);
+
+        h.FindRowControl<Button>("DeleteSubtitleRouteButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        h.Session.WaitForSubtitleRoutes(2);
+
+        Assert.Empty(h.Rows);
+        Assert.Empty(h.Session.AppliedSubtitleRoutes.Last());
+        Assert.Contains(zone, h.Routing.SubtitleZoneSelector.ItemsSource!.Cast<SubtitleZone>());
+    }
+
+    [AvaloniaFact]
+    public void ARouteThatNeverApplies_IsDroppedWithAnErrorAfterTheRetries()
+    {
+        var h = new Harness();
+        h.Session.SubtitleRouteOutcome = _ => [];
+
+        h.AddRoute(h.Zones.Zones[0], _english);
+        h.PumpUntil(() => !h.Rows.Any());
+
+        Assert.Equal(SubtitleRouteApplier.RetryDelays.Count + 1, h.Session.AppliedSubtitleRoutes.Count);
+        Assert.True(h.Routing.SubtitleRouteStatusText.IsVisible);
+        Assert.Equal(Strings.Options_SubtitleRouteError, h.Routing.SubtitleRouteStatusText.Text);
+    }
+
+    [AvaloniaFact]
+    public void ARouteThatAppliesOnARetry_IsKeptAndTheStatusClears()
+    {
+        var h = new Harness();
+        var attempts = 0;
+        h.Session.SubtitleRouteOutcome = requested => Interlocked.Increment(ref attempts) < 2 ? [] : requested;
+
+        h.AddRoute(h.Zones.Zones[0], _english);
+        h.Session.WaitForSubtitleRoutes(2);
+        h.PumpUntil(() => !h.Routing.SubtitleRouteStatusText.IsVisible);
+
+        Assert.Single(h.Rows);
     }
 
     /// <summary>
@@ -117,8 +200,7 @@ public class OptionsSubtitleTabsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => !z.IsBuiltIn);
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
+        h.AddRoute(zone, _english);
         h.Session.WaitForSubtitleRoutes(1);
         Assert.Single(h.Rows);
 
@@ -136,8 +218,7 @@ public class OptionsSubtitleTabsTests
         var routedZone = h.Zones.Zones.First(z => z.Id == "custom-zone");
         var otherZone = h.Zones.Zones.First(z => z.Id == "other-zone");
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.Routing.SubtitleZoneSelector.SelectedItem = routedZone;
+        h.AddRoute(routedZone, _english);
         h.Session.WaitForSubtitleRoutes(1);
         var appliedBefore = h.Session.AppliedSubtitleRoutes.Count;
 
@@ -154,8 +235,7 @@ public class OptionsSubtitleTabsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => z.Id == "custom-zone");
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
+        h.AddRoute(zone, _english);
         h.Session.WaitForSubtitleRoutes(1);
         Assert.Equal("Custom", h.Rows.Single().ZoneLabel);
 
@@ -215,23 +295,21 @@ public class OptionsSubtitleTabsTests
 
         h.RaiseLoadSubtitleFileClick();
 
-        Assert.Contains(
-            h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>(),
-            o => o.Stream.Title == "external");
+        Assert.Contains(h.Routing.DraftTrackPicker.Options, o => o.Stream.Title == "external");
     }
 
     [AvaloniaFact]
     public void LoadSubtitleFileButton_CancelledPicker_AddsNoStreamOption()
     {
         var h = new Harness();
-        var optionsBefore = h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count();
+        var optionsBefore = h.Routing.DraftTrackPicker.Options.Count;
         h.FilePicker
             .Setup(p => p.PickFileAsync(h.Window, It.IsAny<string>(), It.IsAny<FilePickerFileType>()))
             .ReturnsAsync((string?)null);
 
         h.RaiseLoadSubtitleFileClick();
 
-        Assert.Equal(optionsBefore, h.Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().Count());
+        Assert.Equal(optionsBefore, h.Routing.DraftTrackPicker.Options.Count);
     }
 
     [AvaloniaFact]
@@ -240,8 +318,7 @@ public class OptionsSubtitleTabsTests
         var h = new Harness();
         var zone = h.Zones.Zones.First(z => !z.IsBuiltIn);
 
-        h.Routing.SubtitleStreamSelector.SelectedItem = h.StreamOptionFor(_english);
-        h.Routing.SubtitleZoneSelector.SelectedItem = zone;
+        h.AddRoute(zone, _english);
 
         h.Session.WaitForSubtitleRoutes(1);
         h.Routing.Dispose();
@@ -289,14 +366,41 @@ public class OptionsSubtitleTabsTests
             Window.Show();
 
             Zones.Initialize(Window, WindowFactory.Object, settingsService.Object);
-            Routing.Initialize(Window, Zones, registry, WindowFactory.Object, FilePicker.Object, NullLoggerFactory.Instance);
+            var routeApplier = new SubtitleRouteApplier(registry, NullLoggerFactory.Instance, _ => Task.CompletedTask);
+            Routing.Initialize(
+                Window, Zones, registry, WindowFactory.Object, FilePicker.Object, routeApplier, NullLoggerFactory.Instance);
             Dispatcher.UIThread.RunJobs();
         }
 
         public IEnumerable<SubtitleRouteRow> Rows => Routing.SubtitleRoutesList.ItemsSource!.Cast<SubtitleRouteRow>();
 
-        public SubtitleStreamOption StreamOptionFor(SubtitleStream stream) =>
-            Routing.SubtitleStreamSelector.ItemsSource!.Cast<SubtitleStreamOption>().First(o => o.Stream.Id == stream.Id);
+        public SubtitleStreamOption OptionFor(SubtitleStream stream) =>
+            Routing.DraftTrackPicker.Options.First(o => o.Stream.Id == stream.Id);
+
+        public void AddRoute(SubtitleZone zone, SubtitleStream stream)
+        {
+            Routing.SubtitleZoneSelector.SelectedItem = zone;
+            Routing.DraftTrackPicker.Commit(OptionFor(stream));
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        public T FindRowControl<T>(string name) where T : Control =>
+            Routing.SubtitleRoutesList.GetVisualDescendants().OfType<T>().First(c => c.Name == name);
+
+        public void PumpUntil(Func<bool> condition)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (!condition())
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("Condition was never met.");
+                }
+
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(5);
+            }
+        }
 
         public T FindZoneRowControl<T>(SubtitleZone zone, string name) where T : Control =>
             Zones.ZonesList.GetVisualDescendants().OfType<T>().First(c => c.Name == name && Equals(c.DataContext, zone));

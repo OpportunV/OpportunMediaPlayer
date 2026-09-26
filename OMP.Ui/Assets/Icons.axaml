@@ -28,6 +28,7 @@
     <StreamGeometry x:Key="DeleteIconGeometry">M6,6 L18,18 M18,6 L6,18</StreamGeometry>
     <StreamGeometry x:Key="PlusIconGeometry">M12,5 V19 M5,12 H19</StreamGeometry>
     <StreamGeometry x:Key="MinusIconGeometry">M5,12 H19</StreamGeometry>
+    <StreamGeometry x:Key="ChevronDownIconGeometry">M6,9 L12,15 L18,9</StreamGeometry>
 
     <StreamGeometry x:Key="SpeedGaugeArcGeometry">M4,16 A8,8 0 1 1 20,16</StreamGeometry>
     <StreamGeometry x:Key="SpeedGaugeNeedleGeometry">M12,16 L17,8</StreamGeometry>

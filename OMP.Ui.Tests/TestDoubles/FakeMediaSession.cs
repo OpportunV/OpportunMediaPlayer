@@ -50,6 +50,13 @@ internal sealed class FakeMediaSession : IMediaSession
         }
     }
 
+    /// <summary>
+    /// Decides which requested subtitle routes "apply" - lets a test simulate a sidecar that fails
+    /// to open (e.g. an HTTP 429) the way the real session silently drops it. Default: all apply.
+    /// </summary>
+    public Func<IReadOnlyList<SubtitleRoute>, IReadOnlyList<SubtitleRoute>> SubtitleRouteOutcome { get; set; } =
+        requested => requested;
+
     public List<(int OutputId, double Volume)> OutputVolumeCalls { get; } = [];
 
     public List<(int OutputId, bool Muted)> OutputMutedCalls { get; } = [];
@@ -113,7 +120,7 @@ internal sealed class FakeMediaSession : IMediaSession
             Monitor.PulseAll(_sync);
         }
 
-        return applied;
+        return SubtitleRouteOutcome(applied);
     }
 
     public void WaitForAudioRoutes(int minCount) => WaitFor(() => _appliedAudioRoutes.Count >= minCount, "audio routes");
