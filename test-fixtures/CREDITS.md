@@ -14,6 +14,8 @@ apply to every derived file.
   official Blender Foundation upload, `licenseurl: creativecommons.org/licenses/by/3.0/us/`)
 - **Derivation**: 12-second clip (00:00:40–00:00:52), re-encoded per target container/codec.
   Attribution: "Big Buck Bunny" © 2008, Blender Foundation, www.bigbuckbunny.org, CC BY 3.0.
+-   Audio track then retagged (stream copy, no re-encode) with title `Stereo` and language `eng`,
+    as far as each container can store them.
 
 ## Audio (`audio/sample.mp3`, `audio/sample.flac`, `audio/sample.ogg`, `audio/sample.m4a`,
 `audio/sample.aac`, `audio/sample.wav`)
@@ -25,6 +27,8 @@ apply to every derived file.
   https://commons.wikimedia.org/wiki/File:Kevin_MacLeod_-_Alien_Spaceship_Atmosphere_(cc0).ogg
 - **Derivation**: 20-second clip (00:00:03–00:00:23), re-encoded per target format. No
   attribution required (CC0), credited here anyway for traceability.
+-   Audio track then retagged (stream copy, no re-encode) with title `Alien Spaceship Atmosphere`
+    and language `eng`, as far as each container can store them.
 
 ## Subtitle (`subtitle/sample.srt`)
 

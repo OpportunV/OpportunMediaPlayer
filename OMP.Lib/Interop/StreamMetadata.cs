@@ -20,13 +20,26 @@ internal static unsafe class StreamMetadata
     /// </summary>
     public static string Read(AVStream* stream, string key, ILogger logger)
     {
-        var tag = ffmpeg.av_dict_get(stream->metadata, key, null, 0);
-        if (tag == null)
+        var value = Find(stream->metadata, key);
+        if (value is null)
         {
-            logger.LogTrace("Stream {StreamIndex} has no '{Key}' metadata tag.", stream->index, key);
+            LogMissing(stream, key, logger);
             return Unknown;
         }
 
-        return Marshal.PtrToStringUTF8((IntPtr)tag->value) ?? Unknown;
+        return value;
     }
+
+    /// <summary>
+    /// Reads a tag from any metadata dictionary (a stream's or the whole container's), or null when
+    /// it is absent - for callers that chain several fallback sources before settling on <see cref="Unknown"/>.
+    /// </summary>
+    public static string? Find(AVDictionary* metadata, string key)
+    {
+        var tag = ffmpeg.av_dict_get(metadata, key, null, 0);
+        return tag == null ? null : Marshal.PtrToStringUTF8((IntPtr)tag->value);
+    }
+
+    public static void LogMissing(AVStream* stream, string key, ILogger logger) =>
+        logger.LogTrace("Stream {StreamIndex} has no '{Key}' metadata tag.", stream->index, key);
 }

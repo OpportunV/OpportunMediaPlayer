@@ -17,4 +17,6 @@ internal static class TestFixtures
     private static IEnumerable<string> AllFormatPaths => Directory
         .EnumerateFiles(Path.Combine(FixturesRoot, "video"))
         .Concat(Directory.EnumerateFiles(Path.Combine(FixturesRoot, "audio")));
+
+    public static string Get(string relativePath) => Path.Combine(FixturesRoot, relativePath);
 }
