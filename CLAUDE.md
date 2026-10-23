@@ -616,6 +616,25 @@ most runs, then reliably reproduced once a test routed two sidecar-backed source
 succession). Same fix shape as `MediaInputSource.Dispose`'s cancellation-aware interrupt check
 earlier in this file: found by real multi-source testing, not by inspection alone.
 
+## Audio track metadata
+
+`AudioScanner` reads a track's title from the stream's `title` tag, then its `handler_name` (MP4/MOV
+have no per-track `title`; a track's name lives in its `hdlr` box), then - only when the file is a
+single audio track and nothing else - the container's own `title` (where mp3's ID3, flac's Vorbis
+comments and wav's INFO chunk put it). Language follows the same chain minus `handler_name`.
+`handler_name` is skipped when it's a muxer default rather than a name (`HandlerName.IsTrackName`:
+FFmpeg's `SoundHandler`, GPAC/L-SMASH/Apple's `... Handler`, Apple's `Core Media Audio`, YouTube's
+`ISO Media file produced by Google Inc.`). The container fallback is restricted on purpose: every
+video fixture's container `title` is the movie's name (`Big Buck Bunny - http://...`), which would
+otherwise show up as the audio track's title. An mp3's embedded cover art (a video stream with
+`AV_DISPOSITION_ATTACHED_PIC`) doesn't count as video for that check.
+
+`AudioStreamExt.Describe` leaves out whatever is still unknown instead of printing `Unknown`, treats
+`und` (every untagged MP4 track) as unknown, and names an untitled track `Track N` from its catalog
+position (`Id + 1`, the same 0-based order the catalog is built in), so two untagged tracks stay
+distinguishable - the original `[Unknown] Unknown (mp3)` label was GitHub issue #14. The engine-side
+placeholder stays `"Unknown"`: `AudioRouteMatcher` depends on it.
+
 ## Network buffering and end of playback
 
 **A network source reads 30s ahead (`NetworkDemuxLookaheadSeconds`), a local one 3s
