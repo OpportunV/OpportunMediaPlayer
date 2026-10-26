@@ -10,9 +10,11 @@ public sealed class AudioMetadataTests
     [InlineData("video/sample.mkv", "Stereo", "eng")]
     [InlineData("video/sample.webm", "Stereo", "eng")]
     [InlineData("audio/sample.ogg", "Alien Spaceship Atmosphere", "eng")]
-    // MP4/MOV: the track name lives in handler_name.
+    // MP4/MOV track title in udta/name, which FFmpeg doesn't read: next to the default SoundHandler
+    // (mp4), and next to a real handler_name that it has to win over (mov, the reporter's case in #16).
     [InlineData("video/sample.mp4", "Stereo", "eng")]
     [InlineData("video/sample.mov", "Stereo", "eng")]
+    // handler_name as the only name.
     [InlineData("audio/sample.m4a", "Alien Spaceship Atmosphere", "eng")]
     // Containers that can only carry one of the two.
     [InlineData("video/sample.avi", "Stereo", "Unknown")]

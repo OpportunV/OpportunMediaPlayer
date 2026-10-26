@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using OMP.Lib.Audio;
@@ -30,6 +31,13 @@ internal sealed unsafe class MediaInputSource : IDisposable
     /// </summary>
     public TimeSpan Duration { get; }
 
+    /// <summary>
+    /// Track names/languages FFmpeg doesn't expose, keyed by <c>AVStream.id</c> (see
+    /// <see cref="Mp4TrackMetadataReader"/>). Empty for anything but a local MP4/MOV file: a network
+    /// source would need extra requests just for labels, and web sidecars get theirs from yt-dlp anyway.
+    /// </summary>
+    public IReadOnlyDictionary<int, Mp4TrackMetadata> Mp4Tracks { get; }
+
     public Lock FormatSync { get; } = new();
 
     public EndOfStreamTracker EndOfStreamTracker { get; } = new();
@@ -50,6 +58,8 @@ internal sealed unsafe class MediaInputSource : IDisposable
     private const int InterruptTimeoutMs = 15000;
     private const double ZeroSeekEpsilonSeconds = 0.05;
     private const string ReconnectDelayMaxSeconds = "5";
+    private const string MovDemuxerName = "mov";
+    private const string FileProtocolPrefix = "file:";
 
     public MediaInputSource(
         int sourceId,
@@ -141,6 +151,8 @@ internal sealed unsafe class MediaInputSource : IDisposable
         Duration = _formatContext->duration > 0
             ? TimeSpan.FromSeconds(_formatContext->duration / (double)ffmpeg.AV_TIME_BASE)
             : TimeSpan.Zero;
+
+        Mp4Tracks = ReadMp4Tracks();
 
         DemuxWorker = new PipelineWorker(PipelineWorkerRole.Demux, cancellationToken);
         DemuxWorker.Pause();
@@ -240,5 +252,29 @@ internal sealed unsafe class MediaInputSource : IDisposable
 
         _interruptFired = true;
         return 1;
+    }
+
+    private IReadOnlyDictionary<int, Mp4TrackMetadata> ReadMp4Tracks()
+    {
+        // FFmpeg's MP4 demuxer registers as "mov,mp4,m4a,3gp,3g2,mj2".
+        var demuxerName = Marshal.PtrToStringUTF8((IntPtr)_formatContext->iformat->name) ?? string.Empty;
+        if (IsNetwork || !demuxerName.Split(',').Contains(MovDemuxerName))
+        {
+            return new Dictionary<int, Mp4TrackMetadata>();
+        }
+
+        var path = Url.StartsWith(FileProtocolPrefix, StringComparison.Ordinal) ? Url[FileProtocolPrefix.Length..] : Url;
+        try
+        {
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var tracks = Mp4TrackMetadataReader.Read(file);
+            _logger.LogDebug("Read MP4 track metadata for {Count} track(s) of {Url}.", tracks.Count, Url);
+            return tracks;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(ex, "Could not read MP4 track metadata from {Url}.", Url);
+            return new Dictionary<int, Mp4TrackMetadata>();
+        }
     }
 }

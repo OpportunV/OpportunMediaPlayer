@@ -13,22 +13,31 @@ internal static unsafe class StreamMetadata
     /// </summary>
     public const string Unknown = "Unknown";
 
-    /// <summary>
-    /// Reads a stream metadata tag, falling back to <see cref="Unknown"/> when it is absent.
-    /// Takes the caller's <paramref name="logger"/> so the trace line keeps that caller's category
-    /// and stays reachable through per-subsystem MinimumLevel overrides.
-    /// </summary>
-    public static string Read(AVStream* stream, string key, ILogger logger)
-    {
-        var value = Find(stream->metadata, key);
-        if (value is null)
-        {
-            LogMissing(stream, key, logger);
-            return Unknown;
-        }
+    public const string TitleKey = "title";
+    public const string LanguageKey = "language";
 
-        return value;
+    private const string HandlerNameKey = "handler_name";
+
+    /// <summary>
+    /// The title a track gives itself, or null: its own <c>title</c> tag, then an MP4 track's
+    /// <c>udta/name</c> (<paramref name="mp4Track"/>, which FFmpeg doesn't read), then a
+    /// <c>handler_name</c> that is a real name rather than a muxer default. Shared by the audio and
+    /// subtitle scanners so both kinds of track are labelled the same way.
+    /// </summary>
+    public static string? FindTrackTitle(AVStream* stream, Mp4TrackMetadata? mp4Track)
+    {
+        var handlerName = Find(stream->metadata, HandlerNameKey);
+        return Find(stream->metadata, TitleKey)
+            ?? mp4Track?.Name
+            ?? (HandlerName.IsTrackName(handlerName) ? handlerName : null);
     }
+
+    /// <summary>
+    /// An MP4 track's full <c>elng</c> tag when it has one (FFmpeg only reads the 3-letter <c>mdhd</c>
+    /// code, which can't say <c>en-US</c> or <c>pt-BR</c>), otherwise the track's own <c>language</c> tag.
+    /// </summary>
+    public static string? FindTrackLanguage(AVStream* stream, Mp4TrackMetadata? mp4Track) =>
+        mp4Track?.Language ?? Find(stream->metadata, LanguageKey);
 
     /// <summary>
     /// Reads a tag from any metadata dictionary (a stream's or the whole container's), or null when

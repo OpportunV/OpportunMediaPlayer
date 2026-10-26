@@ -9,7 +9,7 @@ public static class AudioStreamExt
     {
         /// <summary>
         /// "[eng] Commentary (aac)", leaving out whatever the file doesn't say. An untitled track
-        /// falls back to "Track N" is the session's 0-based catalog position.
+        /// falls back to "Track N", where N is its 1-based position in the session's catalog.
         /// </summary>
         public string Describe()
         {

@@ -1,4 +1,4 @@
-using OMP.Lib.Audio;
+using OMP.Lib.Interop;
 
 namespace OMP.Lib.Tests;
 
