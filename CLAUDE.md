@@ -618,16 +618,35 @@ earlier in this file: found by real multi-source testing, not by inspection alon
 
 ## Audio track metadata
 
-`AudioScanner` reads a track's title from the stream's `title` tag, then its `handler_name` (MP4/MOV
-have no per-track `title`; a track's name lives in its `hdlr` box), then - only when the file is a
-single audio track and nothing else - the container's own `title` (where mp3's ID3, flac's Vorbis
-comments and wav's INFO chunk put it). Language follows the same chain minus `handler_name`.
-`handler_name` is skipped when it's a muxer default rather than a name (`HandlerName.IsTrackName`:
-FFmpeg's `SoundHandler`, GPAC/L-SMASH/Apple's `... Handler`, Apple's `Core Media Audio`, YouTube's
-`ISO Media file produced by Google Inc.`). The container fallback is restricted on purpose: every
-video fixture's container `title` is the movie's name (`Big Buck Bunny - http://...`), which would
-otherwise show up as the audio track's title. An mp3's embedded cover art (a video stream with
-`AV_DISPOSITION_ATTACHED_PIC`) doesn't count as video for that check.
+Audio and subtitle tracks share one title chain (`StreamMetadata.FindTrackTitle`): the stream's own
+`title` tag, then an MP4/MOV track's `udta/name` box, then a `handler_name` that is a real name rather
+than a muxer default (`HandlerName.IsTrackName`: FFmpeg's `SoundHandler`, GPAC/L-SMASH/Apple's
+`... Handler`, Apple's `Core Media Audio`, YouTube's `ISO Media file produced by Google Inc.`).
+`AudioScanner` then adds one more step - only when the file is a single audio track and nothing else -
+the container's own `title` (where mp3's ID3, flac's Vorbis comments and wav's INFO chunk put it).
+Language: an MP4 track's `elng` box, then the stream's `language` tag, then (audio only) the
+container's. The container fallback is restricted on purpose: every video fixture's container
+`title` is the movie's name (`Big Buck Bunny - http://...`), which would otherwise show up as the
+audio track's title. An mp3's embedded cover art (a video stream with `AV_DISPOSITION_ATTACHED_PIC`)
+doesn't count as video for that check.
+
+**`udta/name` and `elng` are read by our own parser, `Interop/Mp4TrackMetadataReader`, because the
+bundled FFmpeg 7.1.1 never exposes them** - checked against FFmpeg's source, not guessed (GitHub
+issue #16). FFmpeg's own MP4 muxer (6.x through master), mp4v2/HandBrake and others write a track
+title into `trak/udta/name`; 7.1.1's `mov_read_udta_string` has no case for `name` and skips it (it
+also writes every `udta` string into the *container's* metadata, not the stream's), and nothing reads
+`elng`. 8.0/8.0.1 still skip `name`; only unreleased master reads it, as a stream tag named `name`,
+not `title` - so an FFmpeg upgrade alone doesn't fix this yet. An earlier version of this section
+claimed "MP4 has no per-track `title`, a track's name lives in `hdlr`"; that was this same blind spot
+(ffprobe 6.1 didn't show the title, so it looked absent), and real files with a title next to the
+default `SoundHandler` showed up as `Track 1`, `Track 2`. The parser only walks
+`moov/trak/{tkhd,udta/name,mdia/elng}` box headers (an `mdat` is skipped by its size, never read),
+keys results by `tkhd` track ID - which `mov_read_tkhd` copies into `AVStream.id`, so the match to
+FFmpeg's streams is exact - and returns an empty map rather than throwing on anything malformed.
+`MediaInputSource.Mp4Tracks` runs it once at open, only for a local file FFmpeg opened with its
+`mov` demuxer: a network source would need extra requests just for labels, and web sidecars already
+get titles from yt-dlp. If a future FFmpeg upgrade does read `name`, the parser's title half can be
+replaced by a `name` tag lookup (`elng` would still need it).
 
 `AudioStreamExt.Describe` leaves out whatever is still unknown instead of printing `Unknown`, treats
 `und` (every untagged MP4 track) as unknown, and names an untitled track `Track N` from its catalog

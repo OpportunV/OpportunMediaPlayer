@@ -8,11 +8,8 @@ internal sealed unsafe class AudioScanner(ILoggerFactory loggerFactory)
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<AudioScanner>();
 
-    private const string TitleKey = "title";
-    private const string LanguageKey = "language";
-    private const string HandlerNameKey = "handler_name";
-
-    public List<AudioStream> GetAudioStreams(AVFormatContext* formatContext)
+    public List<AudioStream> GetAudioStreams(
+        AVFormatContext* formatContext, IReadOnlyDictionary<int, Mp4TrackMetadata> mp4Tracks)
     {
         var audioStreams = new List<AudioStream>();
         var useContainerTags = DescribesSingleAudioTrack(formatContext);
@@ -22,11 +19,12 @@ internal sealed unsafe class AudioScanner(ILoggerFactory loggerFactory)
             var stream = formatContext->streams[i];
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_AUDIO)
             {
+                var mp4Track = mp4Tracks.GetValueOrDefault(stream->id);
                 var audioStream = new AudioStream(
                     i,
                     ffmpeg.avcodec_get_name(stream->codecpar->codec_id),
-                    ReadTitle(formatContext, stream, useContainerTags),
-                    ReadLanguage(formatContext, stream, useContainerTags));
+                    ReadTitle(formatContext, stream, mp4Track, useContainerTags),
+                    ReadLanguage(formatContext, stream, mp4Track, useContainerTags));
 
                 audioStreams.Add(audioStream);
                 _logger.LogDebug(
@@ -74,22 +72,22 @@ internal sealed unsafe class AudioScanner(ILoggerFactory loggerFactory)
         return audioCount == 1;
     }
 
-    private string ReadTitle(AVFormatContext* formatContext, AVStream* stream, bool useContainerTags)
+    private string ReadTitle(
+        AVFormatContext* formatContext, AVStream* stream, Mp4TrackMetadata? mp4Track, bool useContainerTags)
     {
-        var handlerName = StreamMetadata.Find(stream->metadata, HandlerNameKey);
-        var title = StreamMetadata.Find(stream->metadata, TitleKey)
-            ?? (HandlerName.IsTrackName(handlerName) ? handlerName : null)
-            ?? (useContainerTags ? StreamMetadata.Find(formatContext->metadata, TitleKey) : null);
+        var title = StreamMetadata.FindTrackTitle(stream, mp4Track)
+            ?? (useContainerTags ? StreamMetadata.Find(formatContext->metadata, StreamMetadata.TitleKey) : null);
 
-        return title ?? Missing(stream, TitleKey);
+        return title ?? Missing(stream, StreamMetadata.TitleKey);
     }
 
-    private string ReadLanguage(AVFormatContext* formatContext, AVStream* stream, bool useContainerTags)
+    private string ReadLanguage(
+        AVFormatContext* formatContext, AVStream* stream, Mp4TrackMetadata? mp4Track, bool useContainerTags)
     {
-        var language = StreamMetadata.Find(stream->metadata, LanguageKey)
-            ?? (useContainerTags ? StreamMetadata.Find(formatContext->metadata, LanguageKey) : null);
+        var language = StreamMetadata.FindTrackLanguage(stream, mp4Track)
+            ?? (useContainerTags ? StreamMetadata.Find(formatContext->metadata, StreamMetadata.LanguageKey) : null);
 
-        return language ?? Missing(stream, LanguageKey);
+        return language ?? Missing(stream, StreamMetadata.LanguageKey);
     }
 
     private string Missing(AVStream* stream, string key)

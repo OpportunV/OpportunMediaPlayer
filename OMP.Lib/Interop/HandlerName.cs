@@ -1,4 +1,4 @@
-namespace OMP.Lib.Audio;
+namespace OMP.Lib.Interop;
 
 /// <summary>
 /// MP4/MOV have no per-track <c>title</c> tag: a track's name is stored in its <c>hdlr</c> box,

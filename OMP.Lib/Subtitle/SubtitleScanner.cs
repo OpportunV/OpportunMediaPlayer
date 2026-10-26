@@ -17,7 +17,8 @@ internal sealed unsafe class SubtitleScanner(ILoggerFactory loggerFactory)
         AVCodecID.AV_CODEC_ID_MOV_TEXT
     ];
 
-    public List<SubtitleStream> GetSubtitleStreams(AVFormatContext* formatContext)
+    public List<SubtitleStream> GetSubtitleStreams(
+        AVFormatContext* formatContext, IReadOnlyDictionary<int, Mp4TrackMetadata> mp4Tracks)
     {
         var subtitleStreams = new List<SubtitleStream>();
 
@@ -27,11 +28,12 @@ internal sealed unsafe class SubtitleScanner(ILoggerFactory loggerFactory)
             if (stream->codecpar->codec_type == AVMediaType.AVMEDIA_TYPE_SUBTITLE)
             {
                 var codecId = stream->codecpar->codec_id;
+                var mp4Track = mp4Tracks.GetValueOrDefault(stream->id);
                 var subtitleStream = new SubtitleStream(
                     i,
                     ffmpeg.avcodec_get_name(codecId),
-                    StreamMetadata.Read(stream, "title", _logger),
-                    StreamMetadata.Read(stream, "language", _logger),
+                    StreamMetadata.FindTrackTitle(stream, mp4Track) ?? Missing(stream, StreamMetadata.TitleKey),
+                    StreamMetadata.FindTrackLanguage(stream, mp4Track) ?? Missing(stream, StreamMetadata.LanguageKey),
                     _textBasedCodecs.Contains(codecId));
 
                 subtitleStreams.Add(subtitleStream);
@@ -55,5 +57,11 @@ internal sealed unsafe class SubtitleScanner(ILoggerFactory loggerFactory)
         }
 
         return subtitleStreams;
+    }
+
+    private string Missing(AVStream* stream, string key)
+    {
+        StreamMetadata.LogMissing(stream, key, _logger);
+        return StreamMetadata.Unknown;
     }
 }

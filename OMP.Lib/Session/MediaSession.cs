@@ -680,7 +680,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         foreach (var source in _sources)
         {
-            foreach (var local in scanner.GetAudioStreams(source.FormatContext))
+            foreach (var local in scanner.GetAudioStreams(source.FormatContext, source.Mp4Tracks))
             {
                 var globalId = nextId++;
                 _audioStreamLocations[globalId] = (source.SourceId, local.Id);
@@ -715,7 +715,7 @@ internal sealed unsafe class MediaSession : IMediaSession
 
         foreach (var source in _sources)
         {
-            foreach (var local in scanner.GetSubtitleStreams(source.FormatContext))
+            foreach (var local in scanner.GetSubtitleStreams(source.FormatContext, source.Mp4Tracks))
             {
                 var globalId = _nextSubtitleStreamId++;
                 _subtitleStreamLocations[globalId] = (source.SourceId, local.Id);
@@ -771,7 +771,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             return false;
         }
 
-        var localStream = new AudioScanner(_loggerFactory).GetAudioStreams(source.FormatContext).FirstOrDefault();
+        var localStream = new AudioScanner(_loggerFactory).GetAudioStreams(source.FormatContext, source.Mp4Tracks).FirstOrDefault();
         if (localStream is null)
         {
             _logger.LogWarning("Audio sidecar {Url} has no audio stream; skipping.", sidecar.Url);
@@ -840,7 +840,7 @@ internal sealed unsafe class MediaSession : IMediaSession
             return false;
         }
 
-        var scannedStream = new SubtitleScanner(_loggerFactory).GetSubtitleStreams(source.FormatContext).FirstOrDefault();
+        var scannedStream = new SubtitleScanner(_loggerFactory).GetSubtitleStreams(source.FormatContext, source.Mp4Tracks).FirstOrDefault();
         if (scannedStream is null)
         {
             _logger.LogWarning("Subtitle sidecar {Url} has no subtitle stream; skipping.", sidecar.Url);
